@@ -1,0 +1,190 @@
+name: Hearth
+options:
+  bundleIdPrefix: com.bhavikjain
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+# Local packages only, plus VLCKit (pulled in by PlayerKit's own Package.swift,
+# not here). Core depends on nothing; the kits depend on Core and each other as
+# the technical spec draws it; no feature package imports another.
+packages:
+  Core:
+    path: Packages/Core
+  SourceKit:
+    path: Packages/SourceKit
+  CatalogKit:
+    path: Packages/CatalogKit
+  HouseholdKit:
+    path: Packages/HouseholdKit
+  PlayerKit:
+    path: Packages/PlayerKit
+  HomeFeature:
+    path: Packages/HomeFeature
+  LiveTVFeature:
+    path: Packages/LiveTVFeature
+  LibraryFeature:
+    path: Packages/LibraryFeature
+  ProfilesFeature:
+    path: Packages/ProfilesFeature
+  HouseholdFeature:
+    path: Packages/HouseholdFeature
+  SearchFeature:
+    path: Packages/SearchFeature
+  SettingsFeature:
+    path: Packages/SettingsFeature
+
+targets:
+  Hearth:
+    type: application
+    platform: iOS
+    # Generated, not left to Xcode: once AllPackageTests exists Xcode stops
+    # making a default scheme and the TestFlight archive can't find one
+    # (Multitrack hit exactly this).
+    scheme: {}
+    sources: &appSources
+      # XcodeGen has no "resources:" key; assets go under sources and Xcode
+      # sorts them by type. A resources: key is silently ignored.
+      - path: App/Sources
+      - path: App/Resources/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bhavikjain.hearth
+        PRODUCT_NAME: Hearth
+        # Signing lives here, never in Xcode's Signing & Capabilities tab: the
+        # .xcodeproj is generated and GUI changes vanish on the next generate.
+        DEVELOPMENT_TEAM: Y4M3S6H4NK
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_ENTITLEMENTS: App/Resources/App.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        # iPhone and iPad. iPhone Duo is an iPhone: it reaches the regular
+        # size class when opened, and the app adapts by size class, never by
+        # idiom or orientation (Apple's "Prepare your app for iPhone Duo").
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # The outer display honours these; landscape is how the player and
+        # tent mode work. The inner display ignores them.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
+        APP_DISPLAY_NAME: Hearth
+      configs:
+        # Debug is its own app with its own sandbox, keychain and store. A
+        # Debug build on the release bundle id shared the TestFlight app's
+        # container in Multitrack and crashed TestFlight three times.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.bhavikjain.hearth.dev
+          APP_DISPLAY_NAME: Hearth Dev
+    dependencies: &appDependencies
+      - package: Core
+      - package: SourceKit
+      - package: CatalogKit
+      - package: HouseholdKit
+      - package: PlayerKit
+      - package: HomeFeature
+      - package: LiveTVFeature
+      - package: LibraryFeature
+      - package: ProfilesFeature
+      - package: HouseholdFeature
+      - package: SearchFeature
+      - package: SettingsFeature
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        # Several windows on iPad and iPhone Duo's inner display.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UIBackgroundModes:
+          # Audio keeps playing with the screen off and drives picture in
+          # picture (PLY-3).
+          - audio
+          # Guide refresh (BGAppRefreshTask) every few hours.
+          - fetch
+          # CloudKit's silent pushes, so a partner's favorite lands in seconds.
+          - remote-notification
+        # Every BGTaskScheduler identifier the app registers; registering one
+        # missing from here throws at launch.
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.bhavikjain.hearth.guide-refresh
+        # Portals and playlists are very often plain http:// and their
+        # addresses are typed by the user, so ATS can't list them. The reason
+        # for App Review is user-supplied servers.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        # The app's own traffic is HTTP(S) to the user's providers and iCloud:
+        # exempt encryption, so App Store Connect stops asking on every upload.
+        ITSAppUsesNonExemptEncryption: false
+        # Without this a tapped household invitation never routes into the app.
+        CKSharingSupported: true
+        NSLocalNetworkUsageDescription: Hearth plays channels from portals and playlists on your local network when you add one.
+
+  # Same code, same packages, same bundle id (Universal Purchase): one App
+  # Store Connect app, one TestFlight, both platforms.
+  Hearth-macOS:
+    type: application
+    platform: macOS
+    scheme: {}
+    # On the target, not in options, so the Mac build writes nothing into the
+    # settings the iOS app inherits.
+    deploymentTarget: "15.0"
+    sources: *appSources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bhavikjain.hearth
+        DEVELOPMENT_TEAM: Y4M3S6H4NK
+        CODE_SIGN_STYLE: Automatic
+        # Names the app in Finder, the menu bar and About; left alone it
+        # would read "Hearth-macOS".
+        PRODUCT_NAME: Hearth
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        ENABLE_HARDENED_RUNTIME: "YES"
+        # CloudKit on the Mac only works from a sandboxed app; the sandbox is
+        # then reopened for outgoing connections. See the file's comments.
+        CODE_SIGN_ENTITLEMENTS: App/Resources/App-macOS.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        APP_DISPLAY_NAME: Hearth
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.bhavikjain.hearth.dev
+          APP_DISPLAY_NAME: Hearth Dev
+    dependencies: *appDependencies
+    info:
+      path: App/Resources/Info-macOS.plist
+      properties:
+        CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        # Required by the Mac App Store; an upload without one fails validation.
+        LSApplicationCategoryType: public.app-category.entertainment
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        ITSAppUsesNonExemptEncryption: false
+        CKSharingSupported: true
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+
+schemes:
+  # Every package's tests in one scheme, so CI builds the shared packages once.
+  # A package left out here is never run by CI, silently.
+  AllPackageTests:
+    build:
+      targets:
+        Hearth: [test]
+    test:
+      parallelizeBuild: true
+      targets:
+        - package: Core/CoreTests
+          parallelizable: true
+        - package: SourceKit/SourceKitTests
+          parallelizable: true
+        - package: CatalogKit/CatalogKitTests
+          parallelizable: true
+        - package: HouseholdKit/HouseholdKitTests
+          parallelizable: true
+        - package: PlayerKit/PlayerKitTests
+          parallelizable: true

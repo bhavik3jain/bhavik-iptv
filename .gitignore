@@ -1,0 +1,37 @@
+# Xcode
+# The project file is generated from project.yml by XcodeGen — run `xcodegen generate`.
+*.xcodeproj/
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+
+# Swift Package Manager
+# Packages/ holds this app's own local modules, so it is tracked.
+.swiftpm/
+.build/
+Package.resolved
+!/Package.resolved
+
+# The handoff archive: its contents live, unpacked, in docs/handoff/.
+*.zip
+
+# macOS
+.DS_Store
+
+# Secrets / local config. Provider logins and MACs never go in the repo,
+# not even in test fixtures (PRIV-2).
+*.xcconfig.local
+.env
+.env.local
+*.p8
+*.p12
+*.mobileprovision
+*.provisionprofile
+probe-output/
+
+# Workflow agents' git worktrees.
+.claude/worktrees/

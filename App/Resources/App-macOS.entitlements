@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.bhavikjain.hearth</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<!-- The Mac spelling of aps-environment. Without it a partner's change
+	     only appears when the app is next activated. -->
+	<key>com.apple.developer.aps-environment</key>
+	<string>development</string>
+	<!-- CloudKit refuses a Mac app its database unless it is sandboxed, so the
+	     sandbox is a requirement here; the keys below give back what it takes. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- Every portal, playlist, guide and stream is an outgoing connection.
+	     Without this URLSession fails with an error that reads like a dead
+	     provider, and nothing in the log points at signing. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Adding an M3U playlist from a file the user picks (SRC-3). -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+</dict>
+</plist>

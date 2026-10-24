@@ -1,0 +1,30 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-10T12:00:00Z"},
+  "title": "IPTV Player Mockups",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 390, "h": 844, "title": "Who's watching", "is_interactive": true},
+    "Home.dc.html": {"x": 470, "y": 0, "w": 390, "h": 844, "title": "Home — Bhavik", "is_interactive": true},
+    "LiveGuide.dc.html": {"x": 940, "y": 0, "w": 390, "h": 844, "title": "Live TV guide", "is_interactive": true},
+    "ShowDetail.dc.html": {"x": 1410, "y": 0, "w": 390, "h": 844, "title": "Show detail", "is_interactive": true},
+    "Household.dc.html": {"x": 1880, "y": 0, "w": 390, "h": 1600, "title": "Household & sources", "is_interactive": true},
+    "Player.dc.html": {"x": 2350, "y": 0, "w": 844, "h": 390, "title": "Player (landscape)", "is_interactive": true},
+    "MacLive.dc.html": {"x": 0, "y": 2020, "w": 1440, "h": 900, "title": "Mac — Live TV multi-view"}
+  },
+  "order": [
+    "Main.dc.html",
+    "Home.dc.html",
+    "LiveGuide.dc.html",
+    "ShowDetail.dc.html",
+    "Household.dc.html",
+    "Player.dc.html",
+    "MacLive.dc.html"
+  ],
+  "notes": {
+    "rowPhone": {"x": 0, "y": -300, "text": "iPhone", "kind": "title1", "maxW": 3194},
+    "rowMac": {"x": 0, "y": 1720, "text": "Mac", "kind": "title1", "maxW": 1440}
+  },
+  "designSystems": []
+}

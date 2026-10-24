@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- One iCloud container for both bundle ids. Debug (.dev) syncs with the
+	     Development environment only, release with Production. -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.bhavikjain.hearth</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<!-- CloudKit's silent pushes, so a partner's favorite or a new Playback
+	     row arrives in seconds rather than at the next launch. "development"
+	     is right for local builds; the App Store export rewrites it to
+	     "production" from the distribution profile. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

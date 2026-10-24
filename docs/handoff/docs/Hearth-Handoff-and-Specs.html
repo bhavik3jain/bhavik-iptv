@@ -1,0 +1,1598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hearth — Handoff & Specs</title>
+<link rel="stylesheet" href="../ui/fonts/fonts.css">
+<style>
+:root { --ink: #1D1F24; --dim: #5B606B; --rule: #DADCE0; --head: #F3F4F6; --accent: #B7791F; }
+body { margin: 0; color: var(--ink); background: #FFFFFF; font: 10.5pt/1.5 'IBM Plex Sans', system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+h1, h2, h3 { font-family: Sora, sans-serif; line-height: 1.2; }
+h1 { font-size: 24pt; font-weight: 700; margin: 0 0 8px; }
+h2 { font-size: 14pt; font-weight: 600; margin: 28px 0 8px; padding-top: 8px; border-top: 1px solid var(--rule); }
+p, li { margin: 6px 0; }
+a { color: var(--accent); }
+code { font: 9pt 'IBM Plex Mono', ui-monospace, monospace; background: var(--head); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--head); padding: 12px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+pre code { background: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: 9pt; }
+th, td { text-align: left; vertical-align: top; padding: 6px 8px; border: 1px solid var(--rule); overflow-wrap: anywhere; }
+th { background: var(--head); font-weight: 600; }
+tr { break-inside: avoid; }
+img { max-width: 100%; }
+p > img { display: block; margin: 8px auto; border: 1px solid var(--rule); border-radius: 8px; }
+ul:has(input[type=checkbox]) { list-style: none; padding-left: 4px; }
+input[type=checkbox] { margin-right: 6px; }
+.doc + .doc { break-before: page; margin-top: 48px; }
+figure { margin: 18px 0; text-align: center; break-inside: avoid; }
+figure img { max-height: 8.2in; border-radius: 8px; }
+figcaption { color: var(--dim); font-size: 9pt; margin-top: 6px; }
+@media print { main { padding: 0; max-width: none; } h2 { break-after: avoid; } }
+</style>
+</head>
+<body>
+<main>
+<section id="doc-1" class="doc">
+<h1>Hearth — Handoff &amp; Specs</h1>
+<p>Oct 24, 2026 · Bhavik Jain</p>
+<p>Hearth (a working title) is an IPTV player for iPhone, iPad and Mac. It does what iSTB does and adds Netflix-style profiles that a whole household shares through iCloud. It is a concept with mockups and no code yet; this file is the handoff, and the specs sit in the files beside it.</p>
+<h2>At a glance</h2>
+<p>Nothing is built yet: what exists is research, seven mockup screens and these specs. Next comes Phase 1, a player for one provider on iPhone and Mac.</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Status</td>
+<td>Concept and mockups; no code</td>
+</tr>
+<tr>
+<td>Platforms</td>
+<td>iPhone, iPad and Mac; Apple TV later</td>
+</tr>
+<tr>
+<td>Sources</td>
+<td>Stalker portals (MAC address), Xtream Codes logins, M3U playlists with XMLTV guides</td>
+</tr>
+<tr>
+<td>What iSTB lacks</td>
+<td>Profiles, and a household shared through iCloud with synced favorites and progress</td>
+</tr>
+<tr>
+<td>Mockups</td>
+<td><code>ui/index.html</code> in this package: five iPhone screens, the landscape player and the Mac window</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>Hearth is a working title</td>
+</tr>
+</tbody></table>
+<p>The other files: <a href="#doc-2">Product spec</a> lists every requirement with its phase, <a href="#doc-3">Technical spec</a> covers the stores, sync, player and release, and <a href="#doc-4">Source protocols</a> is the reference for the three provider types.</p>
+<h2>Decisions made</h2>
+<p>The big calls are settled; reopen one only with a reason as strong as the one beside it.</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Choice</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Where it lives</td>
+<td>A separate app and repo, not a ninth Multitrack tracker</td>
+<td>VLCKit would break Multitrack&#39;s zero-remote-dependency rule, and an App Review rejection here would block Multitrack releases</td>
+</tr>
+<tr>
+<td>Sources</td>
+<td>Stalker portals, Xtream Codes and M3U with XMLTV, all three</td>
+<td>iSTB supports the same three; the owner&#39;s provider decides which ships first</td>
+</tr>
+<tr>
+<td>Player</td>
+<td>AVPlayer for HLS and MP4, VLCKit for everything else</td>
+<td>AVPlayer brings picture in picture, AirPlay and Now Playing for free but refuses raw MPEG-TS, which many IPTV streams are</td>
+</tr>
+<tr>
+<td>Profiles</td>
+<td>Kept by the app on top of one provider login</td>
+<td>Providers have no profiles; one login or MAC serves the whole household</td>
+</tr>
+<tr>
+<td>Household</td>
+<td>Core Data with NSPersistentCloudKitContainer, one iCloud share per household</td>
+<td>The pattern Multitrack already ships for Finance and Trips; no server to run</td>
+</tr>
+<tr>
+<td>What syncs</td>
+<td>Profiles, favorites, progress, rules and sources</td>
+<td>Channel lists, guide and posters stay on each device: too big, and they change daily</td>
+</tr>
+<tr>
+<td>Logins</td>
+<td>In the shared store as encrypted attributes</td>
+<td>Every member needs them to play; to be proven across a share in Phase 3</td>
+</tr>
+<tr>
+<td>Minimum OS</td>
+<td>iOS 18 and macOS 15, built with the iOS 26 SDK, Swift 6</td>
+<td>Matches Multitrack, so its Core code carries over</td>
+</tr>
+<tr>
+<td>Distribution</td>
+<td>TestFlight for the household first; the App Store only after a deliberate guideline 5.2 review</td>
+<td>Internal TestFlight builds skip App Review</td>
+</tr>
+</tbody></table>
+<h2>Scope</h2>
+<p>Version 1 is everything iSTB does on iPhone, iPad and Mac, plus profiles and the shared household. Each requirement&#39;s phase is in the product spec.</p>
+<p><strong>In version 1</strong></p>
+<ul>
+<li>All three source types, several per household</li>
+<li>Live TV with categories, a timeline guide and catch-up</li>
+<li>Movies and series with resume and up next</li>
+<li>A player with picture in picture, AirPlay, audio and subtitle tracks, timeshift and multi-view</li>
+<li>Profiles with a PIN, a Kids mode and a Guest mode</li>
+<li>A household shared through iCloud, with favorites and progress synced per profile</li>
+<li>Warnings before a stream would go over the provider&#39;s connection limit</li>
+<li>Downloads of movies and episodes where the provider allows them</li>
+<li>A Mac app with a sidebar and multi-view windows</li>
+</ul>
+<p><strong>Later</strong></p>
+<ul>
+<li>An Apple TV app from the same SwiftUI code</li>
+<li>Siri and Shortcuts, Live Activities for a match in progress</li>
+<li>Recording, only if a provider offers it</li>
+</ul>
+<p><strong>Never</strong></p>
+<ul>
+<li>Bundled channels, playlists or a directory of providers</li>
+<li>Finding, scanning or sharing portals or logins</li>
+<li>Ads, analytics or tracking</li>
+<li>A server of our own</li>
+</ul>
+<h2>Roadmap</h2>
+<p><img src="diagrams/roadmap.png" alt="Roadmap: four phases, each closed by a gate"></p>
+<p>No dates are set: each phase starts when the gate before it passes. Every requirement in the Product spec carries its phase.</p>
+<h2>Risks</h2>
+<p>The two that could stop the project are the owner&#39;s portal refusing an app that isn&#39;t a MAG box, and App Review. Both are checked in the first weeks, before anything else is built on them.</p>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>What happens</th>
+<th>Fallback</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>The portal checks a serial number, device ids or a signature</td>
+<td>Sign-in fails</td>
+<td>Advanced fields for each, filled from the provider; test with the probe in week 1; many providers also issue an Xtream login</td>
+</tr>
+<tr>
+<td>One stream per MAC</td>
+<td>A second member pressing play knocks the first off</td>
+<td>Warn before playing; hold several MACs under one portal; buy a second connection</td>
+</tr>
+<tr>
+<td>App Review rejects under guideline 5.2</td>
+<td>No App Store release</td>
+<td>TestFlight for the household; present it as a player that ships no content</td>
+</tr>
+<tr>
+<td>VLCKit&#39;s licence, size and picture in picture</td>
+<td>LGPL duties, a larger app, harder PiP</td>
+<td>Link it as a dynamic framework with attribution; prefer HLS where the provider offers it</td>
+</tr>
+<tr>
+<td>Huge catalogs and guides</td>
+<td>Slow first load, memory spikes</td>
+<td>Parse as a stream, page requests, store in SQLite, import in the background</td>
+</tr>
+<tr>
+<td>CloudKit sharing traps</td>
+<td>Crash at launch or shares that never finish</td>
+<td>Follow the Multitrack lessons below; run the schema ritual before each TestFlight build</td>
+</tr>
+<tr>
+<td>A provider renumbers channels</td>
+<td>Favorites and progress point at nothing</td>
+<td>Keys built from stable ids with a name fallback (Source protocols, Stable ids)</td>
+</tr>
+<tr>
+<td>Encrypted logins don&#39;t open for share participants</td>
+<td>Members can&#39;t play</td>
+<td>Proven in a Phase 3 spike; fallback is each member typing the login once</td>
+</tr>
+</tbody></table>
+<h2>Open questions</h2>
+<p>The first one decides what Phase 1 builds; the rest can wait until their phase.</p>
+<ul>
+<li><input disabled="" type="checkbox"> Which login does your provider give you: a MAC portal, an Xtream username and password, or an M3U link?</li>
+<li><input disabled="" type="checkbox"> How many streams at once does the subscription allow, per login or per MAC?</li>
+<li><input disabled="" type="checkbox"> Keep the name Hearth?</li>
+<li><input disabled="" type="checkbox"> App Store, or TestFlight only? Internal TestFlight needs each household member added to your App Store Connect team.</li>
+<li><input disabled="" type="checkbox"> Who is in the household, and which role does each person get (owner, can manage, can watch)?</li>
+<li><input disabled="" type="checkbox"> Are downloads wanted, and does the provider allow them?</li>
+<li><input disabled="" type="checkbox"> Apple TV this year, or after the Mac app ships?</li>
+<li><input disabled="" type="checkbox"> Copy Multitrack&#39;s Core sharing code into the new repo, or extract it into a package both apps use?</li>
+</ul>
+<h2>Carried over from Multitrack</h2>
+<p>Multitrack paid for each of these with a crash, a hang or lost data; Hearth uses the same iCloud stack and starts with them. The full record is Multitrack&#39;s <a href="https://github.com/bhavik3jain/bhavik-ios/blob/main/.claude/CLAUDE.md">CLAUDE.md</a>, and its Core package (CloudSharedStore, SharePreparer, CloudSyncMonitor, SharingStatusResolver) is the code to borrow.</p>
+<ul>
+<li><strong>Model rules or a crash at launch.</strong> Every non-optional attribute has a default, every relationship is optional with an inverse, nothing is unique, and enums are stored as raw strings with a fallback. Breaking one fails at container load, never at compile time.</li>
+<li><strong>A computed property can&#39;t be filtered on.</strong> Predicates and sort descriptors touch stored attributes only, or the fetch fails at runtime.</li>
+<li><strong>The schema ritual before every TestFlight build that adds an entity or attribute.</strong> Initialise the schema in Development, check it, then Deploy Schema Changes to Production. Production never creates record types itself, including <code>cloudkit.share</code>, so the run makes and deletes one test share.</li>
+<li><strong>Never call the sharing API on the main thread.</strong> Multitrack&#39;s TestFlight build 16 deadlocked on Share and was killed. Use background forms, one <code>share()</code> per object, look up before sharing, and bound every wait.</li>
+<li><strong>Members leave a share; they never delete its root.</strong> A participant&#39;s delete asks iCloud to delete the owner&#39;s record.</li>
+<li><strong>Don&#39;t write what changes every second.</strong> Each synced write wakes the partner&#39;s devices and can fire their iCloud alerts. Progress is saved on pause, stop and every few minutes; the who&#39;s-watching record is written at play, at stop and every ten minutes, never per second.</li>
+<li><strong>Debug is its own app.</strong> A <code>.dev</code> bundle id with its own container; sharing the release id once crashed TestFlight three times.</li>
+<li><strong>There is no sync now.</strong> Re-post did-become-active at most once a minute and wait, bounded, for an import; never remove and re-add stores.</li>
+<li><strong>iOS allows 64 pending local notifications per app.</strong> Guide reminders must fit inside that.</li>
+<li><strong>Views stay untested by policy.</strong> Logic goes into value types with Swift Testing tests; tests that need a real login are gated so a missing credential shows as a named skip.</li>
+</ul>
+<h2>First week</h2>
+<p>The first week proves the two riskiest things against the real provider: signing in, and playing a channel. Nothing else waits on design.</p>
+<ul>
+<li><input disabled="" type="checkbox"> Get answers to the first two open questions: provider type and stream limit.</li>
+<li><input disabled="" type="checkbox"> Create the repo with an XcodeGen <code>project.yml</code>: iOS and Mac targets, a <code>.dev</code> Debug bundle id, one iCloud container.</li>
+<li><input disabled="" type="checkbox"> Write the source probe (a Debug launch argument): sign in, list categories, fetch one channel&#39;s link, print every step and its timing.</li>
+<li><input disabled="" type="checkbox"> Save the provider&#39;s responses as test fixtures, logins and MACs scrubbed.</li>
+<li><input disabled="" type="checkbox"> Play one live channel through AVPlayer (HLS) and through VLCKit (MPEG-TS), on iPhone and on Mac.</li>
+<li><input disabled="" type="checkbox"> Import that provider&#39;s whole catalog into the local store and time it.</li>
+<li><input disabled="" type="checkbox"> Model the household store from the technical spec now, even though its screens come in Phase 3, and initialise it once in Development.</li>
+<li><input disabled="" type="checkbox"> Set up CI: build both platforms and run the package tests.</li>
+</ul>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://apps.apple.com/app/id1497473331">iSTB on the App Store</a> and <a href="https://apps.apple.com/app/id1498390886">iSTB Lite</a>: the product being matched (feature list from its listing, seen through search results)</li>
+<li><a href="https://developer.apple.com/app-store/review/guidelines/">App Review Guidelines</a>, section 5.2: third-party content and streaming</li>
+<li><a href="https://github.com/bhavik3jain/bhavik-ios/blob/main/.claude/CLAUDE.md">Multitrack&#39;s CLAUDE.md</a>: the CloudKit and sharing lessons</li>
+<li>The mockups: <code>ui/</code> in this package, and the live design canvas at <a href="https://claude.ai/artifact/FQKiJK9SuC9Xc2UZ8UFQdi">https://claude.ai/artifact/FQKiJK9SuC9Xc2UZ8UFQdi</a></li>
+<li>Protocol sources are listed at the end of <a href="#doc-4">Source protocols</a>.</li>
+</ul>
+
+</section>
+<section id="doc-2" class="doc">
+<h1>Product spec</h1>
+<p>What Hearth does, area by area, with every requirement tagged by the phase that delivers it. Requirement ids (SRC-1, PRF-2 …) stay fixed so issues and commits can cite them.</p>
+<h2>Users and roles</h2>
+<p>Two layers: <strong>members</strong> are iCloud accounts in the household share, and <strong>profiles</strong> are the viewers inside it, so one shared iPad can serve several profiles. Roles are enforced by the app, because every member needs write access in iCloud to save their own favorites and progress.</p>
+<table>
+<thead>
+<tr>
+<th>Who</th>
+<th>What they are</th>
+<th>Can</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Owner</td>
+<td>The member who created the household</td>
+<td>Everything: members, sources, profiles, rules, PIN resets</td>
+</tr>
+<tr>
+<td>Can manage</td>
+<td>A member trusted with setup</td>
+<td>Add and edit sources and profiles, change rules; not remove the owner</td>
+</tr>
+<tr>
+<td>Can watch</td>
+<td>Any other member</td>
+<td>Pick a profile, watch, edit that profile&#39;s favorites and lists; never see logins or change sources</td>
+</tr>
+<tr>
+<td>Kids profile</td>
+<td>A viewer, not an account</td>
+<td>Only the categories allowed for kids; an adult&#39;s PIN to leave</td>
+</tr>
+<tr>
+<td>Guest profile</td>
+<td>A viewer, not an account</td>
+<td>Watch anything not hidden; nothing is saved</td>
+</tr>
+</tbody></table>
+<h2>Navigation</h2>
+<p><img src="diagrams/navigation.png" alt="iPhone navigation: profile gate, five tabs, one player"></p>
+<p>On the Mac the same five places sit in a sidebar under the profile switcher (MAC-1). The mockups in <code>ui/</code> show Who&#39;s watching, Home, the Live TV guide, a show, Household, the player and the Mac window.</p>
+<h2>Sources</h2>
+<p>A source is one provider login, added once for the whole household. Stalker is planned for Phase 1; if the owner&#39;s provider turns out to be Xtream, swap SRC-1 and SRC-2.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SRC-1</td>
+<td>Add a Stalker portal: portal URL and MAC address; advanced fields for serial number, device id, device id 2, signature, box model and time zone</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>SRC-2</td>
+<td>Add an Xtream login: server URL, username, password; show expiry and the connection limit from the account call</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SRC-3</td>
+<td>Add an M3U playlist by URL or file, with an XMLTV guide URL taken from the playlist header or typed in</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SRC-4</td>
+<td>Test a source before saving it: sign in, count channels and movies, show the provider&#39;s own error text on failure</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>SRC-5</td>
+<td>Show each source&#39;s status: active or expired, expiry date, last refresh, streams allowed</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>SRC-6</td>
+<td>Refresh on demand and on a schedule: catalog daily, guide every few hours</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>SRC-7</td>
+<td>Several sources per household; their content appears together, each item labelled with its source</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SRC-8</td>
+<td>Only the owner and managers see or edit logins; watchers see a source&#39;s name</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>SRC-9</td>
+<td>Removing a source hides its favorites and progress instead of deleting them, so adding it back restores them</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>SRC-10</td>
+<td>Several MACs under one portal, each device taking a free one</td>
+<td>Phase 4</td>
+</tr>
+</tbody></table>
+<h2>Profiles</h2>
+<p>Profiles work like Netflix&#39;s. Phase 1 ships with one built-in profile so favorites already belong to a profile; the screens to manage them arrive in Phase 3.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PRF-1</td>
+<td>Up to 8 profiles per household, each with a name, an avatar (colour plus letter or symbol) and a kind: standard, kids or guest</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-2</td>
+<td>&quot;Who&#39;s watching?&quot; at launch when there is more than one profile; a device can be set to always open one profile</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-3</td>
+<td>An optional 4-digit PIN per profile, asked when switching to it</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-4</td>
+<td>Kids: only categories the owner marked for kids, no settings, an adult&#39;s PIN to leave</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-5</td>
+<td>Guest: no history, favorites or progress kept, cleared on leaving</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-6</td>
+<td>Per-profile rules: which sources and categories show, and which are hidden</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-7</td>
+<td>Each profile has its own favorites, My List, progress, recent channels and up next</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-8</td>
+<td>Switch profile from Home&#39;s header on the phone and the sidebar on the Mac</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PRF-9</td>
+<td>The last profile used on a device is remembered on that device only, never synced</td>
+<td>Phase 3</td>
+</tr>
+</tbody></table>
+<h2>Household sharing</h2>
+<p>The household is one iCloud share: whoever accepts it gets every profile and source on every device signed in to their Apple ID. The Household screen in the mockups is the reference layout.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>HH-1</td>
+<td>The first launch creates a household (&quot;<surname> Household&quot;); it exists even while unshared</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>HH-2</td>
+<td>Invite through the iCloud share sheet (Messages, Mail or a link) and pick a role: can manage or can watch</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>HH-3</td>
+<td>An accepted invite shows the household&#39;s profiles and sources on all of that person&#39;s devices</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>HH-4</td>
+<td>A member can leave and the owner can remove one; leaving clears the household from that member&#39;s devices only</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>HH-5</td>
+<td>Who&#39;s watching now: each active stream (person, device, channel, source) visible to the household within about a minute</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>HH-6</td>
+<td>Before playing on a source at its limit, warn and name who is using it; &quot;Watch anyway&quot; stays possible</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>HH-7</td>
+<td>Sources and profiles belong to the household; favorites, lists and progress belong to a profile</td>
+<td>Phase 3</td>
+</tr>
+</tbody></table>
+<h2>Live TV and guide</h2>
+<p>Live TV opens on the profile&#39;s favorites. The guide is a timeline, and anything already aired on a channel with an archive can be watched from its start.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>LIV-1</td>
+<td>Channel list by category: number, logo, what&#39;s on now and its progress; Favorites first</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>LIV-2</td>
+<td>Timeline guide: channels down, time across, a now line, two hours on screen, as many days back and ahead as the guide holds</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>LIV-3</td>
+<td>Tap a programme for its details and Watch live</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>LIV-4</td>
+<td>Catch-up: aired programmes carry a mark when the channel has an archive; play from the start or any point</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>LIV-5</td>
+<td>In the player: channel up and down, previous channel, a mini guide over the picture</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>LIV-6</td>
+<td>Find a channel by name or number</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>LIV-7</td>
+<td>A missing logo falls back to a monogram tile</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>LIV-8</td>
+<td>Hide channels and categories per profile</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>LIV-9</td>
+<td>Remind me: a local notification a few minutes before a programme starts</td>
+<td>Phase 4</td>
+</tr>
+</tbody></table>
+<h2>Movies and Shows</h2>
+<p>Movies and shows come from the providers&#39; on-demand catalogs, merged across sources. Home pulls the most useful of them together for the current profile.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>HOME-1</td>
+<td>Home: Continue watching, favorite channels with what&#39;s on, up next in shows, new movies</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>VOD-1</td>
+<td>Movies by category, sorted by date added, name or year, as a poster grid</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>VOD-2</td>
+<td>Movie detail with whatever the provider supplies (poster, year, plot, rating, cast, length), plus Play or Resume, My List and Download</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>VOD-3</td>
+<td>Resume from the last position per profile; marked watched at 95%</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SER-1</td>
+<td>Shows by category; detail with seasons and episodes, each episode&#39;s watched mark and progress</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SER-2</td>
+<td>Up next: the next unwatched episode of each show in progress, per profile</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SER-3</td>
+<td>Show where other profiles in the household are in a show (never a Guest&#39;s)</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>DL-1</td>
+<td>Download a movie or episode to watch offline, when it is a file rather than a live stream; kept on that device only</td>
+<td>Phase 4</td>
+</tr>
+<tr>
+<td>DL-2</td>
+<td>A download counts against the provider&#39;s stream limit while it runs</td>
+<td>Phase 4</td>
+</tr>
+</tbody></table>
+<h2>Player</h2>
+<p>One player screen serves live TV, catch-up, movies and episodes; the engine underneath is chosen per stream (Technical spec). The landscape player in the mockups is the reference.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PLY-1</td>
+<td>Play HLS and MP4 with AVPlayer and everything else (raw MPEG-TS, MKV) with VLCKit, chosen automatically</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>PLY-2</td>
+<td>Controls: play and pause, back and forward 10 seconds, scrubbing, Jump to live</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>PLY-3</td>
+<td>Picture in picture and AirPlay for streams AVPlayer plays; Now Playing and lock-screen controls; audio keeps playing in the background</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>PLY-4</td>
+<td>On failure, show the provider&#39;s message, retry once with a fresh link, then offer the same channel from another source if one exists</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>PLY-5</td>
+<td>Pause and rewind live TV within the channel&#39;s catch-up window</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>PLY-6</td>
+<td>Choose audio and subtitle tracks; each profile&#39;s preferred languages picked automatically</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>PLY-7</td>
+<td>Fit, fill and zoom</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>PLY-8</td>
+<td>Picture in picture for streams VLCKit plays</td>
+<td>Phase 4</td>
+</tr>
+<tr>
+<td>PLY-9</td>
+<td>Multi-view: two or four streams, one with sound; a slot the stream limits rule out says why</td>
+<td>Phase 4</td>
+</tr>
+<tr>
+<td>PLY-10</td>
+<td>Sleep timer</td>
+<td>Later</td>
+</tr>
+</tbody></table>
+<h2>Favorites, My List and search</h2>
+<p>Favorites and My List belong to a profile and follow it to every device in the household. Search runs on the device against the local catalog, across every source.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>FAV-1</td>
+<td>Favorite channels, in an order set by hand</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>FAV-2</td>
+<td>Favorites survive channel renumbering and source refreshes (stable keys, Source protocols)</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>FAV-3</td>
+<td>My List for movies and shows</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>FAV-4</td>
+<td>Favorites, My List and progress synced per profile through the household</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>SRCH-1</td>
+<td>One search across channels, the next 24 hours of the guide, movies and shows, from all sources</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SRCH-2</td>
+<td>Results grouped by type; nothing leaves the device</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>SRCH-3</td>
+<td>A Kids profile&#39;s results include only what it may watch</td>
+<td>Phase 3</td>
+</tr>
+</tbody></table>
+<h2>Parental controls and privacy</h2>
+<p>Adult content is hidden everywhere until the owner says otherwise. Nothing leaves the device except calls to the household&#39;s own providers and to iCloud.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PRIV-1</td>
+<td>No analytics, ads or tracking libraries</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>PRIV-2</td>
+<td>Logins are never logged, and are scrubbed from probe output and test fixtures</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>PRIV-3</td>
+<td>Logins stay encrypted in iCloud yet open on every member&#39;s devices</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PAR-1</td>
+<td>Adult categories hidden on every profile by default, matched by name (&quot;adult&quot;, &quot;xxx&quot;, &quot;18+&quot;) plus any the owner marks</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PAR-2</td>
+<td>Kids profiles see only the categories allowed for them</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PAR-3</td>
+<td>PINs stored as salted hashes; the owner can reset a forgotten one</td>
+<td>Phase 3</td>
+</tr>
+<tr>
+<td>PAR-4</td>
+<td>A Guest profile keeps nothing</td>
+<td>Phase 3</td>
+</tr>
+</tbody></table>
+<h2>Mac app</h2>
+<p>The Mac app shows the same household with a sidebar instead of tabs, and uses the bigger screen for multi-view and separate player windows. The Mac window in the mockups is the reference.</p>
+<table>
+<thead>
+<tr>
+<th>Id</th>
+<th>Requirement</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>MAC-1</td>
+<td>A split view: the profile switcher, search, Home, Live TV, Movies, Shows, My List, Downloads, then favorite channels, and the household&#39;s stream use at the foot</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>MAC-2</td>
+<td>Keyboard: space to pause, left and right arrows for 10 seconds, up and down for channels, ⌘F for full screen</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>MAC-3</td>
+<td>Players in their own windows, several at once, each able to go full screen</td>
+<td>Phase 4</td>
+</tr>
+<tr>
+<td>MAC-4</td>
+<td>Settings as its own window (⌘,)</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>MAC-5</td>
+<td>Multi-view in Live TV&#39;s toolbar, with a channel dragged from the sidebar onto a tile</td>
+<td>Phase 4</td>
+</tr>
+<tr>
+<td>MAC-6</td>
+<td>iPad uses the Mac&#39;s sidebar layout when the window is wide enough</td>
+<td>Phase 2</td>
+</tr>
+</tbody></table>
+<h2>Quality bar</h2>
+<p>These are targets to confirm against the owner&#39;s real provider in Phase 1, not measurements. A miss is a bug to fix or a target to change on purpose.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Starting a live channel</td>
+<td>Picture within 2 s on home Wi-Fi for HLS, 3 s for MPEG-TS</td>
+</tr>
+<tr>
+<td>Switching channel</td>
+<td>Under 2 s from press to picture</td>
+</tr>
+<tr>
+<td>Guide</td>
+<td>Scrolls without dropped frames with 1,000 channels loaded</td>
+</tr>
+<tr>
+<td>First import</td>
+<td>50,000 movies and series stored in under 2 minutes, in the background, with the app usable throughout</td>
+</tr>
+<tr>
+<td>Opening the app</td>
+<td>Last-used screen from the local catalog in under 1 s, with no network</td>
+</tr>
+<tr>
+<td>Offline</td>
+<td>The app opens, downloads play, and a provider it can&#39;t reach says so plainly</td>
+</tr>
+<tr>
+<td>Accessibility</td>
+<td>VoiceOver labels on every control, Dynamic Type, 44 pt touch targets, captions follow system settings, Reduce Motion respected</td>
+</tr>
+<tr>
+<td>Languages</td>
+<td>English first; every string localisable from day one</td>
+</tr>
+</tbody></table>
+
+</section>
+<section id="doc-3" class="doc">
+<h1>Technical spec</h1>
+<p>Hearth is a separate SwiftUI app for iOS 18 and macOS 15, built with the iOS 26 SDK. It keeps two stores, a household shared through iCloud and a catalog cached on each device, and its player picks AVPlayer or VLCKit for each stream.</p>
+<h2>Architecture</h2>
+<p><img src="diagrams/architecture.png" alt="Architecture: four kits, one synced store"></p>
+<p>CatalogKit pulls through SourceKit and writes the local store; only HouseholdKit talks to iCloud. The player takes its stream URLs from the catalog and plays them straight from the provider.</p>
+<h2>Packages and targets</h2>
+<p>The repo copies Multitrack&#39;s layout: an XcodeGen <code>project.yml</code>, an <code>App/</code> composition root with iOS and Mac targets, and local Swift packages. VLCKit is the only remote dependency, and only PlayerKit imports it.</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Owns</th>
+<th>Depends on</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Core</td>
+<td>Shared UI chrome, the Mac shims, formatting, <code>counted(_:_:plural:)</code></td>
+<td>Nothing</td>
+</tr>
+<tr>
+<td>SourceKit</td>
+<td>The Stalker and Xtream clients, the M3U and XMLTV parsers, one <code>SourceClient</code> protocol over all three</td>
+<td>Nothing</td>
+</tr>
+<tr>
+<td>CatalogKit</td>
+<td>The per-device catalog store, imports from SourceKit, stable keys, search</td>
+<td>Core, SourceKit</td>
+</tr>
+<tr>
+<td>HouseholdKit</td>
+<td>The synced household store, sharing, roles, the who&#39;s-watching records</td>
+<td>Core</td>
+</tr>
+<tr>
+<td>PlayerKit</td>
+<td>The engine protocol, the AVPlayer and VLCKit engines, engine choice, picture in picture, Now Playing, multi-view</td>
+<td>Core, VLCKit</td>
+</tr>
+<tr>
+<td>Feature packages</td>
+<td>Home, Live TV, Library (movies and shows), Profiles, Household, Search, Settings</td>
+<td>Core plus the kits they need; never each other</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>Targets:</strong> Hearth (iOS and iPadOS), Hearth-macOS, a test target per package, and an <code>AllPackageTests</code> scheme that CI runs.</li>
+<li><strong>Bundle ids:</strong> a release id and a <code>.dev</code> Debug id, each with its own sandbox; both use one iCloud container, Debug against Development only.</li>
+<li><strong>Rule:</strong> SourceKit and CatalogKit never touch iCloud; HouseholdKit never talks to a provider; features join them.</li>
+</ul>
+<h2>Household store</h2>
+<p>A hand-built Core Data model, <code>HouseholdModel</code>, in an NSPersistentCloudKitContainer with a private and a shared store, the way Multitrack&#39;s Finance is built. <code>Household</code> is the share root; everything else hangs off it. Every non-optional attribute has a default, every relationship is optional with an inverse, nothing is unique, and enums are stored as <code>…Raw</code> strings.</p>
+<table>
+<thead>
+<tr>
+<th>Entity</th>
+<th>Attributes</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Household</td>
+<td>id, name, createdAt, adultCategoryKeys (JSON)</td>
+<td>Share root; to-many sources, profiles, memberRoles, playbacks</td>
+</tr>
+<tr>
+<td>Source</td>
+<td>id, name, kindRaw (stalker, xtream, m3u), serverURL, sortOrder, isRemoved, maxStreams, expiresAt; encrypted: macAddress, username, password, playlistURL, guideURL, serialNumber, deviceID, deviceID2, signature, model, timeZone</td>
+<td>Encrypted attributes use Allows Cloud Encryption, set before the first Production deploy because it can&#39;t be added later</td>
+</tr>
+<tr>
+<td>Profile</td>
+<td>id, name, kindRaw (standard, kids, guest), avatarColorRaw, avatarSymbol, sortOrder, pinHash, pinSalt, allowedCategoryKeys (JSON), hiddenCategoryKeys (JSON), audioLanguage, subtitleLanguage</td>
+<td>Guest profiles never write favorites or progress</td>
+</tr>
+<tr>
+<td>Favorite</td>
+<td>id, itemKey, kindRaw (channel, movie, series), sortOrder (Double), addedAt</td>
+<td>Belongs to a profile; covers favorite channels and My List; duplicates folded by profile plus itemKey</td>
+</tr>
+<tr>
+<td>Progress</td>
+<td>id, itemKey, kindRaw (movie, episode, catchup), position, duration, watched, updatedAt, seriesKey, season, episode</td>
+<td>One row per profile and item, updated in place; the later updatedAt wins a conflict</td>
+</tr>
+<tr>
+<td>Playback</td>
+<td>id, deviceName, profileID, sourceID, itemKey, title, startedAt, lastSeenAt</td>
+<td>Who&#39;s watching now; deleted at stop, ignored after 15 minutes without a heartbeat</td>
+</tr>
+<tr>
+<td>MemberRole</td>
+<td>participantID, roleRaw (owner, manage, watch)</td>
+<td>Written only by the owner; the app hides controls by role</td>
+</tr>
+</tbody></table>
+<p>Item keys are built by CatalogKit from stable provider ids, so a refresh or a renumbered channel doesn&#39;t orphan a favorite (Source protocols, Stable ids).</p>
+<h2>Catalog store</h2>
+<p>A local Core Data store on each device, never synced and safe to delete: everything in it can be fetched again from the providers. Imports use <code>NSBatchInsertRequest</code> into a new generation number, swap when complete, then delete the old generation, so a failed refresh leaves the last good catalog in place.</p>
+<table>
+<thead>
+<tr>
+<th>Entity</th>
+<th>Attributes</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Category</td>
+<td>sourceID, remoteID, kindRaw (live, vod, series), name, sortOrder, isAdult</td>
+<td>isAdult matched by name, plus the household&#39;s own list</td>
+</tr>
+<tr>
+<td>Channel</td>
+<td>sourceID, remoteID, stableKey, number, name, searchKey, logoURL, categoryID, guideChannelID, hasArchive, archiveDays, command, formatHint</td>
+<td>command is Stalker&#39;s <code>cmd</code> or an Xtream or M3U URL</td>
+</tr>
+<tr>
+<td>Programme</td>
+<td>sourceID, guideChannelID, start, end, title, summary, category, hasArchive</td>
+<td>Indexed on guideChannelID and start; kept from 7 days back to 7 ahead</td>
+</tr>
+<tr>
+<td>Movie</td>
+<td>sourceID, remoteID, stableKey, name, searchKey, categoryID, posterURL, year, plot, rating, duration, containerExtension, addedAt</td>
+<td></td>
+</tr>
+<tr>
+<td>Series</td>
+<td>sourceID, remoteID, stableKey, name, searchKey, categoryID, posterURL, plot, year</td>
+<td></td>
+</tr>
+<tr>
+<td>Episode</td>
+<td>sourceID, seriesID, remoteID, stableKey, season, number, title, duration, containerExtension, command</td>
+<td>Fetched when a series is opened, then cached</td>
+</tr>
+<tr>
+<td>SourceState</td>
+<td>sourceID, generation, catalogRefreshedAt, guideRefreshedAt, accountExpiry, streamLimit, activeStreams, activeStreamsReadAt</td>
+<td>Stalker&#39;s session token stays in memory and this device&#39;s Keychain, never here</td>
+</tr>
+<tr>
+<td>Download</td>
+<td>itemKey, profileID, fileName, bytes, state, finishedAt</td>
+<td>Files in Application Support; one device only</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>Search</strong> matches a <code>searchKey</code> (lowercased, accents and punctuation stripped). If 50,000 movies can&#39;t be searched as you type, move to an SQLite FTS table; check in Phase 2.</li>
+<li><strong>Images</strong> go through <code>URLCache</code> with a disk limit, never into either store.</li>
+</ul>
+<h2>Sync and sharing rules</h2>
+<p>Only the household store syncs, and it is written as rarely as the features allow: each write wakes every household device. The share is created through a SharePreparer-style plan, never by a bare <code>share()</code> call on the main thread.</p>
+<table>
+<thead>
+<tr>
+<th>Record</th>
+<th>Written when</th>
+<th>Conflict rule</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Source, Profile, MemberRole</td>
+<td>On save in their editors</td>
+<td>Last save wins per attribute</td>
+</tr>
+<tr>
+<td>Favorite</td>
+<td>On add, remove or reorder</td>
+<td>Duplicates folded on import by profile plus itemKey, keeping the earliest addedAt</td>
+</tr>
+<tr>
+<td>Progress</td>
+<td>On pause, stop, finish, going to the background, and every 5 minutes of playback</td>
+<td>The later updatedAt wins, whole row</td>
+</tr>
+<tr>
+<td>Playback</td>
+<td>At play, at stop, and every 10 minutes while playing</td>
+<td>Any device deletes rows unseen for 15 minutes</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>Sharing:</strong> the owner&#39;s first invite shares the <code>Household</code> root. Participants join with read and write access, because they save their own favorites and progress; role limits are the app&#39;s, not iCloud&#39;s.</li>
+<li><strong>Leaving:</strong> a participant leaves by purging the share&#39;s zone from the shared store, never by deleting the root.</li>
+<li><strong>Logins:</strong> encrypted attributes only; never in UserDefaults, logs or crash reports. A Phase 3 spike proves a participant can read them.</li>
+<li><strong>Pushes:</strong> <code>aps-environment</code> and the remote-notification background mode on, so a partner&#39;s favorite lands in seconds rather than at the next launch.</li>
+<li><strong>No iCloud alert subscriptions</strong> in version 1: nothing needs to reach a device that is off.</li>
+<li><strong>Refresh from iCloud:</strong> Multitrack&#39;s CloudSyncMonitor approach, at most once a minute, with a bounded wait.</li>
+</ul>
+<h2>Player engine</h2>
+<p><img src="diagrams/player-engine.png" alt="Engine choice: two questions, two engines"></p>
+<p>One <code>PlaybackEngine</code> protocol (load, play, pause, seek, tracks, state) hides which engine runs, so the player screen and multi-view never ask. An AVPlayer stream that hasn&#39;t started within a few seconds, or fails, is retried once on VLCKit with a fresh link.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>AVPlayer</th>
+<th>VLCKit</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Formats</td>
+<td>HLS, MP4, MOV</td>
+<td>MPEG-TS, MKV and most others, HLS too</td>
+</tr>
+<tr>
+<td>Picture in picture</td>
+<td>Built in</td>
+<td>Phase 4 (PLY-8), through a sample-buffer layer</td>
+</tr>
+<tr>
+<td>AirPlay video</td>
+<td>Built in</td>
+<td>Screen mirroring only</td>
+</tr>
+<tr>
+<td>Now Playing, lock screen</td>
+<td>Set by the app</td>
+<td>Set by the app</td>
+</tr>
+<tr>
+<td>Audio and subtitle tracks</td>
+<td>Media selection groups</td>
+<td>VLCKit&#39;s track lists</td>
+</tr>
+<tr>
+<td>Mac</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+</tbody></table>
+<h2>Stream limits</h2>
+<p>The provider&#39;s own count wins wherever it gives one; the household&#39;s Playback records only say who is using the streams. Xtream reports a count, Stalker and M3U don&#39;t.</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Limit from</th>
+<th>In use from</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Xtream</td>
+<td><code>max_connections</code> in the account call</td>
+<td><code>active_cons</code> in the same call, read when Live TV opens and before each play</td>
+</tr>
+<tr>
+<td>Stalker</td>
+<td>The owner&#39;s setting, 1 per MAC by default</td>
+<td>Playback records on that source</td>
+</tr>
+<tr>
+<td>M3U</td>
+<td>The owner&#39;s setting, unlimited by default</td>
+<td>Playback records on that source</td>
+</tr>
+</tbody></table>
+<ol>
+<li>Before playing, free = limit minus streams in use, not counting this device&#39;s own stream.</li>
+<li>Free above zero: play.</li>
+<li>Free at zero: a sheet names who is watching what, with Watch anyway, Use another source (when the same channel exists elsewhere) and Cancel.</li>
+<li>Multi-view takes one stream per tile; a tile that can&#39;t get one says which source is full.</li>
+<li>A running download takes a stream until it finishes or pauses.</li>
+</ol>
+<h2>Catalog refresh and the guide</h2>
+<p>Catalogs refresh daily and guides every 6 hours, one source at a time, in the background and cancellable. The exact calls per source are in Source protocols.</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>When</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Account (expiry, streams)</td>
+<td>On adding a source, when Live TV opens, before each play on Xtream</td>
+<td>One call</td>
+</tr>
+<tr>
+<td>Channels and categories</td>
+<td>On adding a source, then when the app opens if older than 24 h</td>
+<td>Stalker <code>get_genres</code> + <code>get_all_channels</code>; Xtream live categories and streams; the M3U file</td>
+</tr>
+<tr>
+<td>Movies and series lists</td>
+<td>Same as channels</td>
+<td>Stalker paged <code>get_ordered_list</code> (pages count from 0); Xtream VOD and series calls</td>
+</tr>
+<tr>
+<td>Episodes</td>
+<td>When a series is opened</td>
+<td>Stalker series list by <code>movie_id</code> and <code>season_id</code>; Xtream <code>get_series_info</code></td>
+</tr>
+<tr>
+<td>Guide</td>
+<td>Every 6 hours, and in an iOS background refresh when the system allows</td>
+<td>XMLTV where offered (Xtream <code>xmltv.php</code>, the playlist&#39;s guide URL), read as a stream; Stalker&#39;s short guide for the channels on screen</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>Big files:</strong> M3U files are read line by line and XMLTV with a streaming <code>XMLParser</code>; gzip goes through the system zlib, never a remote package.</li>
+<li><strong>Background task:</strong> register the iOS refresh task in the app&#39;s init with its identifier in <code>BGTaskSchedulerPermittedIdentifiers</code>, and keep its callbacks <code>@Sendable</code>; Multitrack&#39;s TV refresh hit both traps.</li>
+<li><strong>Time zones:</strong> XMLTV times carry their offset; Stalker guide times are read in the portal&#39;s <code>timezone</code>; a test pins each case.</li>
+</ul>
+<h2>Testing</h2>
+<p>Swift Testing only, as in Multitrack: logic lives in value types and is tested, views are not. No test touches iCloud or a real provider unless it is gated on a credential and skips by name without one.</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>What the tests pin</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SourceKit</td>
+<td>Parsing of saved responses per source type: sign-in, <code>js</code> as an array or as <code>data</code>, 0-based pages, the link inside <code>create_link</code>&#39;s <code>cmd</code>, base64 guide titles, M3U attributes, XMLTV times. Network faked with a <code>URLProtocol</code> stub</td>
+</tr>
+<tr>
+<td>CatalogKit</td>
+<td>Imports of fixture catalogs into an in-memory store, generation swap, stable keys, search normalisation</td>
+</tr>
+<tr>
+<td>HouseholdKit</td>
+<td>In-memory Core Data: progress conflict rule, favorite folding, role checks, stale Playback cleanup</td>
+</tr>
+<tr>
+<td>PlayerKit</td>
+<td>The engine choice table: URL, extension and content type to engine</td>
+</tr>
+</tbody></table>
+<p><strong>Debug launch arguments</strong>, all <code>#if DEBUG</code>:</p>
+<ul>
+<li><code>-SourceProbe &lt;source name&gt;</code>: sign in to a real provider, list categories, fetch one link, print each step with timings, logins masked.</li>
+<li><code>-StubProvider YES</code>: a fake provider behind <code>URLProtocol</code>, so a simulator shows channels, a guide and movies with no login.</li>
+<li><code>-InMemoryStores YES</code>: both stores in memory, no iCloud.</li>
+<li><code>-InitializeCloudKitSchema YES</code>: the schema ritual run, as in Multitrack.</li>
+</ul>
+<p><strong>CI:</strong> a GitHub Actions macOS runner builds both platforms and runs <code>AllPackageTests</code> on a simulator. It holds no provider credentials.</p>
+<h2>Build, release and App Review</h2>
+<p>The household gets builds through internal TestFlight, which skips App Review; an App Store release waits for a deliberate answer to guideline 5.2. The build and signing setup copies Multitrack&#39;s.</p>
+<ul>
+<li><strong>Project:</strong> XcodeGen; the generated <code>.xcodeproj</code> is gitignored; signing, entitlements and Info.plist keys live in <code>project.yml</code>.</li>
+<li><strong>Build number:</strong> the CI run number plus an offset, passed on the archive command line, as in Multitrack.</li>
+<li><strong>Entitlements:</strong> CloudKit with one container, push (<code>aps-environment</code>), background modes for audio, fetch and remote notifications; on the Mac, the sandbox plus outgoing network.</li>
+<li><strong>Plain-HTTP providers:</strong> many portals and playlists are <code>http://</code>, and their addresses are typed by the user, so App Transport Security needs <code>NSAllowsArbitraryLoads</code>. App Review asks for a reason; the reason is user-supplied servers.</li>
+<li><strong>VLCKit:</strong> pinned to an exact version and linked as a dynamic framework. It is LGPL (check the version pinned): the licence and a source offer go in Settings, Acknowledgements.</li>
+<li><strong>TestFlight:</strong> internal testers must be users on the App Store Connect team, up to 100; external testers go through Beta App Review.</li>
+</ul>
+<p><strong>Guideline 5.2</strong>, as Apple words it:</p>
+<ul>
+<li>5.2.2: &quot;If your app uses, accesses, monetizes access to, or displays content from a third-party service, ensure that you are specifically permitted to do so under the service&#39;s terms of use. Authorization must be provided upon request.&quot;</li>
+<li>5.2.3: &quot;Apps should not facilitate illegal file sharing or include the ability to save, convert, or download media from third-party sources … without explicit authorization from those sources. Streaming of audio/video content may also violate Terms of Use, so be sure to check before your app accesses those services.&quot;</li>
+</ul>
+<p>For a public release: ship no channels, playlists or provider lists; give reviewers a demo playlist of streams that are free to use, such as Apple&#39;s own HLS samples; say in the review notes that the app only plays services the user already subscribes to. Downloads (DL-1) are the feature 5.2.3 names most directly, so they are the first thing to drop if review objects.</p>
+
+</section>
+<section id="doc-4" class="doc">
+<h1>Source protocols</h1>
+<p>Reference for the three kinds of provider login. None has an official public spec: the Stalker and Xtream details here come from open-source clients and community docs, so every call must be checked against a real provider before it ships.</p>
+<h2>Compared</h2>
+<p>Stalker is the hardest of the three: it keeps a session, asks the portal for every stream link, and reports no stream count. Xtream is plain HTTP calls; M3U is one text file.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Stalker portal</th>
+<th>Xtream Codes</th>
+<th>M3U with XMLTV</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Login</td>
+<td>Portal URL and MAC; sometimes serial, device ids, signature, username and password</td>
+<td>Server URL, username, password</td>
+<td>Playlist URL or file, optional guide URL</td>
+</tr>
+<tr>
+<td>Catalog</td>
+<td>API calls returning JSON; movies and series paged</td>
+<td>API calls returning JSON</td>
+<td>Read from the file</td>
+</tr>
+<tr>
+<td>Stream link</td>
+<td>Asked of the portal at each play, short-lived</td>
+<td>Built from a URL pattern</td>
+<td>Written in the file</td>
+</tr>
+<tr>
+<td>Guide</td>
+<td>Short guide per channel</td>
+<td><code>xmltv.php</code>, or a short guide per stream</td>
+<td>An XMLTV file</td>
+</tr>
+<tr>
+<td>Catch-up</td>
+<td>Archive flag per channel</td>
+<td><code>tv_archive</code> and <code>tv_archive_duration</code> per channel</td>
+<td><code>catchup</code> attributes</td>
+</tr>
+<tr>
+<td>Streams allowed</td>
+<td>Not reported</td>
+<td><code>max_connections</code> and <code>active_cons</code></td>
+<td>Not reported</td>
+</tr>
+<tr>
+<td>Session</td>
+<td>Token plus a keep-alive call</td>
+<td>None</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Spec</td>
+<td>None public; known from open-source clients</td>
+<td>None public; community docs</td>
+<td>M3U by convention; XMLTV documented</td>
+</tr>
+</tbody></table>
+<h2>Stalker portal</h2>
+<p>A Stalker client behaves like a MAG set-top box: fixed headers and cookies, a token from a handshake, then GET calls named by <code>type</code> and <code>action</code> that answer JSON wrapped in <code>js</code>. Rows marked verified were read in the source of <a href="https://github.com/kidpoleon/stalkerhek">stalkerhek</a>, an open-source client; rows marked unverified are from memory and must be checked with the probe.</p>
+<p><strong>Where to send calls.</strong> The user types a portal URL, often ending <code>/c/</code>. The API answers at <code>&lt;host&gt;/portal.php</code>, <code>&lt;host&gt;/load.php</code> or <code>&lt;host&gt;/stalker_portal/server/portal.php (or load.php)</code>; try each until the handshake returns JSON. Every call adds <code>JsHttpRequest=1-xml</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>User-Agent</td>
+<td><code>Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko)</code> followed by a MAG200 stbapp identifier (stalkerhek sends ver 4, rev 2116)</td>
+</tr>
+<tr>
+<td>X-User-Agent</td>
+<td><code>Model: &lt;model&gt;; Link: Ethernet</code>, model MAG254 by default</td>
+</tr>
+<tr>
+<td>Cookie</td>
+<td><code>sn=&lt;serial&gt;; mac=&lt;MAC&gt;; stb_lang=en; timezone=&lt;time zone&gt;</code></td>
+</tr>
+<tr>
+<td>Referer, Origin</td>
+<td>The portal&#39;s scheme and host</td>
+</tr>
+<tr>
+<td>Authorization</td>
+<td><code>Bearer &lt;token&gt;</code> on every call after the handshake</td>
+</tr>
+</tbody></table>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Request</th>
+<th>Read from the answer</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Handshake</td>
+<td><code>type=stb&amp;action=handshake&amp;token=</code></td>
+<td><code>js.token</code></td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Profile</td>
+<td><code>type=stb&amp;action=get_profile&amp;hd=1&amp;sn=…&amp;stb_type=&lt;model&gt;&amp;device_id=…&amp;device_id2=…&amp;auth_second_step=1</code></td>
+<td>Signed in when <code>js.id</code> is set</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Login, where required</td>
+<td>POST form <code>type=stb&amp;action=do_auth&amp;login=…&amp;password=…&amp;device_id=…&amp;device_id2=…</code></td>
+<td><code>js</code> is true</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Categories</td>
+<td><code>type=itv&amp;action=get_genres</code></td>
+<td><code>js[]</code>: id, title</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Channels</td>
+<td><code>type=itv&amp;action=get_all_channels</code></td>
+<td><code>js.data[]</code>: name, cmd, logo, tv_genre_id, cmds[0].id and ch_id</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Live link</td>
+<td><code>type=itv&amp;action=create_link&amp;cmd=&lt;cmd&gt;</code></td>
+<td><code>js.cmd</code>; the URL is its last space-separated word, which drops an <code>ffmpeg</code> prefix</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Short guide</td>
+<td><code>type=itv&amp;action=get_short_epg&amp;ch_id=&lt;id&gt;&amp;size=&lt;n&gt;</code>, or <code>action=get_epg_info&amp;ch_id=&lt;id&gt;</code></td>
+<td>An array in <code>js</code>, <code>js.epg</code> or <code>js.data</code>; title as name or title, times as start or start_timestamp and end or stop_timestamp, descr</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Movie and series categories</td>
+<td><code>type=vod</code> or <code>type=series</code>, <code>action=get_categories</code></td>
+<td>id, title, alias</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Movie and series lists</td>
+<td><code>action=get_ordered_list&amp;category=&lt;id&gt;&amp;p=&lt;page&gt;</code>; series add movie_id, season_id, episode_id</td>
+<td><code>js.total_items</code> and <code>js.data[]</code> (some portals send a bare array): id, name, cmd, screenshot_uri, is_series, is_season, series_number, container_extension</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Movie link</td>
+<td><code>type=vod&amp;action=create_link&amp;cmd=&lt;cmd&gt;</code>, plus <code>series=&lt;n&gt;</code> for an episode</td>
+<td><code>js.url</code>, else a URL in <code>js.cmd</code>, else build <code>play/movie.php</code> from <code>js.id</code> and <code>js.play_token</code></td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Keep-alive</td>
+<td><code>type=watchdog&amp;action=get_events&amp;event_active_id=0&amp;init=0&amp;cur_play_type=1</code></td>
+<td>Nothing needed; stalkerhek repeats it every 5 minutes by default</td>
+<td>Verified</td>
+</tr>
+<tr>
+<td>Account expiry</td>
+<td><code>type=account_info&amp;action=get_main_info</code></td>
+<td>An expiry field</td>
+<td>Unverified</td>
+</tr>
+<tr>
+<td>Catch-up link</td>
+<td><code>type=tv_archive&amp;action=create_link</code> with the programme</td>
+<td>A link like a live one</td>
+<td>Unverified</td>
+</tr>
+</tbody></table>
+<p><strong>Quirks to build in</strong></p>
+<ul>
+<li>A movie <code>cmd</code> with no leading <code>/</code> or <code>ffmpeg</code> is wrapped as <code>/media/file_&lt;cmd&gt;.mpg</code> before <code>create_link</code>, as stalkerhek does.</li>
+<li>Links expire: never store one; ask for a fresh link at every play and retry.</li>
+<li>Field names drift between portals, especially guide times: read every known spelling.</li>
+<li>Guide times without an offset are in the portal&#39;s <code>timezone</code>.</li>
+<li>On an auth error, handshake again once before failing; stalkerhek doesn&#39;t, and its sessions stop after the token lapses.</li>
+<li>Advanced-field defaults seen in stalkerhek: MAC like <code>00:1A:79:AA:BB:CC</code>, serial <code>0000000000000</code>, device ids and signature 64 <code>f</code> characters.</li>
+</ul>
+<h2>Xtream Codes</h2>
+<p>Plain HTTP calls with the username and password on each one, no session. Most of this is from a <a href="https://github.com/AndreyPavlenko/Fermata/discussions/434">community thread</a> and a sample server script, not an official spec; providers differ in what they support.</p>
+<p><strong>Account.</strong> <code>GET /player_api.php?username=U&amp;password=P</code> with no action returns <code>user_info</code> (username, password, auth, status, exp_date, is_trial, active_cons, created_at, max_connections, allowed_output_formats) and <code>server_info</code> (url, port, server_protocol, timezone).</p>
+<table>
+<thead>
+<tr>
+<th>Action on <code>player_api.php</code></th>
+<th>Parameters</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>get_live_categories</code></td>
+<td></td>
+<td>Live categories</td>
+</tr>
+<tr>
+<td><code>get_live_streams</code></td>
+<td><code>category_id</code>, optional</td>
+<td>Live channels, with <code>tv_archive</code> and <code>tv_archive_duration</code> for catch-up</td>
+</tr>
+<tr>
+<td><code>get_vod_categories</code></td>
+<td></td>
+<td>Movie categories</td>
+</tr>
+<tr>
+<td><code>get_vod_streams</code></td>
+<td><code>category_id</code>, optional</td>
+<td>Movies</td>
+</tr>
+<tr>
+<td><code>get_vod_info</code></td>
+<td><code>vod_id</code></td>
+<td>One movie&#39;s details</td>
+</tr>
+<tr>
+<td><code>get_series_categories</code></td>
+<td></td>
+<td>Series categories</td>
+</tr>
+<tr>
+<td><code>get_series</code></td>
+<td><code>category_id</code>, optional</td>
+<td>Series</td>
+</tr>
+<tr>
+<td><code>get_series_info</code></td>
+<td><code>series_id</code> (not <code>series</code>)</td>
+<td>Seasons and episodes</td>
+</tr>
+<tr>
+<td><code>get_short_epg</code></td>
+<td><code>stream_id</code>, <code>limit</code> (4 by default; some providers ignore it)</td>
+<td>The next few programmes</td>
+</tr>
+<tr>
+<td><code>get_simple_data_table</code></td>
+<td><code>stream_id</code></td>
+<td>The full guide for one stream</td>
+</tr>
+</tbody></table>
+<p>The whole guide for every stream comes from <code>xmltv.php?username=U&amp;password=P</code>, which not every provider offers.</p>
+<table>
+<thead>
+<tr>
+<th>Stream</th>
+<th>URL</th>
+<th>Confidence</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Live</td>
+<td><code>/live/U/P/&lt;stream_id&gt;.ts</code>, or <code>.m3u8</code> when <code>allowed_output_formats</code> lists it</td>
+<td>Confirmed in the thread; ask for <code>.m3u8</code> so AVPlayer can play it</td>
+</tr>
+<tr>
+<td>Movie</td>
+<td><code>/movie/U/P/&lt;stream_id&gt;.&lt;container_extension&gt;</code></td>
+<td>Common convention; the thread shows it failing for one user. Check with the probe</td>
+</tr>
+<tr>
+<td>Episode</td>
+<td><code>/series/U/P/&lt;episode_id&gt;.&lt;container_extension&gt;</code></td>
+<td>Common convention. Check with the probe</td>
+</tr>
+<tr>
+<td>Catch-up</td>
+<td><code>/timeshift/U/P/&lt;minutes&gt;/&lt;YYYY-MM-DD:HH-MM&gt;/&lt;stream_id&gt;.ts</code></td>
+<td>Common convention, unconfirmed; the thread only says timeshift parameters are appended</td>
+</tr>
+</tbody></table>
+<p><strong>Quirks to build in</strong></p>
+<ul>
+<li>Guide titles and descriptions may arrive base64-encoded; decode when the text decodes cleanly.</li>
+<li>Numbers and dates often arrive as strings (<code>exp_date</code> is a Unix time in a string).</li>
+<li>An empty object may arrive as <code>[]</code>.</li>
+</ul>
+<h2>M3U playlists and XMLTV guides</h2>
+<p>An M3U playlist is a text file with an <code>#EXTINF</code> line of attributes before each stream URL; the guide is a separate XMLTV file matched by <code>tvg-id</code>. The attribute names follow <a href="https://github.com/kodi-pvr/pvr.iptvsimple">Kodi&#39;s IPTV Simple</a>, which most players copy.</p>
+<pre><code class="language-text">#EXTM3U x-tvg-url=&quot;https://example.com/guide.xml.gz&quot;
+#EXTINF:-1 tvg-id=&quot;cityline.news&quot; tvg-name=&quot;Cityline News&quot; tvg-logo=&quot;https://example.com/cn.png&quot; tvg-chno=&quot;101&quot; group-title=&quot;News&quot; catchup=&quot;default&quot; catchup-days=&quot;7&quot; catchup-source=&quot;https://example.com/archive/cn?start={utc}&amp;duration={duration}&quot;,Cityline News
+https://example.com/live/cn.m3u8
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>x-tvg-url</code> on <code>#EXTM3U</code></td>
+<td>The guide&#39;s URL; many playlists write <code>url-tvg</code> instead, so read both</td>
+</tr>
+<tr>
+<td><code>tvg-id</code></td>
+<td>The channel&#39;s id in the XMLTV guide</td>
+</tr>
+<tr>
+<td><code>tvg-name</code>, <code>tvg-logo</code>, <code>tvg-chno</code></td>
+<td>Name, logo, channel number</td>
+</tr>
+<tr>
+<td><code>group-title</code></td>
+<td>The category</td>
+</tr>
+<tr>
+<td><code>catchup</code></td>
+<td>How to build an archive URL: <code>default</code> (use <code>catchup-source</code> as the full URL), <code>append</code> (add <code>catchup-source</code> to the channel URL), plus Shift, Flussonic and Xtream codes styles</td>
+</tr>
+<tr>
+<td><code>catchup-days</code></td>
+<td>How far back the archive goes</td>
+</tr>
+<tr>
+<td><code>catchup-source</code></td>
+<td>The archive URL or suffix, with placeholders such as <code>{utc}</code> (programme start), <code>{lutc}</code> (now), <code>{duration}</code>, <code>{Y}</code> <code>{m}</code> <code>{d}</code> <code>{H}</code> <code>{M}</code> <code>{S}</code>, <code>{utcend}</code></td>
+</tr>
+<tr>
+<td><code>#EXTVLCOPT</code> lines</td>
+<td><code>key=value</code> options for the stream that follows, such as a user agent or referrer to send</td>
+</tr>
+</tbody></table>
+<pre><code class="language-text">&lt;tv&gt;
+  &lt;channel id=&quot;cityline.news&quot;&gt;&lt;display-name&gt;Cityline News&lt;/display-name&gt;&lt;icon src=&quot;https://example.com/cn.png&quot;/&gt;&lt;/channel&gt;
+  &lt;programme start=&quot;20261024200000 +0000&quot; stop=&quot;20261024210000 +0000&quot; channel=&quot;cityline.news&quot;&gt;&lt;title&gt;Evening Bulletin&lt;/title&gt;&lt;desc&gt;Tonight&#39;s news.&lt;/desc&gt;&lt;/programme&gt;
+&lt;/tv&gt;
+</code></pre>
+<ul>
+<li>XMLTV times are <code>YYYYMMDDhhmmss</code> plus an offset; files are often gzipped and can run to hundreds of megabytes, so parse as a stream.</li>
+<li>A channel with no <code>tvg-id</code>, or one the guide doesn&#39;t know, is matched by normalised name, and the match is shown so the owner can correct it.</li>
+</ul>
+<h2>Stable ids</h2>
+<p>Favorites and progress are synced by item key, so a key must outlive a refresh, a renumbering and a new stream token. Every key starts with the source&#39;s UUID; stream URLs never go into a key, because many carry a token that changes.</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Channel</th>
+<th>Movie</th>
+<th>Episode</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Stalker</td>
+<td>Channel <code>id</code></td>
+<td>Movie <code>id</code></td>
+<td>Series id + season + episode number</td>
+</tr>
+<tr>
+<td>Xtream</td>
+<td><code>stream_id</code></td>
+<td><code>stream_id</code></td>
+<td><code>series_id</code> + season + episode number</td>
+</tr>
+<tr>
+<td>M3U</td>
+<td><code>tvg-id</code>, else a hash of the normalised name and <code>group-title</code></td>
+<td>Same as a channel</td>
+<td>Series name + season + episode, parsed from the title</td>
+</tr>
+</tbody></table>
+<ol>
+<li>After each refresh, look up every favorite and progress key in the new catalog.</li>
+<li>A key that is gone: search the same source for one item with the same normalised name and kind.</li>
+<li>Exactly one match: rewrite the key once (one synced write) and keep going.</li>
+<li>None or several: keep the row, show the item as unavailable, and look again next refresh.</li>
+<li>Episodes are keyed by season and number, never by the episode&#39;s own id, which some providers reissue.</li>
+</ol>
+<h2>Verification checklist</h2>
+<p>Run the probe against each real provider before its source type ships, and save each answer as a scrubbed fixture. A failed line is a bug in this file first, then in the code.</p>
+<ul>
+<li><input disabled="" type="checkbox"> Stalker: which API path answers the handshake</li>
+<li><input disabled="" type="checkbox"> Stalker: does the portal sign in with the MAC alone, or need serial, device ids, signature, or <code>do_auth</code></li>
+<li><input disabled="" type="checkbox"> Stalker: how many streams one MAC allows (play on two devices at once)</li>
+<li><input disabled="" type="checkbox"> Stalker: the format <code>create_link</code> returns for live, movie and episode, and how long a link lasts</li>
+<li><input disabled="" type="checkbox"> Stalker: the account expiry call, and the catch-up link call</li>
+<li><input disabled="" type="checkbox"> Stalker: how long the token lives without the keep-alive</li>
+<li><input disabled="" type="checkbox"> Xtream: the account call&#39;s <code>max_connections</code>, <code>active_cons</code> and <code>allowed_output_formats</code></li>
+<li><input disabled="" type="checkbox"> Xtream: movie, episode and catch-up URL shapes play</li>
+<li><input disabled="" type="checkbox"> Xtream: whether <code>xmltv.php</code> answers, and whether short guide titles are base64</li>
+<li><input disabled="" type="checkbox"> M3U: the guide header name, catch-up attributes, any <code>#EXTVLCOPT</code> headers the streams need</li>
+<li><input disabled="" type="checkbox"> All: the stream format of each kind of item (HLS, MPEG-TS, MP4, MKV), which picks the player engine</li>
+<li><input disabled="" type="checkbox"> All: catalog size and the time a full import takes</li>
+</ul>
+<h2>Sources</h2>
+<ul>
+<li><a href="https://github.com/kidpoleon/stalkerhek">stalkerhek source</a>: <code>stalker/authentication.go</code>, <code>channels.go</code>, <code>epg.go</code>, <code>vod.go</code> and <code>stalker.go</code> read for the verified Stalker rows</li>
+<li><a href="https://pkg.go.dev/github.com/kidpoleon/stalkerhek">stalkerhek on pkg.go.dev</a>: API paths and advanced-field defaults</li>
+<li><a href="https://github.com/rangoDJ/stalkerweb">StalkerWeb</a>: confirms handshake, token auth and a keep-alive watchdog</li>
+<li><a href="https://github.com/AndreyPavlenko/Fermata/discussions/434">Xtream API thread in Fermata&#39;s discussions</a>: Xtream actions, account fields, live URL shape</li>
+<li><a href="https://github.com/kodi-pvr/pvr.iptvsimple">Kodi IPTV Simple</a>: M3U attributes, catch-up modes and placeholders</li>
+<li><a href="https://developer.apple.com/forums/thread/710481">Apple Developer Forums: AVPlayer and MPEG-TS</a> and <a href="https://code.videolan.org/videolan/VLCKit/issues/119">VLCKit issue 119</a>: why raw MPEG-TS needs VLCKit</li>
+</ul>
+
+</section>
+<section id="doc-ui" class="doc">
+<h1>UI mockups</h1>
+<p>The seven screens from the design canvas. The same screens open as clickable pages from <code>ui/index.html</code>; names, channels and titles are placeholders.</p>
+<figure><img src="../ui/png/01-who-s-watching.png" alt="Who s watching mockup"><figcaption>Who s watching</figcaption></figure>
+<figure><img src="../ui/png/02-home-bhavik.png" alt="Home bhavik mockup"><figcaption>Home bhavik</figcaption></figure>
+<figure><img src="../ui/png/03-live-tv-guide.png" alt="Live tv guide mockup"><figcaption>Live tv guide</figcaption></figure>
+<figure><img src="../ui/png/04-show-detail.png" alt="Show detail mockup"><figcaption>Show detail</figcaption></figure>
+<figure><img src="../ui/png/05-household-and-sources.png" alt="Household and sources mockup"><figcaption>Household and sources</figcaption></figure>
+<figure><img src="../ui/png/06-player-landscape.png" alt="Player landscape mockup"><figcaption>Player landscape</figcaption></figure>
+<figure><img src="../ui/png/07-mac-live-tv-multi-view.png" alt="Mac live tv multi view mockup"><figcaption>Mac live tv multi view</figcaption></figure>
+</section>
+</main>
+</body>
+</html>

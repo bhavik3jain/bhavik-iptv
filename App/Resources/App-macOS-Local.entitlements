@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Used only by scripts/run-mac-local.sh: an ad hoc signed Debug build for
+	     this Mac with no provisioning profile, so no iCloud entitlement (AMFI
+	     kills an app claiming one without a profile). Run it with
+	     -InMemoryStores YES. Never referenced from project.yml. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+</dict>
+</plist>

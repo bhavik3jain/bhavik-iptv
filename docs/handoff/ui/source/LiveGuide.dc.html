@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live TV guide</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E0F12}
+a{color:#F5B841}a:hover{color:#FFD27A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0E0F12; color: #F2F1EE; font-family: 'IBM Plex Sans', system-ui, sans-serif; position: relative; overflow: hidden">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 24px 0">
+    <h1 style="margin: 0; font-family: Sora, sans-serif; font-weight: 600; font-size: 28px; letter-spacing: -0.02em">Live TV</h1>
+    <div style="display: flex; gap: 8px">
+      <button type="button" aria-label="Multi-view" style="width: 44px; height: 44px; border-radius: 22px; border: 0; background: #17191F; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="8" height="7" rx="1.5" fill="none" stroke="#F2F1EE" stroke-width="1.8"></rect><rect x="13" y="4" width="8" height="7" rx="1.5" fill="none" stroke="#F2F1EE" stroke-width="1.8"></rect><rect x="3" y="13" width="8" height="7" rx="1.5" fill="none" stroke="#F2F1EE" stroke-width="1.8"></rect><rect x="13" y="13" width="8" height="7" rx="1.5" fill="none" stroke="#F2F1EE" stroke-width="1.8"></rect></svg>
+      </button>
+      <button type="button" aria-label="Search channels" style="width: 44px; height: 44px; border-radius: 22px; border: 0; background: #17191F; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="#F2F1EE" stroke-width="1.9"></circle><path d="M15.5 15.5L20 20" stroke="#F2F1EE" stroke-width="1.9" stroke-linecap="round"></path></svg>
+      </button>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 14px 24px 0; overflow: hidden">
+    <button type="button" aria-pressed="true" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 0; background: #F5B841; color: #1A1408; font: 600 14px 'IBM Plex Sans', sans-serif">Favorites</button>
+    <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #2A2E38; background: transparent; color: #F2F1EE; font: 500 14px 'IBM Plex Sans', sans-serif">All channels</button>
+    <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #2A2E38; background: transparent; color: #F2F1EE; font: 500 14px 'IBM Plex Sans', sans-serif">News</button>
+    <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #2A2E38; background: transparent; color: #F2F1EE; font: 500 14px 'IBM Plex Sans', sans-serif">Sports</button>
+    <button type="button" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid #2A2E38; background: transparent; color: #F2F1EE; font: 500 14px 'IBM Plex Sans', sans-serif">Kids</button>
+  </div>
+
+  <div style="position: relative; margin-top: 18px">
+    <div style="display: flex; height: 26px; align-items: center">
+      <span style="width: 90px; flex: none; padding-left: 16px; box-sizing: border-box; font-size: 12px; font-weight: 600; color: #A3A7B3">Today</span>
+      <div style="position: relative; width: 300px; height: 26px">
+        <span style="position: absolute; left: 0; top: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #A3A7B3">20:00</span>
+        <span style="position: absolute; left: 150px; top: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #A3A7B3">21:00</span>
+        <span style="position: absolute; left: 225px; top: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #A3A7B3">21:30</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; margin-top: 6px">
+      <sc-for list="{{channels}}" as="c" hint-placeholder-count="7">
+        <div style="display: flex; height: 60px; align-items: center; border-top: 1px solid #1A1C22">
+          <div style="width: 90px; flex: none; box-sizing: border-box; padding-left: 16px; display: flex; align-items: center; gap: 8px">
+            <span style="width: 34px; height: 34px; border-radius: 9px; background: {{c.tile}}; font: 700 12px Sora, sans-serif; color: #FFFFFF; display: flex; align-items: center; justify-content: center">{{c.mono}}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #A3A7B3">{{c.num}}</span>
+          </div>
+          <div style="position: relative; width: 300px; height: 50px">
+            <sc-for list="{{c.progs}}" as="p" hint-placeholder-count="2">
+              <div style="position: absolute; top: 0; left: {{p.left}}px; width: {{p.w}}px; height: 50px; box-sizing: border-box; border-radius: 9px; background: {{p.bg}}; border: 1.5px solid {{p.border}}; padding: 6px 8px; display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden">
+                <span style="display: flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 500; color: {{p.color}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
+                  <sc-if value="{{p.past}}" hint-placeholder-val="{{false}}">
+                    <svg width="11" height="11" viewBox="0 0 24 24" role="img" aria-label="Catch-up available" style="flex: none"><path d="M4.5 12a7.5 7.5 0 1 0 2.3-5.4" fill="none" stroke="#A3A7B3" stroke-width="2.4" stroke-linecap="round"></path><path d="M4 3.5V8h4.5" fill="none" stroke="#A3A7B3" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  </sc-if>
+                  {{p.title}}
+                </span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8A8F9C; white-space: nowrap">{{p.time}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div aria-hidden="true" style="position: absolute; left: 194px; top: 0; bottom: 0; width: 2px; background: #F5B841"></div>
+    <span style="position: absolute; left: 175px; top: -2px; height: 20px; padding: 0 6px; border-radius: 10px; background: #F5B841; color: #1A1408; font-family: 'IBM Plex Mono', monospace; font-size: 11px; display: flex; align-items: center">20:42</span>
+  </div>
+
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 100px; box-sizing: border-box; padding: 16px; border-radius: 20px; background: #1C1F26; border: 1px solid #2A2E38; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span style="width: 42px; height: 42px; border-radius: 11px; background: #2F4B7C; font: 700 14px Sora, sans-serif; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex: none">CN</span>
+      <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0">
+        <span style="font-family: Sora, sans-serif; font-weight: 600; font-size: 17px">Evening Bulletin</span>
+        <span style="font-size: 13px; color: #A3A7B3">101 Cityline News · 20:00–21:00 · 18 min left</span>
+      </div>
+      <button type="button" aria-label="Remove from favorites" style="width: 44px; height: 44px; border-radius: 22px; border: 0; background: #262A33; display: flex; align-items: center; justify-content: center; flex: none">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.9c0 5.4-7.5 10-7.5 10z" fill="#F5B841"></path></svg>
+      </button>
+    </div>
+    <div style="display: flex; gap: 10px">
+      <a href="Player.dc.html" style="flex: 1; height: 44px; border-radius: 12px; background: #F5B841; color: #1A1408; text-decoration: none; font-weight: 600; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px">
+        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="#1A1408"></path></svg>
+        Watch live
+      </a>
+      <a href="Player.dc.html" style="flex: 1; height: 44px; border-radius: 12px; background: #262A33; color: #F2F1EE; text-decoration: none; font-weight: 500; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.3-5.4" fill="none" stroke="#F2F1EE" stroke-width="2" stroke-linecap="round"></path><path d="M4 3.5V8h4.5" fill="none" stroke="#F2F1EE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        From the start
+      </a>
+    </div>
+  </div>
+
+  <nav aria-label="Sections" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding: 8px 12px 26px; background: rgba(14,15,18,0.94); border-top: 1px solid #20232B; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr))">
+    <a href="Home.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: #A3A7B3; font-size: 11px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" fill="none" stroke="#A3A7B3" stroke-width="1.8" stroke-linejoin="round"></path></svg>
+      Home
+    </a>
+    <a href="LiveGuide.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: #F5B841; font-size: 11px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12.5" rx="2.5" fill="#F5B841"></rect><path d="M8 3.5l4 3.5 4-3.5" fill="none" stroke="#F5B841" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      Live TV
+    </a>
+    <a href="Home.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: #A3A7B3; font-size: 11px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="#A3A7B3" stroke-width="1.8"></rect><path d="M3.5 9.5h17M8.5 5l-1.5 4.5M14.5 5L13 9.5" fill="none" stroke="#A3A7B3" stroke-width="1.8" stroke-linecap="round"></path></svg>
+      Movies
+    </a>
+    <a href="ShowDetail.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: #A3A7B3; font-size: 11px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="2.5" fill="none" stroke="#A3A7B3" stroke-width="1.8"></rect><path d="M6.5 6h11M9 3h6" stroke="#A3A7B3" stroke-width="1.8" stroke-linecap="round"></path></svg>
+      Shows
+    </a>
+    <a href="Home.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: #A3A7B3; font-size: 11px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.9c0 5.4-7.5 10-7.5 10z" fill="none" stroke="#A3A7B3" stroke-width="1.8" stroke-linejoin="round"></path></svg>
+      My List
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const px = 2.5;
+    const now = 42;
+    const fmt = (m) => {
+      const t = 20 * 60 + m;
+      return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+    };
+    const raw = [
+      { num: '101', mono: 'CN', tile: '#2F4B7C', progs: [[0, 60, 'Evening Bulletin', true], [60, 90, 'Market Close'], [90, 120, 'World Desk']] },
+      { num: '102', mono: 'FS', tile: '#2E6B4F', progs: [[-30, 150, 'Premier Cricket · Final, 2nd innings']] },
+      { num: '103', mono: 'LD', tile: '#7A3B52', progs: [[0, 60, 'The Long Harbor · S3 E2'], [60, 120, 'The Long Harbor · S3 E3']] },
+      { num: '104', mono: 'ND', tile: '#23435A', progs: [[-10, 30, 'Salt Roads'], [30, 80, 'Deep Water Cities'], [80, 120, 'Night Skies']] },
+      { num: '105', mono: 'KC', tile: '#5A3A2E', progs: [[-15, 100, 'The Quiet Engine (1962)'], [100, 190, 'Glass Orchard']] },
+      { num: '106', mono: 'LO', tile: '#6B4FB8', progs: [[0, 40, 'Paper Boats'], [40, 70, 'Moon Garden'], [70, 120, 'Bedtime Stories']] },
+      { num: '107', mono: 'PM', tile: '#8A4B2A', progs: [[0, 30, 'Throwback Hour'], [30, 90, 'Late Charts'], [90, 150, 'Unplugged']] }
+    ];
+    const channels = raw.map((c) => ({
+      ...c,
+      progs: c.progs.map(([s, e, title, selected]) => {
+        const cs = Math.max(s, 0);
+        const ce = Math.min(e, 120);
+        const past = e <= now;
+        const live = s <= now && e > now;
+        return {
+          title,
+          time: fmt(s) + '–' + fmt(e),
+          left: cs * px,
+          w: (ce - cs) * px - 3,
+          past,
+          bg: live ? '#262A33' : past ? '#121418' : '#17191F',
+          color: past ? '#A3A7B3' : '#F2F1EE',
+          border: selected ? '#F5B841' : live ? '#343843' : '#1E2128'
+        };
+      })
+    }));
+    return { channels };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+# Hearth — build tracker and handoff log
+
+The single place to see what's built, what's in flight, what's blocked and what comes next. Anyone picking this up (a person or an agent) reads **Status**, **Blocked on the owner** and **Next up**, then the newest **Session log** entry. Update this file at the end of every working session; keep entries short and dated.
+
+Specs live in [docs/handoff](handoff/README.md): the [handoff](handoff/docs/1-Handoff.md), the [product spec](handoff/docs/2-Product-spec.md) (requirement ids such as SRC-1 and PRF-2), the [technical spec](handoff/docs/3-Technical-spec.md) and the [source protocols](handoff/docs/4-Source-protocols.md). Mockups: [handoff/ui/png](handoff/ui/png).
+
+## Status
+
+| | |
+| --- | --- |
+| Goal | An IPTV player for Stalker portals with Netflix-style profiles, on iPhone (including iPhone Duo), iPad and Mac, installed through TestFlight |
+| Version | 0.1 (build numbers come from CI run number + offset) |
+| Branch | `build/v0.1-foundation` (main has no commits yet) |
+| Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 |
+| Bundle ids | `com.bhavikjain.hearth` (release), `com.bhavikjain.hearth.dev` (Debug) · iCloud `iCloud.com.bhavikjain.hearth` · team Y4M3S6H4NK |
+| Builds | Scaffold builds for iOS Simulator and macOS (unsigned) |
+| TestFlight | Not yet uploaded — see Blocked on the owner |
+
+## Blocked on the owner
+
+These need you; nothing else waits on them until the upload step.
+
+- [ ] **App Store Connect app record.** Create an app named Hearth (or the final name) with bundle id `com.bhavikjain.hearth`, platforms iOS and macOS (Universal Purchase). App Store Connect's API can't create apps.
+- [ ] **Signing for uploads**, either:
+  - add the App Store Connect API key and dev certificate to this repo's GitHub environment `testflight` (same secret names as Multitrack: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`, `IOS_DEV_P12`, `IOS_DEV_P12_PASSWORD`), then run the TestFlight workflow; or
+  - sign in to Xcode (Settings → Accounts) with the team's Apple ID, then run `scripts/testflight.sh`.
+- [ ] **A real portal to probe.** Portal URL + MAC (never committed) for `-SourceProbe` — the protocol rows marked "unverified" must be checked against your provider.
+- [ ] **Open questions 2–8** in the handoff (stream limit per MAC, name, roles, downloads, Apple TV, Multitrack code sharing).
+
+## Decisions made this build
+
+| Decision | Choice | Why |
+| --- | --- | --- |
+| Package layout | Core · SourceKit · CatalogKit · HouseholdKit · PlayerKit, plus one package per feature (Home, LiveTV, Library, Profiles, Household, Search, Settings) | Technical spec; separate packages let agents build in parallel without sharing a `.build` |
+| Cross-feature navigation | Core's `HearthRoute` + `navigationDestination` in the app; `@Environment(\.play)` with a `PlayIntent` | Features never import each other; the app's playback coordinator owns links, limits, progress |
+| Services to views | `CatalogService`, `HouseholdStore`, `ProfileSession` as `@Observable` environment objects | One instance each, value snapshots out |
+| Contracts first | Public types and service APIs written before implementation; changes additive only | Lets 6+ agents work at once |
+| iPhone Duo | Layout by size class (`\.hearthLayout`), never idiom or orientation; `TabView` sidebar-adaptable; `NavigationSplitView` where regular; no `UIScreen.main`; full-bleed video with controls in the safe area; multiple scenes on | Apple's "Prepare your app for iPhone Duo"; needs Xcode 27.1 / iOS 27.1 SDK for full-screen |
+| Orientation | iPhone portrait + landscape (tent mode, player); iPad all four | Duo's outer display honours these; the inner display ignores them |
+| Sources in v0.1 | Stalker first and fully; Xtream and M3U clients too, since the protocol work is shared | The owner's provider is a Stalker portal |
+| Profiles in v0.1 | Pulled forward from Phase 3: profiles, PIN, Kids, Guest, per-profile favorites/progress | Asked for in this build |
+
+## Workstreams
+
+Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
+
+| # | Workstream | Owns | Requirements | Status |
+| --- | --- | --- | --- | --- |
+| 0 | Scaffold and contracts | `project.yml`, all `Package.swift`, contract files | — | ☑ |
+| 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ☐ |
+| 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ☐ |
+| 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ☐ |
+| 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ☐ |
+| 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ☐ |
+| 6 | CI and release | `.github/`, `scripts/` | Build, release | ☐ |
+| 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☐ |
+| 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☐ |
+| 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ☐ |
+| 10 | Library feature | `Packages/LibraryFeature` | VOD-1…3, SER-1…3, FAV-3 | ☐ |
+| 11 | Household feature | `Packages/HouseholdFeature` | HH-2…6, SRC-1…5, SRC-8/9 | ☐ |
+| 12 | Search and Settings | `Packages/SearchFeature`, `Packages/SettingsFeature` | SRCH-1…3, MAC-4 | ☐ |
+| 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ☐ |
+| 14 | Integration | whole tree | both platforms build, tests pass, runs on iPhone / Duo / Mac | ☐ |
+| 15 | TestFlight | signing, upload | Distribution | ⚠ owner |
+
+## Next up
+
+1. Phase A (parallel): workstreams 1–6.
+2. Phase B (parallel): workstreams 7–13, against the finished kits.
+3. Phase C: integration build and fixes, run on iPhone, iPhone Duo and Mac simulators with `-StubProvider YES -InMemoryStores YES`.
+4. TestFlight once the owner's items above are done.
+
+## Session log
+
+### 2026-10-24 — foundation
+
+- Read the handoff package; unpacked it into `docs/handoff/`.
+- Xcode updated to 27.1 by the owner; iPhone Duo device type present; iOS 27.1 simulator runtime downloaded with `xcodebuild -downloadPlatform iOS`.
+- Wrote `project.yml` (iOS + macOS targets, `.dev` Debug ids, one iCloud container, ATS open for user-supplied servers, background audio/fetch/remote-notification), entitlements, asset catalog skeleton.
+- Wrote every package and its public contract: Core (theme, components, routes, play intent, Mac shims), SourceKit models and `SourceClient`, CatalogKit `ItemKey`, values and `CatalogService`, HouseholdKit values, `HouseholdStore`, `ProfileSession`, PlayerKit engine protocol, `PlayerModel`, `PlayerView`, and each feature's entry views. Implementations are placeholders marked `PLACEHOLDER`.
+- Both apps build unsigned for iOS Simulator and macOS; the placeholder app launches on the iPhone Duo simulator (`iPhone Duo`, iOS 27.1, 466×678 pt when open; the status bar runs down the right edge).
