@@ -1,0 +1,352 @@
+name: TestFlight
+
+# Deliberate uploads only. Running this on every push would turn each
+# work-in-progress commit into a build TestFlight offers the household, so it
+# runs for a version tag or by hand:
+#
+#   gh workflow run TestFlight --ref main
+#   git tag v0.1.1 && git push --tags
+#
+# A tag does not run the Tests workflow and this one has no test gate of its
+# own: tag a commit whose tests passed.
+#
+# Before a build that changes the household model (a new entity or attribute),
+# the CloudKit schema ritual comes first: scripts/cloudkit/init-schema.sh, then
+# Deploy Schema Changes to Production in the CloudKit Console. Production never
+# creates record types on its own, so a build shipped before that deploy saves
+# locally and never syncs.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: >-
+          Build number to use instead of run number + BUILD_OFFSET. Leave empty
+          unless App Store Connect already has a higher one for this version.
+        required: false
+        default: ""
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # App Store Connect rejects a build number it has already seen, and on the
+  # Mac one lower than the last, so this only ever goes up. run_number is
+  # monotonic per workflow and never repeats, even across re-runs. Both jobs
+  # use the same number so one run's two builds are easy to match. Builds
+  # uploaded with scripts/testflight.sh are numbered by date (yymmddHHMM),
+  # far above these; the export's default manageAppVersionAndBuildNumber lets
+  # Xcode raise a number App Store Connect has already passed, and the
+  # build_number input above overrides it outright.
+  BUILD_OFFSET: 100
+
+jobs:
+  ios:
+    name: Archive and upload the iOS app
+    runs-on: xcode-27
+    timeout-minutes: 60
+
+    # The App Store Connect key lives in this environment rather than in
+    # repository secrets, so it's reachable only from the branches and tags the
+    # environment allows. Repository secrets would be readable by any workflow
+    # on any branch, including Tests on pull requests. The key can mint signing
+    # certificates and ship builds, and a .p8 cannot be downloaded twice.
+    environment: testflight
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets
+        # Fails in seconds, naming what's missing, rather than minutes later
+        # inside xcodebuild with an error about signing.
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          IOS_DEV_P12: ${{ secrets.IOS_DEV_P12 }}
+          IOS_DEV_P12_PASSWORD: ${{ secrets.IOS_DEV_P12_PASSWORD }}
+        run: |
+          missing=""
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY IOS_DEV_P12 IOS_DEV_P12_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing from the testflight environment's secrets:$missing (README → Release)"
+            exit 1
+          fi
+
+      - name: Choose the build number
+        env:
+          REQUESTED: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+          build_number=${REQUESTED:-$(( GITHUB_RUN_NUMBER + BUILD_OFFSET ))}
+          if ! [[ "$build_number" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "::error::Build number '$build_number' must be digits, at most three dot-separated numbers"
+            exit 1
+          fi
+          echo "Building $build_number"
+          echo "BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup
+
+      - name: Import the Apple Development certificate
+        # Distribution signing is cloud-managed (Apple holds that key), but the
+        # archive itself is signed with a development identity first. With none
+        # on a fresh runner, -allowProvisioningUpdates made Multitrack a new
+        # "Created by API" development certificate every run, until the account
+        # hit its certificate limit and archives failed with "Choose a
+        # certificate to revoke". Importing one fixed certificate lets Xcode
+        # reuse it. A disposable keychain, deleted in the last step; the
+        # partition list lets codesign use the key without a prompt that would
+        # hang CI.
+        env:
+          IOS_DEV_P12: ${{ secrets.IOS_DEV_P12 }}
+          IOS_DEV_P12_PASSWORD: ${{ secrets.IOS_DEV_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(uuidgen)
+          p12_path="$RUNNER_TEMP/development.p12"
+
+          echo "$IOS_DEV_P12" | base64 --decode > "$p12_path"
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$p12_path" -k "$keychain" -P "$IOS_DEV_P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" > /dev/null
+          # Prepends the new keychain to the search list; the word splitting
+          # of the existing list is intended.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed 's/"//g')
+
+          rm -f "$p12_path"
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Write the App Store Connect API key
+        # CI has no Apple ID signed in to Xcode, so provisioning and the upload
+        # both authenticate with the API key. It needs the Admin role: with App
+        # Manager, cloud-managed distribution signing fails with "Cloud signing
+        # permission error".
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          path="$RUNNER_TEMP/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_PRIVATE_KEY" | base64 --decode > "$path"
+          chmod 600 "$path"
+          echo "ASC_KEY_PATH=$path" >> "$GITHUB_ENV"
+
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project Hearth.xcodeproj \
+            -scheme Hearth \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Hearth.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" | xcbeautify --renderer github-actions
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>teamID</key>
+              <string>Y4M3S6H4NK</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>destination</key>
+              <string>upload</string>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Hearth.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" | xcbeautify --renderer github-actions
+
+          echo "Uploaded iOS build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
+
+      - name: Clean up the API key and signing keychain
+        # Runs even on failure, so a failed archive never leaves the API key or
+        # the certificate on the runner.
+        if: always()
+        run: |
+          rm -f "${ASC_KEY_PATH:-}" || true
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then
+            security delete-keychain "$SIGNING_KEYCHAIN" || true
+          fi
+
+  mac:
+    name: Archive and upload the Mac app
+    # The Mac build of the same App Store Connect app (Universal Purchase: one
+    # bundle id, com.bhavikjain.hearth, on both platforms), so it lands in the
+    # same TestFlight. Its own job, alongside the iOS one, so a failure here
+    # never holds the iOS build back.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    environment: testflight
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          missing=""
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing from the testflight environment's secrets:$missing (README → Release)"
+            exit 1
+          fi
+
+      - name: Choose the build number
+        # Same rule as the iOS job, so one run's two builds share a number.
+        env:
+          REQUESTED: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+          build_number=${REQUESTED:-$(( GITHUB_RUN_NUMBER + BUILD_OFFSET ))}
+          if ! [[ "$build_number" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "::error::Build number '$build_number' must be digits, at most three dot-separated numbers"
+            exit 1
+          fi
+          echo "Building $build_number"
+          echo "BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup
+
+      - name: Write the App Store Connect API key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          path="$RUNNER_TEMP/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_PRIVATE_KEY" | base64 --decode > "$path"
+          chmod 600 "$path"
+          echo "ASC_KEY_PATH=$path" >> "$GITHUB_ENV"
+
+      - name: Archive, signed ad hoc with the app's entitlements
+        # A Mac archive can't be development-signed here the way the iOS one
+        # is: a Mac development profile only covers registered Macs, and a
+        # runner isn't one. Signing manually without a profile is refused
+        # outright ("requires a provisioning profile") because CloudKit and
+        # push need one. So the archive is built unsigned, then signed ad hoc
+        # with the entitlements resolved by hand; left unsigned it would carry
+        # none, and the export would sign the app without its sandbox or
+        # CloudKit. The export replaces this signature with the App Store one
+        # (cloud-managed, through the API key) and takes aps-environment from
+        # the App Store profile.
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/Hearth-macOS.xcarchive"
+
+          xcodebuild archive \
+            -project Hearth.xcodeproj \
+            -scheme Hearth-macOS \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$archive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" | xcbeautify --renderer github-actions
+
+          # App-macOS.entitlements has no $(…) variables today; these are the
+          # ones Xcode would fill in. A new one must be added here, or the app
+          # would be signed with a literal "$(…)" and lose that entitlement.
+          entitlements="$RUNNER_TEMP/Hearth-macOS.entitlements"
+          sed -e 's/\$(TeamIdentifierPrefix)/Y4M3S6H4NK./g' \
+              -e 's/\$(CFBundleIdentifier)/com.bhavikjain.hearth/g' \
+              -e 's/\$(PRODUCT_BUNDLE_IDENTIFIER)/com.bhavikjain.hearth/g' \
+              App/Resources/App-macOS.entitlements > "$entitlements"
+          if grep -q '\$(' "$entitlements"; then
+            echo "::error::App-macOS.entitlements has a \$(…) variable this job doesn't fill in: $(grep -o '\$([A-Za-z_]*)' "$entitlements" | sort -u | tr '\n' ' ')"
+            exit 1
+          fi
+
+          app="$archive/Products/Applications/Hearth.app"
+          # Nested code first (VLCKit's framework, any dylib): codesign refuses
+          # to sign a bundle whose nested code is unsigned.
+          find "$app/Contents" \( -name '*.framework' -o -name '*.dylib' -o -name '*.xpc' \) -prune -print0 \
+            | xargs -0 -I{} codesign --force --sign - --options runtime --timestamp=none {}
+          codesign --force --sign - --options runtime --timestamp=none --entitlements "$entitlements" "$app"
+          codesign -d --entitlements - "$app"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions-macOS.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>teamID</key>
+              <string>Y4M3S6H4NK</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>destination</key>
+              <string>upload</string>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Hearth-macOS.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions-macOS.plist" \
+            -exportPath "$RUNNER_TEMP/export-macOS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" | xcbeautify --renderer github-actions
+
+          echo "Uploaded Mac build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
+
+      - name: Clean up the API key
+        if: always()
+        run: rm -f "${ASC_KEY_PATH:-}" || true
