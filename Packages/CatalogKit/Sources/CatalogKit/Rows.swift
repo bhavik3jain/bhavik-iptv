@@ -395,7 +395,7 @@ enum ArchiveRule {
         guard start <= now else { return false }
         let channelHasArchive = window?.hasArchive ?? false
         guard channelHasArchive || providerFlag else { return false }
-        let days = (window?.days ?? 0) > 0 ? window!.days : assumedDays
+        let days = window.map(\.days).flatMap { $0 > 0 ? $0 : nil } ?? assumedDays
         return start >= now.addingTimeInterval(-Double(days) * 86_400)
     }
 }
