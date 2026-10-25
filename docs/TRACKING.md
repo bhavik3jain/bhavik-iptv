@@ -37,6 +37,7 @@ These need you; nothing else waits on them until the upload step.
 | Orientation | iPhone portrait + landscape (tent mode, player); iPad all four | Duo's outer display honours these; the inner display ignores them |
 | Sources in v0.1 | Stalker first and fully; Xtream and M3U clients too, since the protocol work is shared | The owner's provider is a Stalker portal |
 | Profiles in v0.1 | Pulled forward from Phase 3: profiles, PIN, Kids, Guest, per-profile favorites/progress | Asked for in this build |
+| Tests | Deferred: build the app first, write tests later (owner, 2026-10-25). Phase A's kit tests stay; Phase B adds none | Get a working app on TestFlight sooner |
 
 ## Workstreams
 
@@ -45,19 +46,19 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | # | Workstream | Owns | Requirements | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Scaffold and contracts | `project.yml`, all `Package.swift`, contract files | — | ☑ |
-| 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ◐ |
+| 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ☑ merged (128 tests) |
 | 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ☑ merged (33 tests) |
-| 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ◐ |
-| 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ◐ |
+| 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ☑ merged (93 tests in its worktree; hangs on the merged branch — see log) |
+| 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ☑ merged (VLCKit 4.0.0-a25) |
 | 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ☑ merged (34 tests, icon) |
 | 6 | CI and release | `.github/`, `scripts/`, `README.md` | Build, release | ☑ merged |
-| 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☐ |
-| 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☐ |
-| 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ☐ |
-| 10 | Library feature | `Packages/LibraryFeature` | VOD-1…3, SER-1…3, FAV-3 | ☐ |
-| 11 | Household feature | `Packages/HouseholdFeature` | HH-2…6, SRC-1…5, SRC-8/9 | ☐ |
-| 12 | Search and Settings | `Packages/SearchFeature`, `Packages/SettingsFeature` | SRCH-1…3, MAC-4 | ☐ |
-| 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ☐ |
+| 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ◐ |
+| 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ◐ |
+| 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ◐ |
+| 10 | Library feature | `Packages/LibraryFeature` | VOD-1…3, SER-1…3, FAV-3 | ◐ |
+| 11 | Household feature | `Packages/HouseholdFeature` | HH-2…6, SRC-1…5, SRC-8/9 | ◐ |
+| 12 | Search and Settings | `Packages/SearchFeature`, `Packages/SettingsFeature` | SRCH-1…3, MAC-4 | ◐ |
+| 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ◐ |
 | 14 | Integration | whole tree | both platforms build, tests pass, runs on iPhone / Duo / Mac | ☐ |
 | 15 | TestFlight | signing, upload | Distribution | ⚠ owner |
 
@@ -85,3 +86,5 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Open for the app shell: `scripts/cloudkit/init-schema.sh` expects the app to print `[CloudKitSchemaInitializer] Schema sent to Development` or `[CloudKitSchemaInitializer] Failed` when run with `-InitializeCloudKitSchema YES`.
 - Third run: CatalogKit (33 tests; 50k-movie import ≈ 4 s) and the design system (fonts by PostScript face, ~25 new components, app icon for iOS and macOS, 34 tests) finished and are merged. Core's new `StreamUsage` was renamed `StreamBarUsage` (it clashed with HouseholdKit's contract type in every feature). Both apps build clean for iOS Simulator and macOS. SourceKit, HouseholdKit and PlayerKit were cut off a third time (each now has milestone commits: SourceKit clients + stub + probe, HouseholdKit 90 tests, PlayerKit player screen + multi-view + tests); fourth run started 14:50.
 - Known trap, now in CLAUDE.md: `swift test` with an in-tree `.build` fails codesign because `~/Documents` is iCloud-synced; use `--scratch-path` elsewhere.
+- Fourth run: SourceKit (Stalker, Xtream, M3U + XMLTV with gzip, demo provider, probe), HouseholdKit (iCloud store, sharing, profiles) and PlayerKit (AVPlayer + VLCKit 4.0.0-a25 from code.videolan.org, player screen, PiP, AirPlay, multi-view) finished and are merged. Both apps build for iOS Simulator and macOS with every kit. SourceKit's 128 tests pass on the merged branch; HouseholdKit's test run hung (idle test process) on the merged branch and was stopped — to investigate when tests resume.
+- Owner: build the app first, tests later. Phase B (`hearth-phase-b`) launched without test-writing: Profiles, Home, Live TV, Library, Household, Search + Settings, App shell.
