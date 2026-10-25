@@ -1,0 +1,241 @@
+import CatalogKit
+import Core
+import Foundation
+import HouseholdKit
+import SourceKit
+
+// Every line of text the Household screens compute, in value types so the
+// rules (what a watcher may see, when "Expired" beats "Updated") can be
+// tested without a view. Views only lay them out.
+
+/// A source's row on Household (SRC-5, SRC-8).
+struct SourceRowText: Hashable {
+    /// "MAC", "XC", "M3U": the tile at the start of the row.
+    var code: String
+    var title: String
+    /// "Portal · 00:1A:79:••:••:41", "Xtream login · 2 streams",
+    /// "M3U + XMLTV guide". A watcher's says only what kind it is.
+    var subtitle: String
+    /// "Active\nuntil Mar 2027", "Expired", "Updated\n2 h ago",
+    /// "Updating\n40%".
+    var status: String
+    /// The status needs attention (expired, disabled, a failed refresh).
+    var isWarning: Bool
+    var isRefreshing: Bool
+
+    init(record: SourceRecord, state: SourceRefreshState?, canSeeLogins: Bool, now: Date = .now) {
+        let kind = SourceMapping.kind(of: record)
+        let account = state?.account
+        code = Self.code(for: kind)
+        title = record.name.isEmpty ? String(localized: "Untitled source") : record.name
+        subtitle = Self.subtitle(record: record, kind: kind, account: account, canSeeLogins: canSeeLogins)
+        (status, isWarning, isRefreshing) = Self.status(record: record, kind: kind, state: state, now: now)
+    }
+
+    static func code(for kind: SourceKind?) -> String {
+        switch kind {
+        case .stalker: "MAC"
+        case .xtream: "XC"
+        case .m3u: "M3U"
+        case nil: "?"
+        }
+    }
+
+    /// "Stalker portal", "Xtream Codes", "M3U playlist": the editor's picker.
+    static func kindTitle(_ kind: SourceKind) -> String {
+        switch kind {
+        case .stalker: String(localized: "Stalker portal")
+        case .xtream: String(localized: "Xtream Codes")
+        case .m3u: String(localized: "M3U playlist")
+        }
+    }
+
+    static func subtitle(record: SourceRecord, kind: SourceKind?, account: AccountInfo?, canSeeLogins: Bool) -> String {
+        let login = record.credentials
+        switch kind {
+        case .stalker:
+            let portal = String(localized: "Portal", comment: "A Stalker source, before its masked MAC address")
+            guard canSeeLogins, !login.macAddress.isEmpty else { return portal }
+            return "\(portal) · \(MACAddress.masked(login.macAddress))"
+        case .xtream:
+            let base = String(localized: "Xtream login")
+            guard let max = account?.maxConnections, max > 0 else { return base }
+            return "\(base) · \(max == 1 ? String(localized: "1 stream") : String(localized: "\(max) streams"))"
+        case .m3u:
+            let isFile = login.playlistURL.lowercased().hasPrefix("file:")
+            let hasGuide = !login.guideURL.trimmingCharacters(in: .whitespaces).isEmpty
+            switch (isFile, hasGuide) {
+            case (false, true): return String(localized: "M3U + XMLTV guide")
+            case (false, false): return String(localized: "M3U playlist")
+            case (true, true): return String(localized: "M3U file + XMLTV guide")
+            case (true, false): return String(localized: "M3U file on one device")
+            }
+        case nil:
+            return String(localized: "Needs a newer version of the app")
+        }
+    }
+
+    static func status(record: SourceRecord, kind: SourceKind?, state: SourceRefreshState?, now: Date) -> (text: String, isWarning: Bool, isRefreshing: Bool) {
+        if case .refreshing(let progress, _) = state?.phase {
+            let percent = progress.map { "\(Int(($0 * 100).rounded()))%" } ?? "…"
+            return (String(localized: "Updating\n\(percent)", comment: "A source's catalog is downloading; second line is a percentage"), false, true)
+        }
+        let account = state?.account
+        if account?.status == .disabled {
+            return (String(localized: "Disabled"), true, false)
+        }
+        let expiry = account?.expiresAt ?? record.expiresAt
+        if account?.status == .expired || (expiry.map { $0 < now } ?? false) {
+            return (String(localized: "Expired"), true, false)
+        }
+        if case .failed = state?.phase {
+            return (String(localized: "Couldn't\nupdate", comment: "Two lines: a source's last refresh failed"), true, false)
+        }
+        if let expiry, kind != .m3u {
+            return (String(localized: "Active\nuntil \(HouseholdFormat.monthYear(expiry))", comment: "Two lines: a source is active until a month and year"), false, false)
+        }
+        if let refreshed = state?.catalogRefreshedAt {
+            return (String(localized: "Updated\n\(HouseholdFormat.ago(refreshed, now: now))", comment: "Two lines: when a source's catalog was last downloaded"), false, false)
+        }
+        return (String(localized: "Not updated\nyet"), false, false)
+    }
+}
+
+/// The line under a profile's name on Household: "PIN · All sources",
+/// "Kids categories only · PIN to leave", "Keeps no history or favorites".
+enum ProfileSummaryText {
+    static func subtitle(for profile: ProfileRecord, sourceCount: Int) -> String {
+        switch profile.kind {
+        case .guest:
+            return String(localized: "Keeps no history or favorites")
+        case .kids:
+            // Leaving a Kids profile always takes an adult's PIN (PRF-4).
+            return String(localized: "Kids categories only · PIN to leave")
+        case .standard:
+            var parts: [String] = []
+            if profile.hasPIN { parts.append(String(localized: "PIN", comment: "The profile is locked with a PIN")) }
+            parts.append(sources(profile.visibleSourceIDs, of: sourceCount))
+            return parts.joined(separator: " · ")
+        }
+    }
+
+    /// "All sources", "1 source", "2 of 3 sources" (PRF-6).
+    static func sources(_ visible: Set<UUID>, of count: Int) -> String {
+        if visible.isEmpty || visible.count >= count { return String(localized: "All sources") }
+        if visible.count == 1 { return String(localized: "1 source") }
+        return String(localized: "\(visible.count) of \(count) sources")
+    }
+}
+
+/// Members and roles (HH-2, SRC-8).
+enum MemberText {
+    static func role(_ role: MemberRole) -> String {
+        switch role {
+        case .owner: String(localized: "Owner")
+        case .manage: String(localized: "Can manage")
+        case .watch: String(localized: "Can watch")
+        }
+    }
+
+    /// What a role allows, for the owner's role menu.
+    static func roleExplanation(_ role: MemberRole) -> String {
+        switch role {
+        case .owner: String(localized: "Everything, including members")
+        case .manage: String(localized: "Adds and edits sources and profiles")
+        case .watch: String(localized: "Picks a profile and watches; never sees logins")
+        }
+    }
+
+    /// "Shared through iCloud · 3 people", "Only on your devices".
+    static func householdLine(isShared: Bool, memberCount: Int) -> String {
+        guard isShared else { return String(localized: "Only on your devices") }
+        let people = memberCount == 1 ? String(localized: "1 person") : String(localized: "\(memberCount) people")
+        return String(localized: "Shared through iCloud · \(people)", comment: "The household card's subtitle; the argument is '3 people'")
+    }
+
+    /// The colour of a member's circle: amber for this person, as in the
+    /// mockup, then a stable pick from the rest by name so a member keeps
+    /// their colour as others join.
+    static func palette(for member: MemberRecord) -> AvatarPalette {
+        if member.isCurrentUser { return .amber }
+        let others: [AvatarPalette] = [.teal, .slate, .lavender, .coral, .green, .blue, .rose]
+        return others[TilePalette.index(for: member.displayName) % others.count]
+    }
+}
+
+/// Who is using a source's streams (HH-5): "Anya · Living Room iPad ·
+/// Lantern Drama", one line per stream.
+enum StreamCaption {
+    static func lines(_ playbacks: [PlaybackRecord], profiles: [ProfileRecord]) -> String? {
+        guard !playbacks.isEmpty else { return nil }
+        let names = Dictionary(profiles.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        return playbacks
+            .map { playback in
+                [names[playback.profileID], playback.deviceName, playback.title]
+                    .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " · ")
+            }
+            .joined(separator: "\n")
+    }
+
+    /// "This device and Anya's iPad": the Mac sidebar's foot, devices only.
+    /// This device first, then the others in the order they started.
+    static func devices(_ playbacks: [PlaybackRecord], thisDevice: String) -> String? {
+        guard !playbacks.isEmpty else { return nil }
+        var names: [String] = []
+        let own = playbacks.contains { $0.deviceName == thisDevice }
+        if own { names.append(String(localized: "This device")) }
+        for playback in playbacks.sorted(by: { $0.startedAt < $1.startedAt }) where playback.deviceName != thisDevice {
+            if !names.contains(playback.deviceName) { names.append(playback.deviceName) }
+        }
+        return names.formatted(.list(type: .and))
+    }
+}
+
+/// iCloud as the Sync section words it.
+enum SyncStatusText {
+    static func text(_ status: HouseholdSyncStatus, now: Date = .now) -> (text: String, isWarning: Bool) {
+        switch status {
+        case .local: (String(localized: "On this device only"), false)
+        case .syncing: (String(localized: "Syncing…"), false)
+        case .upToDate(let date): (String(localized: "Up to date · \(HouseholdFormat.ago(date, now: now))"), false)
+        case .failed(let message): (message, true)
+        case .noAccount: (String(localized: "Not signed in to iCloud"), true)
+        }
+    }
+}
+
+enum HouseholdFormat {
+    /// "Mar 2027".
+    static func monthYear(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.abbreviated).year())
+    }
+
+    /// "12 Mar 2027".
+    static func day(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// "just now", "12 min ago", "2 h ago", "3 d ago": as short as the
+    /// Sources rows' second line needs.
+    static func ago(_ date: Date, now: Date) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        switch seconds {
+        case ..<60: return String(localized: "just now")
+        case ..<3600: return String(localized: "\(Int(seconds / 60)) min ago")
+        case ..<86_400: return String(localized: "\(Int(seconds / 3600)) h ago")
+        default: return String(localized: "\(Int(seconds / 86_400)) d ago")
+        }
+    }
+
+    /// "412 channels · 3,120 movies · 210 shows", leaving out what the
+    /// provider doesn't offer.
+    static func counts(channels: Int?, movies: Int?, series: Int?) -> String? {
+        var parts: [String] = []
+        if let channels, channels > 0 { parts.append(channels == 1 ? String(localized: "1 channel") : String(localized: "\(channels) channels")) }
+        if let movies, movies > 0 { parts.append(movies == 1 ? String(localized: "1 movie") : String(localized: "\(movies) movies")) }
+        if let series, series > 0 { parts.append(series == 1 ? String(localized: "1 show") : String(localized: "\(series) shows")) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
