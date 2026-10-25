@@ -54,6 +54,26 @@ struct PlayerModelTests {
         model.close()
     }
 
+    @Test func aCancelledCallerDoesNotCancelTheOpen() async throws {
+        // SwiftUI cancels a view's task when the view goes; the link the
+        // model is resolving must not fail because of it.
+        let resolver = ScriptedResolver(Streams.hls)
+        let item = PlayerItem(id: "ch-102", title: "Match", channelNumber: 102, isLive: true) { request in
+            try Task.checkCancellation()
+            return try resolver.resolve(request)
+        }
+        let model = makeModel(item)
+        let caller = Task { await model.start() }
+        caller.cancel()
+        await caller.value
+
+        #expect(resolver.requests == [.standard], "resolved once, not failed and retried")
+        #expect(engines.made.count == 1)
+        #expect(model.state == .loading)
+        #expect(!log.events.contains { if case .failed = $0 { true } else { false } })
+        model.close()
+    }
+
     @Test func movieResumesFromItsStartPosition() async throws {
         let model = makeModel(movie(resolver: ScriptedResolver(Streams.movie), startPosition: 1234))
         await model.start()

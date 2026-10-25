@@ -208,7 +208,11 @@ public final class PlayerModel: Identifiable {
         if configuration.publishesNowPlaying { activateNowPlaying() }
         startTicking()
         let token = beginOpen(.standard, isRetry: false)
-        await runOpen(token: token, engine: nil)
+        // The open belongs to the model, not to the view that asked for it:
+        // SwiftUI cancels a view's `.task` when the view goes (the player
+        // moving into a multi-view tile), and a resolve cancelled that way
+        // would read as a dead link and spend the one retry.
+        await Task { await self.runOpen(token: token, engine: nil) }.value
     }
 
     /// Opens the item again with a fresh link, after a failure or on demand.

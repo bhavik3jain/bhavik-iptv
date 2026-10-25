@@ -12,7 +12,9 @@ import SwiftUI
 /// portrait, Duo folded) the logo and the multi-view button step aside.
 ///
 /// Keys (MAC-2, and an iPad keyboard): space plays and pauses, ← and → skip
-/// 10 seconds, ↑ and ↓ change channel, Esc closes.
+/// 10 seconds, ↑ and ↓ change channel, Esc closes, and on the Mac ⌘F turns
+/// the window full screen (unless the app's menu claims ⌘F first: menu key
+/// equivalents run before a view sees the key).
 ///
 /// The view starts the model when it appears; closing is the model's (the X,
 /// Esc, or the owner calling `close()`), so the owner hears `onClose` and
@@ -103,6 +105,10 @@ public struct PlayerView: View {
         .onKeyPress(.escape) {
             model.close()
             return .handled
+        }
+        .onKeyPress(characters: CharacterSet(charactersIn: "fF"), phases: .down) { press in
+            guard press.modifiers == .command else { return .ignored }
+            return PlayerWindow.toggleFullScreen() ? .handled : .ignored
         }
         .onAppear { hasKeyboardFocus = true }
         .onChange(of: voiceOverEnabled, initial: true) { _, enabled in

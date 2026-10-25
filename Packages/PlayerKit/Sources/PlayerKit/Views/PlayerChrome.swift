@@ -1,6 +1,10 @@
 import Core
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 // The small pieces the player screen and multi-view tiles are drawn with.
 // Over a picture the app's opaque surfaces look like holes, so the player
 // uses translucent white and black instead (mockup 06's own values).
@@ -98,6 +102,23 @@ struct JumpToLiveButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text("Jump to live"))
+    }
+}
+
+/// ⌘F on the Mac (MAC-2). The player usually sits in a sheet, which can't
+/// go full screen itself, so the window the sheet hangs from does.
+enum PlayerWindow {
+    /// False where there is no window to toggle (iOS, or no key window), so
+    /// the key passes on.
+    @MainActor
+    static func toggleFullScreen() -> Bool {
+        #if os(macOS)
+        guard let window = NSApp.keyWindow else { return false }
+        (window.sheetParent ?? window).toggleFullScreen(nil)
+        return true
+        #else
+        return false
+        #endif
     }
 }
 

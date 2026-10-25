@@ -46,7 +46,10 @@ final class NowPlayingCenter {
         add(center.nextTrackCommand) { handlers.next() }
         add(center.previousTrackCommand) { handlers.previous() }
         let seek = center.changePlaybackPositionCommand
-        let token = seek.addTarget { event in
+        // `@Sendable` keeps the handler nonisolated: a closure formed here
+        // would otherwise inherit the main actor, and Swift 6 traps when
+        // MediaPlayer calls it from one of its own queues.
+        let token = seek.addTarget { @Sendable event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let position = event.positionTime
             Task { @MainActor in handlers.seek(position) }
@@ -101,7 +104,7 @@ final class NowPlayingCenter {
 
     private func add(_ command: MPRemoteCommand, _ action: @escaping @MainActor () -> Void) {
         command.isEnabled = true
-        let token = command.addTarget { _ in
+        let token = command.addTarget { @Sendable _ in
             Task { @MainActor in action() }
             return .success
         }
