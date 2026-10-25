@@ -335,3 +335,112 @@ enum Base64 {
         return text
     }
 }
+
+// MARK: - Session, series and account readers
+
+extension StalkerParse {
+    /// Signed in when `get_profile` gives the account an id (verified in
+    /// stalkerhek). Some portals answer an unknown MAC with `id: 0` or null.
+    static func profileIsSignedIn(_ js: JSONValue) -> Bool {
+        guard let id = js.string("id") else { return false }
+        return id != "0"
+    }
+
+    /// Episode rows of one season (`get_ordered_list` with a `season_id`).
+    /// The number is `series_number`, else the number in the name, else the
+    /// row's position; it, not the provider's id, goes into item keys.
+    static func episodes(_ rows: [JSONValue], seriesID: String, season: Int, api: URL) -> [RemoteEpisode] {
+        rows.enumerated().compactMap { index, row in
+            guard let id = row.string("id") else { return nil }
+            let name = row.string("name") ?? ""
+            let number = row.int("series_number", "episode_number") ?? leadingNumber(in: name) ?? index + 1
+            return RemoteEpisode(
+                id: id,
+                seriesID: seriesID,
+                season: season,
+                number: number,
+                title: name.isEmpty ? "Episode \(number)" : episodeTitle(name),
+                plot: row.string("description", "plot"),
+                durationSeconds: duration(row),
+                containerExtension: row.string("container_extension"),
+                posterURL: poster(row, api: api),
+                command: row.string("cmd")
+            )
+        }
+    }
+
+    /// Episodes of a portal that lists them only as numbers on the season
+    /// row (`series: [1, 2, 3]`) and plays each as the season's `cmd` plus
+    /// `series=<n>`.
+    static func numberedEpisodes(_ seasonRow: JSONValue, seriesID: String, season: Int) -> [RemoteEpisode] {
+        guard let numbers = seasonRow["series"]?.array?.compactMap(\.int), !numbers.isEmpty,
+              let command = seasonRow.string("cmd")
+        else { return [] }
+        let seasonID = seasonRow.string("id") ?? String(season)
+        return numbers.map { number in
+            RemoteEpisode(
+                id: "\(seasonID):\(number)",
+                seriesID: seriesID,
+                season: season,
+                number: number,
+                title: "Episode \(number)",
+                command: command
+            )
+        }
+    }
+
+    /// `2026-10-24` in the portal's zone, the `date` of `get_simple_data_table`.
+    static func dayString(_ date: Date, timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 1970, parts.month ?? 1, parts.day ?? 1)
+    }
+
+    /// The `id` of the guide row that starts at `start` (within five
+    /// minutes: portals round), for a `tv_archive` link.
+    static func programmeID(in rows: [JSONValue], startingAt start: Date, timeZone: TimeZone) -> String? {
+        var best: (id: String, gap: TimeInterval)?
+        for row in rows {
+            guard let id = row.string("id"),
+                  let programme = programme(row, guideChannelID: "", timeZone: timeZone)
+            else { continue }
+            let gap = abs(programme.start.timeIntervalSince(start))
+            if gap <= 300, gap < (best?.gap ?? .infinity) { best = (id, gap) }
+        }
+        return best?.id
+    }
+
+    /// The account from `get_profile` and `account_info/get_main_info`
+    /// (unverified). Expiry fields differ per portal; many resellers put the
+    /// date in `phone` ("January 15, 2027, 4:31 pm"), so that one is read
+    /// only as a written date, never as a number.
+    static func account(profile: JSONValue?, mainInfo: JSONValue?, timeZone: TimeZone, now: Date) -> AccountInfo {
+        var expiresAt: Date?
+        let sources = [mainInfo, profile].compactMap { $0 }.filter { $0.object != nil }
+        search: for source in sources {
+            for key in ["end_date", "expire_billing_date", "expire_date", "exp_date", "expires", "expiry", "tariff_expired_date"] {
+                guard let value = source[key] else { continue }
+                if let date = ProviderTime.unix(value) ?? value.string.flatMap({ ProviderTime.looseDate($0, timeZone: timeZone) }) {
+                    expiresAt = date
+                    break search
+                }
+            }
+            if let phone = source.string("phone"), let date = ProviderTime.looseDate(phone, timeZone: timeZone) {
+                expiresAt = date
+                break search
+            }
+        }
+        let blocked = profile?.truthy("blocked") == true
+        let message = profile?.string("block_msg", "msg") ?? mainInfo?.string("msg", "message")
+        let status: AccountStatus
+        if blocked {
+            status = .disabled
+        } else if let expiresAt, expiresAt < now {
+            status = .expired
+        } else {
+            status = .active
+        }
+        return AccountInfo(status: status, expiresAt: expiresAt, message: message)
+    }
+}
