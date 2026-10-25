@@ -26,7 +26,13 @@ final class VLCEngine: PlaybackEngine {
     private var hasStarted = false
     /// A stop we asked for; any other stop is the stream ending or dying.
     private var stopRequested = false
-    private var bufferingProgress: Float = 100
+    /// Set by `load` until the new media reports opening or playing: swapping
+    /// the media on a playing player makes libvlc stop the old one first, and
+    /// that stop arrives (on its own thread, then here) after `load` returned.
+    /// Without this a channel change would read as the new stream dying.
+    private var awaitingOpen = false
+    /// libvlc's buffering progress, 0…1 (1 is "enough to play").
+    private var bufferingProgress: Float = 1
 
     private(set) var audioTracks: [MediaTrack] = []
     private(set) var subtitleTracks: [MediaTrack] = []
@@ -65,12 +71,12 @@ final class VLCEngine: PlaybackEngine {
     }
 
     var isMuted = false {
-        didSet { player.audio?.isMuted = isMuted }
+        didSet { applyAudio() }
     }
 
     /// 0…1 here; VLC counts 0…200 with 100 as unity.
     var volume: Float = 1 {
-        didSet { player.audio?.volume = Int32((min(max(volume, 0), 1) * 100).rounded()) }
+        didSet { applyAudio() }
     }
 
     var gravity: VideoGravity = .fit {
@@ -86,7 +92,8 @@ final class VLCEngine: PlaybackEngine {
         self.stream = stream
         hasStarted = false
         stopRequested = false
-        bufferingProgress = 100
+        awaitingOpen = true
+        bufferingProgress = 1
         audioTracks = []
         subtitleTracks = []
         selectedAudioTrackID = nil
@@ -180,30 +187,43 @@ final class VLCEngine: PlaybackEngine {
     private func refresh() {
         let newState = computeState()
         if newState != state {
+            // libvlc makes its audio output when playback starts and forgets a
+            // mute set before then, so a muted multi-view tile re-applies it.
+            if newState == .playing { applyAudio() }
             state = newState
             onChange?()
         }
+    }
+
+    private func applyAudio() {
+        guard let audio = player.audio else { return }
+        audio.isMuted = isMuted
+        audio.volume = Int32((min(max(volume, 0), 1) * 100).rounded())
     }
 
     private func computeState() -> PlaybackState {
         guard stream != nil else { return .idle }
         switch player.state {
         case .opening:
+            awaitingOpen = false
             return hasStarted ? .buffering : .loading
         case .playing:
-            if bufferingProgress < 100 { return hasStarted ? .buffering : .loading }
+            awaitingOpen = false
+            if bufferingProgress < 1 { return hasStarted ? .buffering : .loading }
             hasStarted = true
             return .playing
         case .paused:
             return .paused
         case .stopped, .stopping:
             if stopRequested { return .idle }
+            // The previous media's stop, still on its way in.
+            if awaitingOpen { return .loading }
             // The stream ran out (a movie's end) or the server closed it
             // before a frame arrived.
-            return hasStarted ? .ended : .failed(String(localized: "The stream stopped before it started."))
+            return hasStarted ? .ended : .failed(PlayerMessage.stoppedBeforeStart)
         case .error:
             // libvlc 4 keeps no error text; its log has the detail.
-            return .failed(String(localized: "VLC couldn't open this stream."))
+            return .failed(PlayerMessage.vlcCouldNotOpen)
         case .nothingSpecial:
             return wantsToPlay ? .loading : .idle
         @unknown default:
@@ -279,15 +299,15 @@ private final class VLCEventProxy: NSObject, VLCMediaPlayerDelegate, @unchecked 
         forward { $0.lengthChanged() }
     }
 
-    func mediaPlayerTrackAdded(_ trackId: String, with trackType: VLCMediaTrackType) {
+    func mediaPlayerTrackAdded(_ trackId: String, with trackType: VLCMedia.TrackType) {
         forward { $0.tracksChanged() }
     }
 
-    func mediaPlayerTrackRemoved(_ trackId: String, with trackType: VLCMediaTrackType) {
+    func mediaPlayerTrackRemoved(_ trackId: String, with trackType: VLCMedia.TrackType) {
         forward { $0.tracksChanged() }
     }
 
-    func mediaPlayerTrackSelected(_ trackType: VLCMediaTrackType, selectedId: String, unselectedId: String) {
+    func mediaPlayerTrackSelected(_ trackType: VLCMedia.TrackType, selectedId: String, unselectedId: String) {
         forward { $0.tracksChanged() }
     }
 

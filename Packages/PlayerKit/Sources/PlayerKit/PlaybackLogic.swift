@@ -250,6 +250,28 @@ public enum PlayerFormat {
 public enum PlayerMessage {
     public static let genericFailure = String(localized: "This stream couldn't be played.")
     public static let vlcMissing = String(localized: "This stream needs the VLC engine, which isn't in this build.")
+    /// AVPlayer (or VLCKit) sat loading past its start timeout.
+    public static let didNotStart = String(localized: "The stream didn't start.")
+    /// A live channel's stream ended, which live streams don't do on purpose.
+    public static let liveStopped = String(localized: "The channel stopped sending.")
+    /// VLCKit's own failure states, which carry no detail.
+    public static let vlcCouldNotOpen = String(localized: "VLC couldn't open this stream.")
+    public static let stoppedBeforeStart = String(localized: "The stream stopped before it started.")
+
+    /// The engines' own wording, which says less than a provider's message.
+    public static func isGeneric(_ message: String) -> Bool {
+        [genericFailure, didNotStart, liveStopped, vlcCouldNotOpen, stoppedBeforeStart].contains(message)
+    }
+
+    /// What the player shows after its retry failed too (PLY-4): the
+    /// provider's own words if either attempt got some ("HTTP 403: Forbidden"
+    /// from AVPlayer beats VLC's wordless failure on the retry), and the
+    /// missing-engine note when the stream needed VLCKit and this build has none.
+    public static func final(first: String?, last: String, vlcMissing needsVLC: Bool) -> String {
+        if needsVLC { return vlcMissing }
+        if isGeneric(last), let first, !isGeneric(first) { return first }
+        return last
+    }
 
     public static func describe(_ error: any Error) -> String {
         let text = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -262,6 +284,55 @@ public enum PlayerMessage {
         let scrubbed = text.replacingOccurrences(of: pattern, with: String(localized: "the stream address"), options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return scrubbed.isEmpty ? genericFailure : scrubbed
+    }
+}
+
+// MARK: - Seeking behind live
+
+/// How to reach a point some seconds behind live (PLY-2, PLY-5): seek on the
+/// link already open when it holds that moment, otherwise open the channel's
+/// archive from it, otherwise it can't be done.
+public enum LiveSeekPlan: Sendable, Equatable {
+    /// Seek the open stream to this position (seconds from its start).
+    case seek(TimeInterval)
+    /// Back to live; the caller decides between a seek and a fresh link.
+    case live
+    /// Open the archive from `start`, `duration` seconds long.
+    case archive(start: Date, duration: TimeInterval)
+    case unavailable
+
+    /// Closer to live than this counts as live: the edge itself wobbles by a
+    /// segment or two.
+    public static let liveTolerance: TimeInterval = 3
+
+    public static func plan(
+        behindLive target: TimeInterval,
+        anchor: LiveClock.Anchor,
+        currentTime: TimeInterval,
+        duration: TimeInterval?,
+        edgeSlack: TimeInterval?,
+        now: Date,
+        hasArchive: Bool,
+        programmeEnd: Date?
+    ) -> LiveSeekPlan {
+        guard target > liveTolerance else { return .live }
+        switch anchor {
+        case .live:
+            // An HLS window: the live edge sits `edgeSlack` before its end.
+            if let duration, duration > 0 {
+                let position = duration - (edgeSlack ?? 0) - target
+                if position >= 0 { return .seek(position) }
+            }
+        case .archive(let start):
+            let position = now.timeIntervalSince(start) - target
+            if position >= 0, duration.map({ position <= $0 }) ?? true { return .seek(position) }
+        }
+        guard hasArchive else { return .unavailable }
+        let start = now.addingTimeInterval(-target)
+        // Through the programme's end; a catch-up link asked to run past now
+        // plays on to the live point, so a minute's floor is plenty.
+        let end = max(programmeEnd ?? now, now)
+        return .archive(start: start, duration: max(60, end.timeIntervalSince(start)))
     }
 }
 
