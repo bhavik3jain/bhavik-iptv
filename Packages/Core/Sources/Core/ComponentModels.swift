@@ -132,6 +132,14 @@ extension EpisodeText {
     /// rather than "Downloaded", since resuming is the likelier next step; a
     /// finished one shows only its length (the checkmark says the rest).
     public static func detail(duration: TimeInterval?, remaining: TimeInterval? = nil, isDownloaded: Bool = false) -> String? {
+        let parts = detailParts(duration: duration, remaining: remaining, isDownloaded: isDownloaded)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The pieces of `detail` before they are joined, so VoiceOver can join
+    /// them with commas instead of "·". Under a minute left reads as
+    /// finished rather than "0 min left".
+    public static func detailParts(duration: TimeInterval?, remaining: TimeInterval? = nil, isDownloaded: Bool = false) -> [String] {
         var parts: [String] = []
         if let duration, duration > 0 { parts.append(HearthFormat.duration(duration)) }
         if let remaining, remaining >= 60, remaining < (duration ?? .infinity) {
@@ -139,7 +147,7 @@ extension EpisodeText {
         } else if isDownloaded {
             parts.append(String(localized: "Downloaded", bundle: .module, comment: "An episode saved on this device"))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts
     }
 }
 
