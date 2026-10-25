@@ -64,19 +64,28 @@ xcodebuild build -project Hearth.xcodeproj -scheme Hearth-macOS \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 ```
 
-The scripts keep DerivedData in `build/DerivedData` and their logs in `build/logs` (both gitignored). Never point `-derivedDataPath` at `/tmp`.
+| Script | What it does |
+| --- | --- |
+| `scripts/run-sim.sh "<simulator>" [args…]` | Generates the project, builds Debug for that simulator, boots it, opens Device Hub, installs and launches Hearth Dev with `-StubProvider YES -InMemoryStores YES` plus your arguments |
+| `scripts/run-mac-local.sh [--no-launch] [args…]` | Builds Debug `Hearth-macOS` unsigned, signs it ad hoc, and runs it the same way in the foreground |
+| `scripts/testflight.sh ios\|mac\|all [--no-upload]` | Archives Release and uploads to TestFlight from this Mac (see Release) |
+| `scripts/cloudkit/init-schema.sh [--simulator ["<name>"]]` | Sends the household model's schema to CloudKit Development (see Release) |
+| `scripts/pick-simulator.sh ["<name>"]` | Prints a simulator's UDID: that name, else iPhone Duo, else the newest runtime's iPhone. CI and the scripts above use it |
+| `scripts/codesign-app.sh` | Signs a Mac app built unsigned, nested code (VLCKit) first, filling in the entitlements' `$(…)` variables. The Mac paths above use it |
+
+The scripts keep DerivedData in `build/DerivedData` and their logs in `build/logs` (both gitignored; `DERIVED_DATA` overrides the first). Never point `-derivedDataPath` at `/tmp`.
 
 `scripts/run-mac-local.sh` signs with `App/Resources/App-macOS-Local.entitlements`: the sandbox and outgoing connections, but no iCloud, since an app that claims iCloud without a provisioning profile is killed at launch. So it always runs with `-InMemoryStores YES`. iCloud on the Mac needs a profile-signed build from Xcode, signed in.
 
 Debug builds are their own app, **Hearth Dev** (`com.bhavikjain.hearth.dev`), with their own sandbox and store, and they sync with iCloud's Development environment only. Never give Debug the release bundle id.
 
-**iPhone Duo.** Folded, it is a compact iPhone. Opened, the inner display is regular × regular, like a small iPad, and the app switches to its `.sidebar` layout. Open, close and rotate it from **Device Hub**'s controls; `simctl` has no hinge command. Check both states and both orientations: controls stay inside the safe area, video and artwork run past it, and opposite insets are not always equal.
+**iPhone Duo.** Folded, it is a compact iPhone. Opened, the inner display is regular × regular, like a small iPad, and the app switches to its `.sidebar` layout. Open, close and rotate it from **Device Hub**'s controls (Xcode 27's successor to Simulator.app); `simctl` has no hinge command. Check both states and both orientations: controls stay inside the safe area, video and artwork run past it, and opposite insets are not always equal.
 
 **Tests.** Swift Testing only. Logic lives in value types and is tested; views are not. The network is faked with a `URLProtocol` stub, fixtures are scrubbed provider responses, and nothing touches iCloud. A test that needs a real login is gated with `.enabled(if:)` and skips by name without one. Every package's suite must be listed in `project.yml`'s `AllPackageTests` scheme, or CI never runs it.
 
 ## Debug launch arguments
 
-Debug builds only (`#if DEBUG`). Pass them in Xcode (Product → Scheme → Edit Scheme → Run → Arguments) or after the simulator name in `scripts/run-sim.sh`.
+Debug builds only (`#if DEBUG`). Pass them in Xcode (Product → Scheme → Edit Scheme → Run → Arguments) or as extra arguments to `scripts/run-sim.sh` (after the simulator name) and `scripts/run-mac-local.sh`.
 
 | Argument | What it does |
 | --- | --- |
