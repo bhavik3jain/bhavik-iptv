@@ -2,6 +2,8 @@
 import PackageDescription
 
 // A feature package: Core plus the kits it needs, never another feature.
+// The string catalog under Resources gives the target a `Bundle.module`, so
+// every user-visible string here is looked up in this package's own table.
 let package = Package(
     name: "SearchFeature",
     defaultLocalization: "en",
@@ -13,6 +15,10 @@ let package = Package(
         .package(path: "../HouseholdKit"),
     ],
     targets: [
-        .target(name: "SearchFeature", dependencies: ["Core", "CatalogKit", "HouseholdKit"]),
+        .target(
+            name: "SearchFeature",
+            dependencies: ["Core", "CatalogKit", "HouseholdKit"],
+            resources: [.process("Resources")]
+        ),
     ]
 )
