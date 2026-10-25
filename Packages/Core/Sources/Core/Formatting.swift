@@ -38,4 +38,24 @@ public enum HearthFormat {
     public static func episodeCode(season: Int, episode: Int) -> String {
         "S\(season) · E\(episode)"
     }
+
+    /// "20:00–21:00", without spaces, for the guide's narrow programme cells.
+    public static func compactTimeRange(_ start: Date, _ end: Date) -> String {
+        "\(clock(start))–\(clock(end))"
+    }
+
+    /// `timecode` set for display: a true minus sign ("−4:12") rather than a
+    /// hyphen, as in the player mockup.
+    public static func displayTimecode(_ seconds: TimeInterval, signed: Bool = false) -> String {
+        let code = timecode(seconds, signed: signed)
+        return code.hasPrefix("-") ? "\u{2212}" + code.dropFirst() : code
+    }
+
+    /// "4 minutes, 12 seconds": a duration as VoiceOver should say it, where
+    /// "4:12" would be read as a time of day.
+    public static func spokenDuration(_ seconds: TimeInterval) -> String {
+        let whole = Int(abs(seconds).rounded())
+        let units: Set<Duration.UnitsFormatStyle.Unit> = whole >= 3600 ? [.hours, .minutes] : [.minutes, .seconds]
+        return Duration.seconds(whole).formatted(.units(allowed: units, width: .wide))
+    }
 }
