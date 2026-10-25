@@ -60,8 +60,8 @@ extension NSPersistentCloudKitContainer {
             let context = self.newBackgroundContext()
             let object = context.performAndWait { context.object(with: objectID) }
             // The object only weakly knows its context; held here until
-            // CloudKit answers. Only touched on this queue and in that answer.
-            nonisolated(unsafe) let keepAlive = context
+            // CloudKit answers.
+            let keepAlive = context
             self.share([object], to: nil) { _, share, _, error in
                 _ = keepAlive
                 if let share {

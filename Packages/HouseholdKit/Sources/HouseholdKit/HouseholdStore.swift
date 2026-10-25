@@ -295,8 +295,7 @@ public final class HouseholdStore {
     /// Returns once the private store has finished an import this launch, or
     /// the bound passed, or there's no account to import from.
     private func waitForFirstImport() async {
-        guard case .cloud(let identifier) = mode, let store = privateStore else { return }
-        let storeID = store.identifier
+        guard case .cloud(let identifier) = mode, let storeID = privateStore?.identifier else { return }
         if cloudEvents.hasImported(store: storeID) { return }
         switch try? await CKContainer(identifier: identifier).accountStatus() {
         case .noAccount?, .restricted?:
