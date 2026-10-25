@@ -29,7 +29,7 @@ enum RowWriter {
             "generation": generation,
             "remoteID": channel.id,
             "stableKey": ItemKey.channel(source: sourceID, id: channel.id).rawValue,
-            "sortNumber": channel.number.map(Int64.init) ?? Int64.max,
+            "sortNumber": channel.number.map { Int64($0) } ?? Int64.max,
             "name": channel.name,
             "searchKey": SearchKey.normalize(channel.name),
             "guideKey": channel.guideChannelID ?? channel.id,
@@ -86,10 +86,10 @@ enum RowWriter {
             row["categoryID"] = CategoryKey.make(source: sourceID, kind: ContentKind.vod.rawValue, remoteID: categoryID)
         }
         row["posterURL"] = movie.posterURL?.absoluteString
-        row["year"] = movie.year.map(Int64.init)
+        row["year"] = movie.year.map { Int64($0) }
         row["plot"] = movie.plot
         row["rating"] = movie.rating
-        row["duration"] = movie.durationSeconds.map(Double.init)
+        row["duration"] = movie.durationSeconds.map { Double($0) }
         row["containerExtension"] = movie.containerExtension
         row["addedAt"] = movie.addedAt
         row["genre"] = movie.genre
@@ -115,7 +115,7 @@ enum RowWriter {
         }
         row["posterURL"] = series.posterURL?.absoluteString
         row["plot"] = series.plot
-        row["year"] = series.year.map(Int64.init)
+        row["year"] = series.year.map { Int64($0) }
         row["rating"] = series.rating
         row["addedAt"] = series.addedAt
         row["genre"] = series.genre
@@ -136,7 +136,7 @@ enum RowWriter {
             "fetchedAt": fetchedAt,
         ]
         row["plot"] = episode.plot
-        row["duration"] = episode.durationSeconds.map(Double.init)
+        row["duration"] = episode.durationSeconds.map { Double($0) }
         row["containerExtension"] = episode.containerExtension
         row["posterURL"] = episode.posterURL?.absoluteString
         row["command"] = episode.command

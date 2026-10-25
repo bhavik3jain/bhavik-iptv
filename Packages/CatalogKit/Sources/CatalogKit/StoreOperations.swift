@@ -111,8 +111,8 @@ enum SourceStateRow {
     static func setAccount(_ account: AccountInfo, on row: NSManagedObject, readAt: Date) {
         row.setValue(try? JSONEncoder().encode(account), forKey: "accountJSON")
         row.setValue(account.expiresAt, forKey: "accountExpiry")
-        row.setValue(account.maxConnections.map(Int64.init), forKey: "streamLimit")
-        row.setValue(account.activeConnections.map(Int64.init), forKey: "activeStreams")
+        row.setValue(account.maxConnections.map { Int64($0) }, forKey: "streamLimit")
+        row.setValue(account.activeConnections.map { Int64($0) }, forKey: "activeStreams")
         row.setValue(account.activeConnections == nil ? nil : readAt, forKey: "activeStreamsReadAt")
     }
 
