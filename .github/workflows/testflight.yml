@@ -290,25 +290,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" | xcbeautify --renderer github-actions
 
-          # App-macOS.entitlements has no $(…) variables today; these are the
-          # ones Xcode would fill in. A new one must be added here, or the app
-          # would be signed with a literal "$(…)" and lose that entitlement.
-          entitlements="$RUNNER_TEMP/Hearth-macOS.entitlements"
-          sed -e 's/\$(TeamIdentifierPrefix)/Y4M3S6H4NK./g' \
-              -e 's/\$(CFBundleIdentifier)/com.bhavikjain.hearth/g' \
-              -e 's/\$(PRODUCT_BUNDLE_IDENTIFIER)/com.bhavikjain.hearth/g' \
-              App/Resources/App-macOS.entitlements > "$entitlements"
-          if grep -q '\$(' "$entitlements"; then
-            echo "::error::App-macOS.entitlements has a \$(…) variable this job doesn't fill in: $(grep -o '\$([A-Za-z_]*)' "$entitlements" | sort -u | tr '\n' ' ')"
+          app="$archive/Products/Applications/Hearth.app"
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
+          if [ "$bundle_id" != com.bhavikjain.hearth ]; then
+            echo "::error::The Release archive's bundle id is $bundle_id, not com.bhavikjain.hearth"
             exit 1
           fi
 
-          app="$archive/Products/Applications/Hearth.app"
-          # Nested code first (VLCKit's framework, any dylib): codesign refuses
-          # to sign a bundle whose nested code is unsigned.
-          find "$app/Contents" \( -name '*.framework' -o -name '*.dylib' -o -name '*.xpc' \) -prune -print0 \
-            | xargs -0 -I{} codesign --force --sign - --options runtime --timestamp=none {}
-          codesign --force --sign - --options runtime --timestamp=none --entitlements "$entitlements" "$app"
+          # The helper (shared with scripts/testflight.sh) fills in the
+          # $(…) variables Xcode would, stops on any it doesn't know (the app
+          # would otherwise be signed with a literal "$(…)" and lose that
+          # entitlement), and signs nested code deepest first: VLCKit's
+          # framework and its dylibs, then the app.
+          TEAM=Y4M3S6H4NK scripts/codesign-app.sh --hardened-runtime "$app" App/Resources/App-macOS.entitlements
           codesign -d --entitlements - "$app"
 
       - name: Upload to TestFlight

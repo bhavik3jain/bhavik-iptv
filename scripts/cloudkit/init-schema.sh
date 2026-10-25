@@ -61,6 +61,10 @@ TIMEOUT=${TIMEOUT:-300}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=${WORK:-$HOME/Library/Developer/Xcode/DerivedData/Hearth-schema-init}
 LOG="$WORK/run.log"
+# WORK is deleted on exit, so a slip like WORK=~ must not get that far.
+case "${WORK%/}" in
+    ""|/|"$HOME"|"$ROOT"|/tmp|/private/tmp) echo "error: WORK=$WORK would be deleted on exit; give it a folder of its own" >&2; exit 2 ;;
+esac
 
 MODE=mac
 SIMULATOR=""
@@ -178,13 +182,9 @@ prepare_mac() {
     /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $TEAM.$BUNDLE_ID" \
         -c "Add :com.apple.developer.team-identifier string $TEAM" "$entitlements"
 
-    # Nested code first: codesign refuses a bundle whose nested code is unsigned.
-    find "$APP/Contents" \( -name '*.dylib' -o -name '*.framework' -o -name '*.xpc' \) -prune -print0 \
-        | xargs -0 -I{} codesign --force --sign "$SIGN_IDENTITY" --timestamp=none {} > /dev/null 2>&1 \
-        || die "signing the app's frameworks failed"
-    codesign --force --sign "$SIGN_IDENTITY" --entitlements "$entitlements" --timestamp=none "$APP" \
-        || die "signing the app failed"
-    codesign --verify --strict "$APP" || die "the signature doesn't verify"
+    # Nested code first (VLCKit's framework and its dylibs), then the app.
+    TEAM=$TEAM "$ROOT/scripts/codesign-app.sh" --identity "$SIGN_IDENTITY" "$APP" "$entitlements" 2> "$WORK/sign.log" \
+        || { cat "$WORK/sign.log" >&2; die "signing the app failed"; }
 }
 
 # MARK: - Simulator: build, boot, install
@@ -197,7 +197,7 @@ prepare_simulator() {
     fi
 
     echo "Building the app (Debug) for the simulator…"
-    build -scheme Hearth -destination "platform=iOS Simulator,id=$UDID"
+    build -scheme Hearth -destination "platform=iOS Simulator,id=$UDID,arch=$(uname -m)"
 
     APP="$WORK/dd/Build/Products/Debug-iphonesimulator/Hearth.app"
     [[ -d $APP ]] || die "no app at $APP"
@@ -241,13 +241,16 @@ stop_app() {
 }
 
 # Launches the app with "$@", waits (at most TIMEOUT seconds) for its result
-# in $LOG, then quits it. Returns 0 when the schema was sent, 1 when the run
-# failed, 2 when it never answered.
+# in $LOG, then quits it. Returns 0 when the schema was sent (or, for
+# -SchemaPass list, the passes were listed), 1 when the run failed, 2 when it
+# never answered.
 launch() {
     start_app "$@"
     local result=2 elapsed
     for ((elapsed = 0; elapsed < TIMEOUT; elapsed += 2)); do
         if grep -qF "$MARK Schema sent to Development" "$LOG"; then result=0; break; fi
+        # The app stays open after listing, so the list ends the wait.
+        if grep -qF "$MARK Passes:" "$LOG"; then result=0; break; fi
         # A moment more, so the lines after the failure (CloudKit's own
         # errors) reach the log too.
         if grep -qF "$MARK Failed" "$LOG"; then sleep 2; result=1; break; fi

@@ -277,22 +277,15 @@ release_mac() {
     check_archive_build_number "$archive"
 
     # Left unsigned, the archive would carry no entitlements and the export
-    # would ship the app without its sandbox or CloudKit.
-    local entitlements="$OUT/Hearth-macOS.entitlements"
-    sed -e "s/\$(TeamIdentifierPrefix)/$TEAM./g" \
-        -e "s/\$(CFBundleIdentifier)/$BUNDLE_ID/g" \
-        -e "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/$BUNDLE_ID/g" \
-        App/Resources/App-macOS.entitlements > "$entitlements"
-    if grep -q '\$(' "$entitlements"; then
-        die "App-macOS.entitlements has a \$(…) variable this script doesn't fill in: $(grep -o '\$([A-Za-z_]*)' "$entitlements" | sort -u | tr '\n' ' ')"
-    fi
+    # would ship the app without its sandbox or CloudKit. The helper resolves
+    # the entitlements' $(…) variables and signs VLCKit's framework first.
     local app="$archive/Products/Applications/Hearth.app"
     [[ -d $app ]] || die "no app at ${app#"$ROOT"/}"
-    # Nested code first: codesign refuses a bundle whose nested code is unsigned.
-    find "$app/Contents" \( -name '*.framework' -o -name '*.dylib' -o -name '*.xpc' \) -prune -print0 \
-        | xargs -0 -I{} codesign --force --sign - --options runtime --timestamp=none {} 2>> "$OUT/mac-sign.log" \
-        || die "ad hoc signing of the app's frameworks failed; see ${OUT#"$ROOT"/}/mac-sign.log"
-    codesign --force --sign - --options runtime --timestamp=none --entitlements "$entitlements" "$app" 2>> "$OUT/mac-sign.log" \
+    local bundle_id
+    bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
+    [[ $bundle_id == "$BUNDLE_ID" ]] || die "the Release archive's bundle id is $bundle_id, not $BUNDLE_ID"
+    TEAM=$TEAM "$ROOT/scripts/codesign-app.sh" --hardened-runtime "$app" App/Resources/App-macOS.entitlements \
+        2>> "$OUT/mac-sign.log" \
         || die "ad hoc signing failed; see ${OUT#"$ROOT"/}/mac-sign.log"
 
     export_archive "$archive" "$OUT/mac-export" mac

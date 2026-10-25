@@ -45,12 +45,14 @@ xcodegen generate --quiet
 
 echo "Building Hearth (Debug) for $name… (log: ${log#"$ROOT"/})"
 # Signed the way Xcode signs any simulator build: no Apple ID or profile
-# needed, which is how CI builds it too.
+# needed, which is how CI builds it too. The architecture is named because a
+# simulator is listed once per architecture, and xcodebuild otherwise warns
+# that the destination is ambiguous and may pick the Rosetta one.
 if ! xcodebuild build \
         -project Hearth.xcodeproj \
         -scheme Hearth \
         -configuration Debug \
-        -destination "platform=iOS Simulator,id=$udid" \
+        -destination "platform=iOS Simulator,id=$udid,arch=$(uname -m)" \
         -derivedDataPath "$DERIVED_DATA" > "$log" 2>&1; then
     grep -E "(^|[[:space:]])error:|\*\* BUILD FAILED \*\*" "$log" | awk '!seen[$0]++' | tail -30 >&2 || tail -40 "$log" >&2
     die "the build failed. Full log: ${log#"$ROOT"/}"

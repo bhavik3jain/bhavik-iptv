@@ -68,16 +68,11 @@ executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Conten
 [[ $bundle_id != "$RELEASE_BUNDLE_ID" ]] || die "the Debug build has the release bundle id; project.yml's Debug config should make it $RELEASE_BUNDLE_ID.dev"
 
 echo "Signing ad hoc with ${ENTITLEMENTS#"$ROOT"/}…"
-# Nested code first (VLCKit's framework, any dylib): codesign refuses a bundle
-# whose nested code is unsigned. No hardened runtime: it's for distribution,
-# and its library validation would refuse ad hoc frameworks, which carry no
-# team id.
-find "$app/Contents" \( -name '*.framework' -o -name '*.dylib' -o -name '*.xpc' \) -prune -print0 \
-    | xargs -0 -I{} codesign --force --sign - --timestamp=none {} 2>> "$log" \
-    || die "signing the app's frameworks failed; see ${log#"$ROOT"/}"
-codesign --force --sign - --timestamp=none --entitlements "$ENTITLEMENTS" "$app" 2>> "$log" \
+# Nested code first (VLCKit's framework and its dylibs), then the app. No
+# hardened runtime: it's for distribution, and its library validation would
+# refuse ad hoc frameworks, which carry no team id.
+"$ROOT/scripts/codesign-app.sh" "$app" "$ENTITLEMENTS" 2>> "$log" \
     || die "signing the app failed; see ${log#"$ROOT"/}"
-codesign --verify --strict "$app" 2>> "$log" || die "the signature doesn't verify; see ${log#"$ROOT"/}"
 
 if [[ $LAUNCH == NO ]]; then
     echo "Built and signed: ${app#"$ROOT"/} ($bundle_id). Not launched (--no-launch)."
