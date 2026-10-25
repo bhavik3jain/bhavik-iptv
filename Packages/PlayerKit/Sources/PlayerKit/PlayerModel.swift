@@ -173,6 +173,11 @@ public final class PlayerModel: Identifiable {
     @ObservationIgnored private var retryAvailable = true
     /// The current attempt has reached `.playing` at least once.
     @ObservationIgnored private var attemptStarted = false
+    /// Seconds the current attempt has actually played. Past
+    /// `retryRestoredAfter` the stream has proved itself, so a drop an hour
+    /// into a match gets its own retry rather than the error screen.
+    @ObservationIgnored private var attemptPlayedSeconds: TimeInterval = 0
+    static let retryRestoredAfter: TimeInterval = 60
     /// `.started` went out for this item and `.stopped` hasn't yet.
     @ObservationIgnored private var startedEventSent = false
     @ObservationIgnored private var firstFailureMessage: String?
@@ -222,13 +227,17 @@ public final class PlayerModel: Identifiable {
             firstFailureMessage = nil
             vlcWanted = false
         }
+        // Every link starts at its own edge, so the live clock starts afresh:
+        // a retried live link is at live again, and its window's edge gap is
+        // measured anew when it plays.
         if case .fromStart(let start, _) = request {
             liveClock = LiveClock(anchor: .archive(start: start))
-        } else if self.request != request || !isRetry {
+        } else {
             liveClock = LiveClock(anchor: .live)
         }
         self.request = request
         attemptStarted = false
+        attemptPlayedSeconds = 0
         // Stop what's playing now: a channel change mustn't hold two of the
         // provider's streams while the new link resolves (Stalker allows one).
         engine?.onChange = nil
@@ -377,6 +386,13 @@ public final class PlayerModel: Identifiable {
         case .playing, .buffering:
             if old == .paused { liveClock.resumed(at: configuration.now()) }
             if new == .playing, old != .buffering { scheduleControlsHide() }
+            if new == .playing, !startedEventSent {
+                // Played again after it finished: a new viewing as far as the
+                // household's progress and who's-watching rows go.
+                startedEventSent = true
+                checkpoints.reset()
+                emit(.started(itemID: item.id))
+            }
         case .ended:
             checkpoints.reset()
             emit(.finished(itemID: item.id, duration: duration))
@@ -464,6 +480,13 @@ public final class PlayerModel: Identifiable {
         now = configuration.now()
         syncTime()
         liveOffset = computeLiveOffset()
+        if state == .playing, attemptStarted, elapsed > 0 {
+            attemptPlayedSeconds += min(elapsed, checkpoints.maximumStep)
+            if attemptPlayedSeconds >= Self.retryRestoredAfter, !retryAvailable {
+                retryAvailable = true
+                firstFailureMessage = nil
+            }
+        }
         if startedEventSent, checkpoints.advance(by: elapsed, isPlaying: state == .playing) {
             emit(.checkpoint(itemID: item.id, position: currentTime, duration: duration))
         }
@@ -568,6 +591,14 @@ public final class PlayerModel: Identifiable {
     public func jumpToLive() async {
         guard item.isLive, didStart, !isClosed else { return }
         showControls()
+        if isAtLiveEdge {
+            return
+        }
+        if state == .paused, !isPlayingArchive, liveOffset < LiveSeekPlan.liveTolerance {
+            // Paused for a moment: carrying on is live enough.
+            play()
+            return
+        }
         if !isPlayingArchive, let engine, let duration, duration > 0 {
             engine.seek(to: duration)
             liveClock.returnedToLive()

@@ -15,6 +15,7 @@ typealias PlatformView = NSView
 /// gets a fresh container each time and the engine's view is moved into it.
 /// The container only removes the view on dismantle if it still owns it, so a
 /// second surface (the player screen over a multi-view tile) can take it over.
+@MainActor
 struct EngineVideoSurface {
     let content: PlatformView
 }
