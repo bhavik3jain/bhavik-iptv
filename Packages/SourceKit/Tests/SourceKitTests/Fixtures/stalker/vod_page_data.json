@@ -1,0 +1,5 @@
+{"js":{"total_items":7,"max_page_items":3,"selected_item":0,"cur_page":1,"data":[
+{"id":"7001","name":"Glass Orchard","o_name":"Glass Orchard","description":"Three sisters return to the family orchard.","time":"104","category_id":"12","director":"A. Director","actors":"A. Actor, B. Actor","year":"2019","added":"2026-08-14 10:21:45","is_series":"0","screenshot_uri":"/stalker_portal/screenshots/7001.jpg","genres_str":"Drama","cmd":"eyJ0eXBlIjoibW92aWUiLCJzdHJlYW1faWQiOiI3MDAxIn0=","rating_imdb":"7.4","rating_kinopoisk":"","container_extension":"mkv"},
+{"id":"7002","name":"The Quiet Engine","description":"","time":"01:38:00","category_id":"12","year":"1962","added":"2026-07-02 09:00:00","is_series":0,"screenshot_uri":"http://img.portal.test/7002.jpg","cmd":"/media/7002.mpg","rating_imdb":"N/A","rating_kinopoisk":"6.9"},
+{"id":"7003","name":"Salt & Signal","is_series":"1","category_id":"12","cmd":"7003"}
+]}}

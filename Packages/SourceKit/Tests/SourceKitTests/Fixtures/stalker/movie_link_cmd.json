@@ -1,0 +1,1 @@
+{"js":[{"id":"ad1","cmd":"http://ads.portal.test/ad.mp4","is_advert":true},{"id":"7002","cmd":"ffmpeg http://vod.portal.test:8080/movies/7002.mkv?token=Pq7","error":""}]}
