@@ -100,6 +100,11 @@ struct CatalogImporter: Sendable {
                 progress: progress,
                 fetch: { try await client.movies(categoryID: $0, page: $1) },
                 id: { $0.id },
+                filed: { movie, categoryID in
+                    var movie = movie
+                    movie.categoryID = movie.categoryID ?? categoryID
+                    return movie
+                },
                 row: { movie, position in RowWriter.movie(movie, position: position, sourceID: sourceID, generation: generation) }
             )
         }
@@ -114,6 +119,11 @@ struct CatalogImporter: Sendable {
                 progress: progress,
                 fetch: { try await client.series(categoryID: $0, page: $1) },
                 id: { $0.id },
+                filed: { series, categoryID in
+                    var series = series
+                    series.categoryID = series.categoryID ?? categoryID
+                    return series
+                },
                 row: { series, position in RowWriter.series(series, position: position, sourceID: sourceID, generation: generation) }
             )
         }
@@ -258,10 +268,14 @@ struct CatalogImporter: Sendable {
     // MARK: Steps
 
     /// A whole paged list (movies or shows): asks for everything at once and,
-    /// when the provider won't (`notSupported`), category by category.
+    /// when the provider won't (`notSupported`), category by category, filing
+    /// each item under the category it was listed in when it names none.
     /// Stops when the provider says there's no more, a page comes back
-    /// empty, or a page repeats the last one (a portal ignoring `p`).
-    /// Titles listed twice (in two categories) are written once.
+    /// empty, a page repeats the last one (a portal ignoring `p`), or after
+    /// `pageCap` pages. Titles listed twice (in two categories) are written
+    /// once. Rows are buffered into batches of `Batch.chunkSize`: a Stalker
+    /// page holds 14 titles, and one batch insert per page would be
+    /// thousands of transactions for a big catalog.
     private func importPaged<Item: Sendable & Hashable>(
         entity: String,
         label: String,
@@ -270,11 +284,21 @@ struct CatalogImporter: Sendable {
         progress: ProgressThrottle,
         fetch: @Sendable (String?, Int) async throws -> Page<Item>,
         id: @escaping @Sendable (Item) -> String,
+        filed: @escaping @Sendable (Item, String) -> Item,
         row: @escaping @Sendable (Item, Int) -> [String: Any]
     ) async throws -> Int {
         var seen = Set<String>()
+        var buffer: [Item] = []
         var written = 0
         let width = slice.upperBound - slice.lowerBound
+
+        func flush() async throws {
+            guard !buffer.isEmpty else { return }
+            let items = buffer
+            buffer.removeAll(keepingCapacity: true)
+            try await insert(entity, items, positionBase: written, row: row)
+            written += items.count
+        }
 
         func list(_ categoryID: String?, share: ClosedRange<Double>) async throws {
             var page = 0
@@ -287,15 +311,16 @@ struct CatalogImporter: Sendable {
                 if ids.isEmpty || ids == previousIDs { break }
                 previousIDs = ids
                 listed += ids.count
-                let fresh = result.items.filter { seen.insert(id($0)).inserted }
-                try await insert(entity, fresh, positionBase: written, row: row)
-                written += fresh.count
+                for item in result.items where seen.insert(id(item)).inserted {
+                    buffer.append(categoryID.map { filed(item, $0) } ?? item)
+                }
+                if buffer.count >= Batch.chunkSize { try await flush() }
 
                 var fraction = share.lowerBound
                 if let total = result.totalItems, total > 0 {
                     fraction += (share.upperBound - share.lowerBound) * min(Double(listed) / Double(total), 1)
                 }
-                await progress.update(fraction, "\(label): \(written.formatted())")
+                await progress.update(fraction, "\(label): \((written + buffer.count).formatted())")
                 guard result.hasMore else { break }
                 page += 1
             }
@@ -310,6 +335,7 @@ struct CatalogImporter: Sendable {
                 try await list(category.id, share: lower...upper)
             }
         }
+        try await flush()
         await progress.update(slice.upperBound, "\(label): \(written.formatted())", force: true)
         return written
     }

@@ -22,6 +22,10 @@ final class CatalogStore: Sendable {
     func newBackgroundContext() -> NSManagedObjectContext {
         let context = container.newBackgroundContext()
         context.undoManager = nil
+        // Writers touch disjoint fields of the one SourceState row (a guide
+        // swap, an account read); merge per property instead of failing.
+        context.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
+        context.name = "CatalogKit.import"
         return context
     }
 
@@ -56,6 +60,11 @@ final class CatalogStore: Sendable {
         description.shouldAddStoreAsynchronously = false
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
+        if url == inMemoryURL {
+            // One connection, so every context sees the same in-memory
+            // database rather than a fresh empty one per pooled connection.
+            description.setOption(1 as NSNumber, forKey: NSPersistentStoreConnectionPoolMaxSizeKey)
+        }
         container.persistentStoreDescriptions = [description]
 
         // `shouldAddStoreAsynchronously = false` makes the completion run
