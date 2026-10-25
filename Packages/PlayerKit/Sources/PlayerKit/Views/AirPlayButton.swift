@@ -25,6 +25,23 @@ struct AirPlayButton: View {
     }
 }
 
+/// The AirPlay route button for screens outside the player (Home's header,
+/// mockup 02): the same system picker on the raised circle the other header
+/// buttons use. With no player it routes the audio session, so the next
+/// stream starts on the chosen Apple TV.
+public struct AirPlayRouteButton: View {
+    public init() {}
+
+    public var body: some View {
+        AirPlayRoutePicker(player: nil)
+            .frame(width: 24, height: 24)
+            .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
+            .background(Circle().fill(HearthColor.surfaceRaised))
+            .contentShape(Circle())
+            .accessibilityLabel(Text("AirPlay"))
+    }
+}
+
 /// `AVRoutePickerView` for SwiftUI on both platforms.
 @MainActor
 struct AirPlayRoutePicker {
