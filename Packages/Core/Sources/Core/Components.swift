@@ -462,7 +462,9 @@ private struct HearthButtonBody: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        let outline = AnyShape(shape == .capsule ? AnyShape(Capsule()) : AnyShape(RoundedRectangle(cornerRadius: size.cornerRadius, style: .continuous)))
+        let outline = shape == .capsule
+            ? AnyShape(Capsule())
+            : AnyShape(RoundedRectangle(cornerRadius: size.cornerRadius, style: .continuous))
         configuration.label
             .font(.hearthText(size.fontSize, weight: weight, relativeTo: .body))
             .lineLimit(2)
