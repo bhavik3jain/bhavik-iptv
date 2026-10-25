@@ -125,6 +125,9 @@ public struct PlayerItem: Identifiable, Sendable {
     /// "102 Fieldhouse Sports · 19:30–22:30" or "S2 · E5 — The Lighthouse Keeper".
     public var subtitle: String?
     public var channelNumber: Int?
+    /// The channel's own name ("Fieldhouse Sports"), for the logo monogram,
+    /// the channel pills and multi-view's chip. Nil for movies and episodes.
+    public var channelName: String?
     public var logoURL: URL?
     public var artworkURL: URL?
     public var isLive: Bool
@@ -142,6 +145,7 @@ public struct PlayerItem: Identifiable, Sendable {
         title: String,
         subtitle: String? = nil,
         channelNumber: Int? = nil,
+        channelName: String? = nil,
         logoURL: URL? = nil,
         artworkURL: URL? = nil,
         isLive: Bool,
@@ -155,6 +159,7 @@ public struct PlayerItem: Identifiable, Sendable {
         self.title = title
         self.subtitle = subtitle
         self.channelNumber = channelNumber
+        self.channelName = channelName
         self.logoURL = logoURL
         self.artworkURL = artworkURL
         self.isLive = isLive
