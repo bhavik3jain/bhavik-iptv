@@ -1,0 +1,1 @@
+{"js":[{"id":"2001","name":"Kestrel Cinema","number":105,"cmd":"ffmpeg http://stream.portal.test/live/2001.m3u8","logo":"/stalker_portal/misc/logos/320/2001.png","tv_genre_id":"5","tv_archive":"1","cmds":[{"id":"6001","ch_id":"2001"}]},{"name":"No id, no cmds — skipped"}]}

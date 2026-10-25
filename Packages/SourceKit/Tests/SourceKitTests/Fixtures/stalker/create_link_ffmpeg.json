@@ -1,0 +1,1 @@
+{"js":{"id":"1001","cmd":"ffmpeg http://cdn.portal.test:8080/play/live.php?mac=00:1A:79:00:00:01&stream=1001&extension=ts&play_token=Zq81Lm","streamer_id":0,"link_id":48213,"load":0,"error":""},"text":"generated in: 0.012s; query counter: 6; cache hits: 0; cache miss: 0; php errors: 0; sql errors: 0;"}

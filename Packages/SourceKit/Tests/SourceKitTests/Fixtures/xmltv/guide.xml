@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE tv SYSTEM "xmltv.dtd">
+<tv generator-info-name="hearth-fixture">
+  <channel id="cityline.news"><display-name>Cityline News</display-name><icon src="http://img.m3u.test/cn.png"/></channel>
+  <channel id="fieldhouse"><display-name>Fieldhouse Sports</display-name></channel>
+  <programme start="20261024200000 +0000" stop="20261024210000 +0000" channel="cityline.news">
+    <title lang="en">Evening Bulletin</title>
+    <title lang="fr">Journal du soir</title>
+    <desc lang="en">Tonight's news.</desc>
+    <category lang="en">News</category>
+  </programme>
+  <programme start="20261024210000 +0100" stop="20261024213000 +0100" channel="cityline.news">
+    <title>Market Close</title>
+    <sub-title>Friday edition</sub-title>
+  </programme>
+  <programme start="20261024153000 -0500" stop="20261024183000 -0500" channel="fieldhouse">
+    <title><![CDATA[Premier Cricket · Final, 2nd innings]]></title>
+    <desc>Live &amp; uninterrupted.</desc>
+  </programme>
+  <programme start="20261024223000" stop="20261024230000" channel="fieldhouse">
+    <title>Post-match: The Verdict</title>
+  </programme>
+  <programme start="20261024230000 +0000" channel="fieldhouse">
+    <title>No stop given</title>
+  </programme>
+  <programme start="20261024233000 +0000" stop="20261024230000 +0000" channel="fieldhouse">
+    <title>Ends before it starts: dropped</title>
+  </programme>
+</tv>

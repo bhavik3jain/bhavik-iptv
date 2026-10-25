@@ -1,0 +1,23 @@
+﻿#EXTM3U x-tvg-url="http://guide.m3u.test/guide.xml.gz,http://guide.m3u.test/extra.xml" catchup-days="3"
+#EXTINF:-1 tvg-id="cityline.news" tvg-name="Cityline News" tvg-logo="http://img.m3u.test/cn.png" tvg-chno="101" group-title="News" catchup="default" catchup-days="7" catchup-source="http://archive.m3u.test/cn/{Y}/{m}/{d}/{H}-{M}.m3u8?start={utc}&end={utcend}&dur={duration}&now={lutc}",Cityline News
+http://live.m3u.test/cn/index.m3u8
+#EXTINF:-1 tvg-id="fieldhouse" tvg-chno="102" group-title="Sports, Live" catchup="append" catchup-source="?utc={utc}&lutc={lutc}",Fieldhouse Sports
+#EXTVLCOPT:http-user-agent=HearthTest/1.0
+#EXTVLCOPT:http-referrer=http://referrer.m3u.test/
+http://live.m3u.test/fs/stream.ts
+#EXTINF:0 group-title="Drama",Lantern Drama
+http://live.m3u.test/ld/playlist.m3u8|User-Agent=PipeAgent%2F2&Referer=http://pipe.m3u.test/
+#EXTINF:-1 group-title="Drama",Lantern  Drama
+#EXTHTTP:{"cookie":"session=abc","User-Agent":"HttpAgent/3"}
+http://backup.m3u.test/ld/playlist.m3u8
+#EXTINF:-1 tvg-id="cityline.news" tvg-name="Cityline News SD" group-title="News",Cityline News SD
+http://live.m3u.test/cn-sd/index.m3u8
+#EXTINF:-1 tvg-id="" tvg-name="Paper Kite" group-title="Kids" catchup="shift",
+http://live.m3u.test/pk/mono.m3u8?token=t1
+#EXTINF:-1 tvg-id="wild.frame" group-title="Docs" catchup="flussonic",Wildframe
+http://fl.m3u.test/wildframe/index.m3u8?token=t2
+#EXTINF:-1 tvg-id="xc.one" group-title="Docs" catchup="xc",XC One
+http://xc.m3u.test:8080/live/user/pass/4242.m3u8
+#EXTGRP:Music
+#EXTINF:-1,Pulse Music
+http://live.m3u.test/pulse/master.mkv
