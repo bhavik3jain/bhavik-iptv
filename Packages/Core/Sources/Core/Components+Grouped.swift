@@ -313,7 +313,7 @@ public struct CardActionRow: View {
 /// A source's streams in use (HH-5): "Provider B   1 of 2", one amber
 /// segment per stream taken, and a caption saying who ("Anya · Living Room
 /// iPad · Lantern Drama"). Over the limit ("Watch anyway", HH-6) the count
-/// and segments turn red. A source with more slots than `StreamUsage
+/// and segments turn red. A source with more slots than `StreamBarUsage
 /// .maxSegments` gets one continuous bar; one with no limit gets no bar.
 public struct StreamBar: View {
     public enum Size: Sendable {
@@ -324,11 +324,11 @@ public struct StreamBar: View {
     }
 
     public var name: String
-    public var usage: StreamUsage
+    public var usage: StreamBarUsage
     public var caption: String?
     public var size: Size
 
-    public init(_ name: String, usage: StreamUsage, caption: String? = nil, size: Size = .regular) {
+    public init(_ name: String, usage: StreamBarUsage, caption: String? = nil, size: Size = .regular) {
         self.name = name
         self.usage = usage
         self.caption = caption

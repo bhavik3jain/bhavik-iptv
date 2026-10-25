@@ -35,7 +35,7 @@ No analytics, ads or tracking. Logins, MACs and device ids are never logged, pri
 ## Building and testing
 
 - **Never point `-derivedDataPath` or `--scratch-path` at `/tmp`.** Use the default DerivedData or your session's scratchpad, and delete one-off build folders.
-- Package tests: `cd Packages/<Name> && swift test` (runs on macOS). iOS-only compile errors only show in an iOS build: `xcodebuild build -scheme <Package> -destination 'generic/platform=iOS Simulator'` from the package directory, or the app scheme.
+- Package tests: `cd Packages/<Name> && swift test --scratch-path <somewhere outside ~/Documents>` (runs on macOS). The repo lives under `~/Documents`, which iCloud Drive syncs: the File Provider tags an in-tree `.build/…/*.xctest` with Finder info and codesign of the test bundle fails. `swift build` in-tree is fine. iOS-only compile errors only show in an iOS build: `xcodebuild build -scheme <Package> -destination 'generic/platform=iOS Simulator'` from the package directory, or the app scheme.
 - App: `xcodegen generate`, then `xcodebuild -project Hearth.xcodeproj -scheme Hearth -destination 'platform=iOS Simulator,name=iPhone Duo'` (or `Hearth-macOS`). Unsigned local builds: `CODE_SIGNING_ALLOWED=NO`.
 - Swift Testing only (no XCTest). Views are untested by policy: put logic in value types and test those. Network is faked with a `URLProtocol` stub. Tests needing a real login are gated with `.enabled(if:)` and skip by name.
 - Debug launch arguments (`#if DEBUG`): `-StubProvider YES` (a fake provider with Apple's public HLS samples, no login), `-InMemoryStores YES` (no iCloud), `-SourceProbe <name>` (sign in to a real source, print each step with timings, logins masked), `-InitializeCloudKitSchema YES`.

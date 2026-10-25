@@ -39,40 +39,40 @@ import Testing
 
 @Suite struct StreamUsageTests {
     @Test func segmentsMarkTheTakenSlots() {
-        #expect(StreamUsage(inUse: 1, limit: 2).segments == [true, false])
-        #expect(StreamUsage(inUse: 0, limit: 1).segments == [false])
-        #expect(StreamUsage(inUse: 3, limit: 2).segments == [true, true])
+        #expect(StreamBarUsage(inUse: 1, limit: 2).segments == [true, false])
+        #expect(StreamBarUsage(inUse: 0, limit: 1).segments == [false])
+        #expect(StreamBarUsage(inUse: 3, limit: 2).segments == [true, true])
     }
 
     @Test func manySlotsOrNoLimitDrawNoSegments() {
-        #expect(StreamUsage(inUse: 2, limit: 9).segments == nil)
-        #expect(StreamUsage(inUse: 2, limit: nil).segments == nil)
-        #expect(StreamUsage(inUse: 0, limit: 0).segments == nil)
+        #expect(StreamBarUsage(inUse: 2, limit: 9).segments == nil)
+        #expect(StreamBarUsage(inUse: 2, limit: nil).segments == nil)
+        #expect(StreamBarUsage(inUse: 0, limit: 0).segments == nil)
     }
 
     @Test func fullnessAndOverLimit() {
-        let half = StreamUsage(inUse: 1, limit: 2)
+        let half = StreamBarUsage(inUse: 1, limit: 2)
         #expect(!half.isFull && !half.isOverLimit && half.free == 1 && half.fraction == 0.5)
 
-        let full = StreamUsage(inUse: 2, limit: 2)
+        let full = StreamBarUsage(inUse: 2, limit: 2)
         #expect(full.isFull && !full.isOverLimit && full.free == 0)
 
-        let over = StreamUsage(inUse: 3, limit: 2)
+        let over = StreamBarUsage(inUse: 3, limit: 2)
         #expect(over.isFull && over.isOverLimit && over.free == 0 && over.fraction == 1)
 
-        let unlimited = StreamUsage(inUse: 5, limit: nil)
+        let unlimited = StreamBarUsage(inUse: 5, limit: nil)
         #expect(!unlimited.isFull && unlimited.free == nil && unlimited.fraction == 0)
     }
 
     @Test func negativeCountsAreClamped() {
-        let usage = StreamUsage(inUse: -1, limit: -3)
+        let usage = StreamBarUsage(inUse: -1, limit: -3)
         #expect(usage.inUse == 0 && usage.limit == 0)
     }
 
     @Test func textReadsLikeTheMockup() {
-        #expect(StreamUsage(inUse: 1, limit: 2).countText == "1 of 2")
-        #expect(StreamUsage(inUse: 3, limit: nil).countText == "3 in use")
-        #expect(StreamUsage(inUse: 1, limit: 2).spokenText == "1 of 2 streams in use")
+        #expect(StreamBarUsage(inUse: 1, limit: 2).countText == "1 of 2")
+        #expect(StreamBarUsage(inUse: 3, limit: nil).countText == "3 in use")
+        #expect(StreamBarUsage(inUse: 1, limit: 2).spokenText == "1 of 2 streams in use")
     }
 }
 

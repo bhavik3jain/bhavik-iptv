@@ -42,7 +42,7 @@ public struct ProgrammeTiming: Hashable, Sendable {
 
 /// How many of a source's streams are taken (HH-5, HH-6): the segmented bar
 /// under "Provider B   1 of 2" and the Mac sidebar's foot.
-public struct StreamUsage: Hashable, Sendable {
+public struct StreamBarUsage: Hashable, Sendable {
     /// Streams playing now, from the provider's own count or the household's
     /// who's-watching rows.
     public var inUse: Int
