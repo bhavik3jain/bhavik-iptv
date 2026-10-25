@@ -99,6 +99,16 @@ final class AVPlayerEngine: PlaybackEngine {
 
     var supportsPictureInPicture: Bool { pictureInPicture != nil }
 
+    /// iOS starts picture in picture by itself when the app leaves mid-stream
+    /// (PLY-3); a multi-view tile turns this off.
+    var startsPictureInPictureAutomatically = true {
+        didSet {
+            #if os(iOS)
+            pictureInPicture?.canStartPictureInPictureAutomaticallyFromInline = startsPictureInPictureAutomatically
+            #endif
+        }
+    }
+
     private var isLiveStream: Bool {
         stream?.isLive == true || player.currentItem?.duration.isIndefinite == true
     }

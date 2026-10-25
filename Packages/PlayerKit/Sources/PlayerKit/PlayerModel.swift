@@ -115,7 +115,9 @@ public final class PlayerModel: Identifiable {
     /// The neighbouring items' titles for the "‹ 101 Cityline News" pills.
     public var previousItemTitle: String? { previousNeighbour.map(PlayerFormat.itemLabel) }
     public var nextItemTitle: String? { nextNeighbour.map(PlayerFormat.itemLabel) }
-    public var supportsPictureInPicture: Bool { engine?.supportsPictureInPicture ?? false }
+    public var supportsPictureInPicture: Bool {
+        configuration.allowsPictureInPicture && (engine?.supportsPictureInPicture ?? false)
+    }
 
     /// A channel watched before this one, for "previous channel" (LIV-5).
     public var canGoToLastItem: Bool { lastItem != nil }
@@ -309,6 +311,7 @@ public final class PlayerModel: Identifiable {
         guard let new = engineFactory.makeEngine(kind) else { return nil }
         new.gravity = gravity
         new.isMuted = isMuted
+        (new as? AVPlayerEngine)?.startsPictureInPictureAutomatically = configuration.allowsPictureInPicture
         new.onChange = { [weak self] in self?.engineDidChange() }
         engine = new
         engineKind = kind
@@ -727,6 +730,7 @@ public final class PlayerModel: Identifiable {
     }
 
     public func startPictureInPicture() {
+        guard supportsPictureInPicture else { return }
         engine?.startPictureInPicture()
     }
 

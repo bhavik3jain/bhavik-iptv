@@ -12,6 +12,10 @@ public struct PlayerConfiguration: Sendable {
     public var publishesNowPlaying: Bool
     /// Multi-view tiles start silent; tapping one gives it the sound.
     public var startsMuted: Bool
+    /// Offers picture in picture, and on iOS starts it by itself when the
+    /// app goes to the background mid-stream. Off for multi-view tiles: four
+    /// players racing for one floating window helps nobody.
+    public var allowsPictureInPicture: Bool
     /// How long an AVPlayer stream may sit loading before it is retried on
     /// VLCKit (technical spec, Player engine: "a few seconds").
     public var startTimeout: TimeInterval
@@ -37,10 +41,12 @@ public struct PlayerConfiguration: Sendable {
         controlsHideDelay: TimeInterval = 4,
         checkpointInterval: TimeInterval = 300,
         tickInterval: TimeInterval = 1,
+        allowsPictureInPicture: Bool = true,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.publishesNowPlaying = publishesNowPlaying
         self.startsMuted = startsMuted
+        self.allowsPictureInPicture = allowsPictureInPicture
         self.startTimeout = startTimeout
         self.slowStartTimeout = slowStartTimeout
         self.controlsHideDelay = controlsHideDelay
@@ -52,6 +58,7 @@ public struct PlayerConfiguration: Sendable {
     /// The full-screen player.
     public static let standard = PlayerConfiguration()
 
-    /// A multi-view tile: muted, and leaves Now Playing to the full-screen player.
-    public static let multiViewTile = PlayerConfiguration(publishesNowPlaying: false, startsMuted: true)
+    /// A multi-view tile: muted, no picture in picture, and leaves Now
+    /// Playing to the full-screen player.
+    public static let multiViewTile = PlayerConfiguration(publishesNowPlaying: false, startsMuted: true, allowsPictureInPicture: false)
 }

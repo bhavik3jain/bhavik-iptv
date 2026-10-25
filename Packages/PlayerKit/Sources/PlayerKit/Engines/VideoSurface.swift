@@ -39,6 +39,10 @@ extension EngineVideoSurface: UIViewRepresentable {
     }
 
     private func adopt(into container: UIView) {
+        // A previous engine's view (AVPlayer before a VLCKit retry) goes.
+        for view in container.subviews where view !== content {
+            view.removeFromSuperview()
+        }
         content.removeFromSuperview()
         content.frame = container.bounds
         content.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -65,6 +69,10 @@ extension EngineVideoSurface: NSViewRepresentable {
     }
 
     private func adopt(into container: NSView) {
+        // A previous engine's view (AVPlayer before a VLCKit retry) goes.
+        for view in container.subviews where view !== content {
+            view.removeFromSuperview()
+        }
         content.removeFromSuperview()
         content.frame = container.bounds
         content.autoresizingMask = [.width, .height]

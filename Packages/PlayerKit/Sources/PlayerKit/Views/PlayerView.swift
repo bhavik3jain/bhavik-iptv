@@ -13,6 +13,11 @@ import SwiftUI
 ///
 /// Keys (MAC-2, and an iPad keyboard): space plays and pauses, ← and → skip
 /// 10 seconds, ↑ and ↓ change channel, Esc closes.
+///
+/// The view starts the model when it appears; closing is the model's (the X,
+/// Esc, or the owner calling `close()`), so the owner hears `onClose` and
+/// dismisses. Disappearing alone doesn't close it — the same model may go on
+/// playing in a multi-view tile.
 public struct PlayerView: View {
     let model: PlayerModel
 
@@ -346,6 +351,7 @@ struct PlayerBottomBar: View {
                 Text(timeline.leadingLabel)
                     .font(.hearthMono(12, relativeTo: .caption))
                     .foregroundStyle(PlayerPalette.secondaryText)
+                    .fixedSize()
                     .accessibilityHidden(true)
                 Spacer(minLength: 8)
                 if let previous = model.previousItemTitle {
@@ -372,6 +378,7 @@ struct PlayerBottomBar: View {
                 Text(timeline.trailingLabel)
                     .font(.hearthMono(12, relativeTo: .caption))
                     .foregroundStyle(PlayerPalette.secondaryText)
+                    .fixedSize()
                     .accessibilityHidden(true)
             }
             .frame(minHeight: HearthMetrics.minimumHitTarget)
@@ -400,6 +407,7 @@ struct PlayerLiveStatusRow: View {
                     .padding(.horizontal, 8)
                     .frame(height: 24)
                     .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(PlayerPalette.badge))
+                    .fixedSize()
                     .accessibilityLabel(Text("\(HearthFormat.timecode(model.liveOffset)) behind live"))
                 Text(PlayerFormat.liveCaption(
                     isPaused: model.state == .paused,

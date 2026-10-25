@@ -88,6 +88,7 @@ struct JumpToLiveButton: View {
                 Text("Jump to live")
                     .font(.hearthText(13, weight: .semibold, relativeTo: .footnote))
             }
+            .fixedSize()
             .foregroundStyle(HearthColor.onAccent)
             .padding(.horizontal, 12)
             .frame(minHeight: 32)

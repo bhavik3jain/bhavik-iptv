@@ -19,7 +19,8 @@ final class VLCEngine: PlaybackEngine {
 
     private let player: VLCMediaPlayer
     private let drawable: PlatformView
-    private let events: VLCEventProxy
+    /// Retained here: VLCKit holds its delegate weakly.
+    private var events: VLCEventProxy?
 
     private var stream: StreamDescriptor?
     private var wantsToPlay = false
@@ -51,8 +52,8 @@ final class VLCEngine: PlaybackEngine {
         view.clipsToBounds = true
         drawable = view
         #endif
-        events = VLCEventProxy()
-        events.engine = self
+        let events = VLCEventProxy(engine: self)
+        self.events = events
         player.drawable = drawable
         player.delegate = events
         applyGravity()
@@ -279,13 +280,15 @@ final class VLCEngine: PlaybackEngine {
 }
 
 /// VLCKit's delegate. Nonisolated because libvlc calls it on its own
-/// threads; it only ever forwards to the main actor.
-///
-/// `@unchecked Sendable`: `engine` is written once, on the main actor,
-/// before the proxy becomes the player's delegate, and only read afterwards;
-/// the engine it points at is main-actor isolated and so Sendable itself.
-private final class VLCEventProxy: NSObject, VLCMediaPlayerDelegate, @unchecked Sendable {
-    weak var engine: VLCEngine?
+/// threads; it only ever forwards to the main actor. Sendable as it stands:
+/// its one property is a constant weak reference to a main-actor engine.
+private final class VLCEventProxy: NSObject, VLCMediaPlayerDelegate, Sendable {
+    weak let engine: VLCEngine?
+
+    init(engine: VLCEngine) {
+        self.engine = engine
+        super.init()
+    }
 
     func mediaPlayerStateChanged(_ newState: VLCMediaPlayerState) {
         forward { $0.playerStateChanged() }
