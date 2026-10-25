@@ -50,7 +50,7 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ◐ |
 | 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ◐ |
 | 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ◐ |
-| 6 | CI and release | `.github/`, `scripts/` | Build, release | ◐ |
+| 6 | CI and release | `.github/`, `scripts/`, `README.md` | Build, release | ☑ merged |
 | 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☐ |
 | 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☐ |
 | 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ☐ |
@@ -81,3 +81,5 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Phase A launched as a workflow (`wf_e4b48df7-eed`): workstreams 1–6, one git worktree each, branched from `build/v0.1-foundation`.
 - Owner signed in to Xcode. Signed iOS and macOS builds (Release and Debug) registered both bundle ids with iCloud and push.
 - Phase A's first run (`wf_e4b48df7-eed`) was cut off by the account's session limit after ~16 min; every agent's partial work was committed as a `WIP <package>` commit on its worktree branch (`worktree-wf_e4b48df7-eed-1` SourceKit … `-6` infra). Resumed as `wf_7ca035c7-b66`, each agent continuing in its existing worktree.
+- Second run (`wf_7ca035c7-b66`): infra finished and is merged (tests and TestFlight workflows, `scripts/testflight.sh`, `run-sim.sh`, `run-mac-local.sh`, `codesign-app.sh`, `pick-simulator.sh`, `cloudkit/init-schema.sh`, README). The other five hit the session limit again; their progress is a second `WIP` commit on each branch. Third run resumed at 09:45 on 2026-10-25. `testflight.sh` now numbers builds `yyDDDHHMM` (under 2^31).
+- Open for the app shell: `scripts/cloudkit/init-schema.sh` expects the app to print `[CloudKitSchemaInitializer] Schema sent to Development` or `[CloudKitSchemaInitializer] Failed` when run with `-InitializeCloudKitSchema YES`.
