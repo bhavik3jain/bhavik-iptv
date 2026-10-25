@@ -111,6 +111,7 @@ struct StalkerPortal: Sendable {
         request.setValue("*/*", forHTTPHeaderField: "Accept")
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         if let origin = Self.origin(of: api) {
             request.setValue(origin + "/", forHTTPHeaderField: "Referer")
             request.setValue(origin, forHTTPHeaderField: "Origin")
@@ -120,8 +121,10 @@ struct StalkerPortal: Sendable {
         }
     }
 
+    /// stalkerhek's cookie, `PHPSESSID=null` included: some portals start a
+    /// PHP session otherwise and then expect it back.
     var cookie: String {
-        "mac=\(QueryEncoding.encode(mac)); sn=\(QueryEncoding.encode(serial)); stb_lang=en; timezone=\(QueryEncoding.encode(timeZone.identifier))"
+        "PHPSESSID=null; sn=\(QueryEncoding.encode(serial)); mac=\(QueryEncoding.encode(mac)); stb_lang=en; timezone=\(QueryEncoding.encode(timeZone.identifier))"
     }
 
     /// Parameters of `get_profile`: the doc's set (hd, sn, stb_type, device

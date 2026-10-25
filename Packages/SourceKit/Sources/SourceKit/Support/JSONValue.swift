@@ -116,12 +116,12 @@ enum JSONValue: Sendable, Hashable {
     var int: Int? {
         switch self {
         case .int(let value): return Int(exactly: value)
-        case .double(let value): return value.isFinite ? Int(value) : nil
+        case .double(let value): return Self.integer(value)
         case .bool(let value): return value ? 1 : 0
         case .string(let text):
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if let value = Int(trimmed) { return value }
-            if let value = Double(trimmed), value.isFinite { return Int(value) }
+            if let value = Double(trimmed) { return Self.integer(value) }
             return nil
         case .null, .array, .object: return nil
         }
@@ -162,5 +162,37 @@ enum JSONValue: Sendable, Hashable {
             return object.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.compactMap { object[$0] }
         default: return []
         }
+    }
+
+    /// A double that fits an `Int`, truncated; nil for NaN, infinity and
+    /// anything out of range (a corrupt field must not trap).
+    private static func integer(_ value: Double) -> Int? {
+        guard value.isFinite, abs(value) < 9.0e18 else { return nil }
+        return Int(value)
+    }
+
+    // MARK: Reading a field by any of its spellings
+
+    /// Text of the first of `keys` that holds any.
+    func string(_ keys: String...) -> String? {
+        for key in keys { if let value = self[key]?.string { return value } }
+        return nil
+    }
+
+    /// An integer from the first of `keys` that holds one.
+    func int(_ keys: String...) -> Int? {
+        for key in keys { if let value = self[key]?.int { return value } }
+        return nil
+    }
+
+    /// A number from the first of `keys` that holds one.
+    func double(_ keys: String...) -> Double? {
+        for key in keys { if let value = self[key]?.double { return value } }
+        return nil
+    }
+
+    /// True when any of `keys` is truthy.
+    func truthy(_ keys: String...) -> Bool {
+        keys.contains { self[$0]?.truthy == true }
     }
 }

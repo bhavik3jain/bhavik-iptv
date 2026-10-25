@@ -26,11 +26,17 @@ enum HTTP {
 
     static func send(_ request: URLRequest, session: URLSession) async throws -> HTTPResponse {
         do {
-            let (data, response) = try await session.data(for: request)
-            return HTTPResponse(data: data, status: (response as? HTTPURLResponse)?.statusCode ?? 200, headers: headers(of: response))
+            return try await sendRaw(request, session: session)
         } catch {
             throw sourceError(for: error, host: request.url?.host())
         }
+    }
+
+    /// `send` without the mapping, for callers that need the `URLError`
+    /// itself (Stalker path discovery tells a dead host from a wrong path).
+    static func sendRaw(_ request: URLRequest, session: URLSession) async throws -> HTTPResponse {
+        let (data, response) = try await session.data(for: request)
+        return HTTPResponse(data: data, status: (response as? HTTPURLResponse)?.statusCode ?? 200, headers: headers(of: response))
     }
 
     /// Downloads to a file this process owns (the caller deletes it). File
@@ -67,9 +73,26 @@ enum HTTP {
     }
 
     /// True when the host itself can't be reached, so trying another path on
-    /// it is pointless.
-    static func isHostFailure(_ error: SourceError) -> Bool {
-        error.code == .unreachable
+    /// it is pointless: the name doesn't resolve, nothing listens, TLS fails
+    /// or the connection times out.
+    static func isHostFailure(_ error: Error) -> Bool {
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .notConnectedToInternet, .timedOut,
+             .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot, .appTransportSecurityRequiresSecureConnection,
+             .internationalRoamingOff, .dataNotAllowed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// The error for an answer that isn't 2xx, carrying the provider's text
+    /// (SRC-4). 401 and 403 are refusals of the login; the rest are faults.
+    static func statusError(_ response: HTTPResponse, what: String) -> SourceError {
+        let code: SourceError.Code = (response.status == 401 || response.status == 403) ? .authenticationFailed : .badResponse
+        return SourceError(code, providerMessage: response.plainText, detail: "\(what) answered HTTP \(response.status)")
     }
 
     static func headers(of response: URLResponse) -> [String: String] {

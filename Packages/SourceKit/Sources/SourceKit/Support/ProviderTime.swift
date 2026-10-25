@@ -85,6 +85,48 @@ enum ProviderTime {
         return Date(timeIntervalSince1970: TimeInterval(seconds))
     }
 
+    /// An account expiry as reseller panels write it, for the few fields
+    /// that aren't ISO: `January 15, 2027, 4:31 pm`, `15.01.2027`,
+    /// `01/15/2027`. Tried only after `date(_:timeZone:)` fails; account
+    /// calls are rare, so a formatter is fine here.
+    static func looseDate(_ text: String, timeZone: TimeZone) -> Date? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let date = date(trimmed, timeZone: timeZone) { return date }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        for format in ["MMMM d, yyyy, h:mm a", "MMMM d, yyyy h:mm a", "MMMM d, yyyy", "MMM d, yyyy", "d MMMM yyyy", "dd.MM.yyyy HH:mm", "dd.MM.yyyy", "MM/dd/yyyy"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: trimmed) { return date }
+        }
+        return nil
+    }
+
+    /// A running time in seconds from `01:45:00`, `01:45` (hours and
+    /// minutes), `105:30` (minutes and seconds, since no film runs 105
+    /// hours) or a bare number. `minutesWhenBare` says how to read a plain
+    /// number: Stalker's `time` is minutes; Xtream's `duration_secs` is seconds.
+    static func duration(_ value: JSONValue?, minutesWhenBare: Bool) -> Int? {
+        guard let value else { return nil }
+        if case .string(let text) = value, text.contains(":") {
+            let parts = text.trimmingCharacters(in: .whitespaces).split(separator: ":").map { Int($0) }
+            guard (2...3).contains(parts.count), parts.allSatisfy({ $0 != nil }) else { return nil }
+            let numbers = parts.compactMap { $0 }
+            let seconds: Int
+            if numbers.count == 3 {
+                seconds = numbers[0] * 3600 + numbers[1] * 60 + numbers[2]
+            } else if numbers[0] >= 24 {
+                seconds = numbers[0] * 60 + numbers[1]
+            } else {
+                seconds = numbers[0] * 3600 + numbers[1] * 60
+            }
+            return seconds > 0 ? seconds : nil
+        }
+        guard let number = value.int, number > 0 else { return nil }
+        return minutesWhenBare ? number * 60 : number
+    }
+
     /// A year written anywhere in `text`: `"2019"`, `"2019-05-01"`, `"Dune (2021)"`.
     static func year(in text: String?) -> Int? {
         guard let text else { return nil }
