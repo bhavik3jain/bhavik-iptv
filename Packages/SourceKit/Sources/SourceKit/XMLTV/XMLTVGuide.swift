@@ -14,17 +14,24 @@ public enum XMLTVGuide {
         headers: [String: String] = [:]
     ) -> AsyncThrowingStream<RemoteProgramme, Error> {
         ProgrammeStream.make { channel in
-            var request = URLRequest(url: url, timeoutInterval: HTTP.downloadTimeout)
-            for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
-            let download = try await HTTP.download(request, session: session)
-            defer { if download.isTemporary { try? FileManager.default.removeItem(at: download.file) } }
-            guard (200..<300).contains(download.status) else {
-                let text = (try? Data(contentsOf: download.file)).flatMap { HTTP.plainText(from: $0) }
-                throw SourceError(download.status == 401 || download.status == 403 ? .authenticationFailed : .badResponse,
-                                  providerMessage: text, detail: "Guide answered HTTP \(download.status)")
-            }
-            try await parse(file: download.file, into: channel)
+            try await fetch(url, session: session, headers: headers, into: channel)
         }
+    }
+
+    /// Downloads and parses the guide at `url` into `channel`. For clients
+    /// that only learn the guide's address once the stream is read (an M3U
+    /// playlist's `x-tvg-url`).
+    static func fetch(_ url: URL, session: URLSession, headers: [String: String], into channel: ProgrammeChannel) async throws {
+        var request = URLRequest(url: url, timeoutInterval: HTTP.downloadTimeout)
+        for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
+        let download = try await HTTP.download(request, session: session)
+        defer { if download.isTemporary { try? FileManager.default.removeItem(at: download.file) } }
+        guard (200..<300).contains(download.status) else {
+            let text = (try? Data(contentsOf: download.file)).flatMap { HTTP.plainText(from: $0) }
+            throw SourceError(download.status == 401 || download.status == 403 ? .authenticationFailed : .badResponse,
+                              providerMessage: text, detail: "Guide answered HTTP \(download.status)")
+        }
+        try await parse(file: download.file, into: channel)
     }
 
     /// Parses a guide held in memory (tests, small guides).
