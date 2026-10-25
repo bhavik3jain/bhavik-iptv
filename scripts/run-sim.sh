@@ -8,7 +8,8 @@
 #   CONSOLE=YES scripts/run-sim.sh "iPhone Duo"                 # stay attached, printing the app's output
 #
 # The simulator is booted if it isn't already, and a booted one of that name
-# is preferred over others (scripts/pick-simulator.sh). The app is Debug's own,
+# is preferred over others (scripts/pick-simulator.sh); Device Hub (Xcode 27's
+# successor to Simulator.app) is brought up to show it. The app is Debug's own,
 # com.bhavikjain.hearth.dev ("Hearth Dev"), so it never shares a container
 # with the TestFlight app. DerivedData is build/DerivedData (DERIVED_DATA
 # overrides it), shared with the other scripts; the build log goes to
@@ -67,7 +68,19 @@ bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.pl
 
 echo "Booting the simulator if needed…"
 xcrun simctl bootstatus "$udid" -b > /dev/null
-open -a Simulator --args -CurrentDeviceUDID "$udid"
+
+# Shows the simulator. Xcode 27 replaced Simulator.app with Device Hub (in
+# Xcode.app/Contents/Applications, where iPhone Duo's fold controls live), so
+# `open -a Simulator` finds nothing there; older Xcodes still have Simulator.
+# Only a convenience: the app runs on the booted simulator either way.
+developer_dir=$(xcode-select -p)
+if [[ -d $developer_dir/../Applications/DeviceHub.app ]]; then
+    open -a "$developer_dir/../Applications/DeviceHub.app" \
+        || echo "warning: couldn't open Device Hub; the app still runs on the booted simulator." >&2
+elif [[ -d $developer_dir/Applications/Simulator.app ]]; then
+    open -a "$developer_dir/Applications/Simulator.app" --args -CurrentDeviceUDID "$udid" \
+        || echo "warning: couldn't open Simulator; the app still runs on the booted simulator." >&2
+fi
 
 echo "Installing $bundle_id…"
 xcrun simctl install "$udid" "$app"
