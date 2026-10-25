@@ -46,10 +46,10 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | --- | --- | --- | --- | --- |
 | 0 | Scaffold and contracts | `project.yml`, all `Package.swift`, contract files | — | ☑ |
 | 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ◐ |
-| 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ◐ |
+| 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ☑ merged (33 tests) |
 | 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ◐ |
 | 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ◐ |
-| 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ◐ |
+| 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ☑ merged (34 tests, icon) |
 | 6 | CI and release | `.github/`, `scripts/`, `README.md` | Build, release | ☑ merged |
 | 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☐ |
 | 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☐ |
@@ -83,3 +83,5 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Phase A's first run (`wf_e4b48df7-eed`) was cut off by the account's session limit after ~16 min; every agent's partial work was committed as a `WIP <package>` commit on its worktree branch (`worktree-wf_e4b48df7-eed-1` SourceKit … `-6` infra). Resumed as `wf_7ca035c7-b66`, each agent continuing in its existing worktree.
 - Second run (`wf_7ca035c7-b66`): infra finished and is merged (tests and TestFlight workflows, `scripts/testflight.sh`, `run-sim.sh`, `run-mac-local.sh`, `codesign-app.sh`, `pick-simulator.sh`, `cloudkit/init-schema.sh`, README). The other five hit the session limit again; their progress is a second `WIP` commit on each branch. Third run resumed at 09:45 on 2026-10-25. `testflight.sh` now numbers builds `yyDDDHHMM` (under 2^31).
 - Open for the app shell: `scripts/cloudkit/init-schema.sh` expects the app to print `[CloudKitSchemaInitializer] Schema sent to Development` or `[CloudKitSchemaInitializer] Failed` when run with `-InitializeCloudKitSchema YES`.
+- Third run: CatalogKit (33 tests; 50k-movie import ≈ 4 s) and the design system (fonts by PostScript face, ~25 new components, app icon for iOS and macOS, 34 tests) finished and are merged. Core's new `StreamUsage` was renamed `StreamBarUsage` (it clashed with HouseholdKit's contract type in every feature). Both apps build clean for iOS Simulator and macOS. SourceKit, HouseholdKit and PlayerKit were cut off a third time (each now has milestone commits: SourceKit clients + stub + probe, HouseholdKit 90 tests, PlayerKit player screen + multi-view + tests); fourth run started 14:50.
+- Known trap, now in CLAUDE.md: `swift test` with an in-tree `.build` fails codesign because `~/Documents` is iCloud-synced; use `--scratch-path` elsewhere.
