@@ -1,4 +1,5 @@
 import Core
+import CoreData
 import Foundation
 import Testing
 @testable import HouseholdKit
@@ -43,6 +44,28 @@ import Testing
         let store = try HouseholdStore(mode: .inMemory)
         await store.prepareHousehold(defaultName: "Jain Household", firstProfileName: "Bhavik")
         #expect(store.hasHousehold)
+    }
+
+    /// What an import looks like from the store's side: another context saves,
+    /// the view context merges, and the snapshots follow after the debounce.
+    @Test func changesFromAnotherContextRebuildSnapshots() async throws {
+        let store = try makeStore()
+        let revision = store.revision
+        let householdID = try #require(store.currentHouseholdEntity()).objectID
+        let context = store.container.newBackgroundContext()
+        try await context.perform {
+            let profile = NSEntityDescription.insertNewObject(forEntityName: HouseholdModel.Entity.profile, into: context)
+            profile.setValue(UUID(), forKey: "id")
+            profile.setValue("Anya", forKey: "name")
+            profile.setValue(1, forKey: "sortOrder")
+            profile.setValue(context.object(with: householdID), forKey: "household")
+            try context.save()
+        }
+        for _ in 0..<60 where store.profiles.count < 2 {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(store.profiles.map(\.name) == ["Bhavik", "Anya"])
+        #expect(store.revision > revision)
     }
 
     @Test func householdSettingsAreSaved() throws {

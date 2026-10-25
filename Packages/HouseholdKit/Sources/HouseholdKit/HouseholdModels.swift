@@ -38,6 +38,11 @@ public enum ProgressKind: String, Sendable, Codable, CaseIterable, Hashable {
     case catchup
 }
 
+/// `ProgressKind` under a name nothing else exports: Foundation has a
+/// `ProgressKind` too, so a file importing both can't spell the type bare
+/// (`.movie` arguments are unaffected). Write this, or `HouseholdKit.ProgressKind`.
+public typealias HouseholdProgressKind = ProgressKind
+
 public struct HouseholdInfo: Sendable, Hashable {
     public var id: UUID
     /// "Jain Household".

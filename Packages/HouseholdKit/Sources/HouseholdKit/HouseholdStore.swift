@@ -220,9 +220,11 @@ public final class HouseholdStore {
         assign(\.sources, live(current.sources).filter { !$0.isRemoved }.map(\.record).sorted(by: Self.sourceOrder))
         assign(\.activePlaybacks, live(current.playbacks).map(\.record).filter { !$0.isStale(at: now) }.sorted { $0.startedAt < $1.startedAt })
         // Before the household is shared there is one member: whoever made
-        // it, whose first profile ensureHousehold named after them.
+        // it, whose first profile ensureHousehold named after them. A
+        // participant's list waits for the share lookup instead: that
+        // fallback would name them the owner.
         let ownerName = profileRecords.first { $0.kind == .standard }?.name ?? "You"
-        assign(\.members, MemberList.make(participants: participants, roles: roles, ownerFallbackName: ownerName))
+        assign(\.members, isParticipant && share == nil ? [] : MemberList.make(participants: participants, roles: roles, ownerFallbackName: ownerName))
         scheduleShareLookup()
     }
 
