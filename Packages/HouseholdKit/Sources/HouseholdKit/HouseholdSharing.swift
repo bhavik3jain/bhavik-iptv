@@ -406,7 +406,7 @@ extension HouseholdStore {
         // object it holds (only snapshots leave this class, so none is in use).
         viewContext.reset()
         shareState = ShareState()
-        ownPlaybackIDs.removeAll()
+        ownPlaybacks.removeAll()
         rebuildSnapshots()
         if currentHouseholdEntity() == nil, let names = ensureNames {
             ensureHousehold(defaultName: names.household, firstProfileName: names.profile)

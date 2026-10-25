@@ -75,8 +75,11 @@ public final class HouseholdStore {
     /// The names `ensureHousehold` was last given, to make a new household
     /// after leaving someone else's.
     @ObservationIgnored var ensureNames: (household: String, profile: String)?
-    /// Playback rows this device wrote, so stream usage lists other devices first.
-    @ObservationIgnored var ownPlaybackIDs: Set<UUID> = []
+    /// Playback rows this device wrote and hasn't stopped, as written: stream
+    /// usage lists other devices first, and a heartbeat writes a row again
+    /// when another device purged it meanwhile.
+    @ObservationIgnored var ownPlaybacks: [UUID: PlaybackRecord] = [:]
+    var ownPlaybackIDs: Set<UUID> { Set(ownPlaybacks.keys) }
     @ObservationIgnored var shareState = ShareState()
     @ObservationIgnored var shareLookupTask: Task<Void, Never>?
     @ObservationIgnored var householdFoldTask: Task<Void, Never>?
@@ -710,31 +713,48 @@ public final class HouseholdStore {
     public func startPlayback(profileID: UUID, sourceID: UUID, itemKey: String, title: String, deviceName: String) -> UUID {
         let id = UUID()
         guard let household = currentHouseholdEntity() else { return id }
-        let row = insert(HouseholdModel.Entity.playback, as: PlaybackEntity.self, into: targetStore(for: household))
         let now = Date.now
-        row.id = id
-        row.profileID = profileID
-        row.sourceID = sourceID
-        row.itemKey = itemKey
-        row.title = title
-        row.deviceName = deviceName
-        row.startedAt = now
-        row.lastSeenAt = now
-        row.household = household
-        ownPlaybackIDs.insert(id)
+        let record = PlaybackRecord(id: id, deviceName: deviceName, profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, startedAt: now, lastSeenAt: now)
+        insertPlayback(record, into: household)
+        ownPlaybacks[id] = record
         commit("start playback")
         return id
     }
 
     /// Every 10 minutes while playing, never more often.
+    ///
+    /// When the row is gone although this device never stopped it — another
+    /// device purged it while this one was offline past the 15 minutes — it
+    /// is written again under the same id, so the stream shows (and counts
+    /// against the limit) once more (HH-5, HH-6).
     public func heartbeat(playbackID: UUID) {
-        guard let row = playbackEntity(playbackID) else { return }
-        row.lastSeenAt = .now
+        if let row = playbackEntity(playbackID) {
+            row.lastSeenAt = .now
+        } else if var record = ownPlaybacks[playbackID], let household = currentHouseholdEntity() {
+            record.lastSeenAt = .now
+            insertPlayback(record, into: household)
+            Logger.household.notice("Heartbeat: wrote this device's purged playback row again")
+        } else {
+            return
+        }
         commit("heartbeat")
     }
 
+    private func insertPlayback(_ record: PlaybackRecord, into household: HouseholdEntity) {
+        let row = insert(HouseholdModel.Entity.playback, as: PlaybackEntity.self, into: targetStore(for: household))
+        row.id = record.id
+        row.profileID = record.profileID
+        row.sourceID = record.sourceID
+        row.itemKey = record.itemKey
+        row.title = record.title
+        row.deviceName = record.deviceName
+        row.startedAt = record.startedAt
+        row.lastSeenAt = record.lastSeenAt
+        row.household = household
+    }
+
     public func stopPlayback(playbackID: UUID) {
-        ownPlaybackIDs.remove(playbackID)
+        ownPlaybacks[playbackID] = nil
         guard let household = currentHouseholdEntity() else { return }
         live(household.playbacks).filter { $0.id == playbackID }.forEach(viewContext.delete)
         commit("stop playback")

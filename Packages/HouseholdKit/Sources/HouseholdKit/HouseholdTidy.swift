@@ -24,9 +24,21 @@ extension HouseholdStore {
         for household in fetch(HouseholdEntity.self, HouseholdModel.Entity.household) {
             foldFavorites(in: household)
             foldProgress(in: household)
-            purgeStalePlaybacks(in: household, now: now)
+            if hasImportedThisLaunch(household) { purgeStalePlaybacks(in: household, now: now) }
         }
         save("tidy")
+    }
+
+    /// Whether the store `household` lives in has finished an iCloud import
+    /// this launch (always, in memory). A device that was offline holds
+    /// every row as it last saw it: purging before the import that brings
+    /// the fresh heartbeats would delete streams still playing elsewhere.
+    /// Until then stale rows are only ignored (`activePlaybacks`,
+    /// `streamUsage`).
+    func hasImportedThisLaunch(_ household: HouseholdEntity) -> Bool {
+        guard case .cloud = mode else { return true }
+        guard let storeID = household.objectID.persistentStore?.identifier else { return false }
+        return cloudEvents.hasImported(store: storeID)
     }
 
     // MARK: Households (HH-1)

@@ -83,6 +83,35 @@ import Testing
         #expect(usage.inUse.map(\.deviceName) == ["Living Room", "This iPhone"])
         #expect(usage.free == 0)
     }
+
+    // HH-5: another device purged this one's row while it was offline.
+    @Test func aHeartbeatWritesAPurgedRowAgain() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        let id = store.startPlayback(profileID: profile, sourceID: TestKeys.sourceA, itemKey: TestKeys.channel("1"), title: "News", deviceName: "iPhone")
+        store.purgeStalePlaybacks(now: .now.addingTimeInterval(PlaybackRecord.staleAfter + 1))
+        #expect(store.activePlaybacks.isEmpty)
+
+        store.heartbeat(playbackID: id)
+        #expect(store.activePlaybacks.map(\.id) == [id])
+        #expect(store.activePlaybacks.first?.title == "News")
+        #expect(store.count(HouseholdModel.Entity.playback) == 1)
+
+        // A stopped stream stays stopped, and a stranger's id writes nothing.
+        store.stopPlayback(playbackID: id)
+        store.heartbeat(playbackID: id)
+        store.heartbeat(playbackID: UUID())
+        #expect(store.count(HouseholdModel.Entity.playback) == 0)
+    }
+
+    @Test func tidyPurgesStaleRowsInMemory() throws {
+        let store = try makeStore()
+        store.startPlayback(profileID: store.firstProfile.id, sourceID: TestKeys.sourceA, itemKey: "k", title: "t", deviceName: "d")
+        let household = try #require(store.currentHouseholdEntity())
+        #expect(store.hasImportedThisLaunch(household), "no iCloud import to wait for in memory")
+        store.tidyAfterImport(now: .now.addingTimeInterval(PlaybackRecord.staleAfter + 1))
+        #expect(store.count(HouseholdModel.Entity.playback) == 0)
+    }
 }
 
 /// What the store does when an import brings duplicates (technical spec,
