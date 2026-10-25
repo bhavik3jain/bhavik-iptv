@@ -60,6 +60,17 @@ public enum HearthColor {
     public static let overlayTrack = Color.white.opacity(0.22)
     /// The scrim behind a badge on artwork ("New · S3 E3").
     public static let badgeScrim = Color.black.opacity(0.45)
+    /// The Continue watching hero and a show's header before its artwork
+    /// loads: a deep teal that keeps the amber Resume button the brightest
+    /// thing on it.
+    public static let hero = Color(hex: 0x23404C)
+    /// The darker shapes drawn on `hero` (the hill and beam source in the
+    /// hero's decoration).
+    public static let heroShade = Color(hex: 0x16303A)
+    /// The line between the guide's channel rows and under the Mac toolbar:
+    /// a shade lighter than the background, where `hairline` divides rows on
+    /// a card.
+    public static let rowDivider = Color(hex: 0x1A1C22)
 }
 
 /// The avatar colours a profile can take (PRF-1). Stored by HouseholdKit as a
@@ -290,6 +301,17 @@ extension Font {
             return .system(size: size, weight: weight, design: family == .mono ? .monospaced : .default)
         }
         return .custom(face.postScriptName, size: size, relativeTo: textStyle)
+    }
+
+    /// The face of `family` nearest `weight` at a size that ignores Dynamic
+    /// Type. Only for type that is part of a picture rather than text to read:
+    /// the letter on an avatar or channel monogram, sized to its tile.
+    public static func hearth(_ family: HearthFontFamily, fixedSize size: CGFloat, weight: Font.Weight) -> Font {
+        let face = HearthFontFace.face(family, weight: weight)
+        guard HearthFonts.isRegistered(face) else {
+            return .system(size: size, weight: weight, design: family == .mono ? .monospaced : .default)
+        }
+        return .custom(face.postScriptName, fixedSize: size)
     }
 
     // MARK: Named styles from the mockups

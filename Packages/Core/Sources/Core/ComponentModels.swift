@@ -125,3 +125,76 @@ public enum EpisodeText {
         return "\(number). \(trimmed)"
     }
 }
+
+extension EpisodeText {
+    /// The line under an episode's title: "51 min · 31 min left",
+    /// "47 min · Downloaded", "48 min". A started episode shows what is left
+    /// rather than "Downloaded", since resuming is the likelier next step; a
+    /// finished one shows only its length (the checkmark says the rest).
+    public static func detail(duration: TimeInterval?, remaining: TimeInterval? = nil, isDownloaded: Bool = false) -> String? {
+        var parts: [String] = []
+        if let duration, duration > 0 { parts.append(HearthFormat.duration(duration)) }
+        if let remaining, remaining >= 60, remaining < (duration ?? .infinity) {
+            parts.append(HearthFormat.remaining(remaining))
+        } else if isDownloaded {
+            parts.append(String(localized: "Downloaded", bundle: .module, comment: "An episode saved on this device"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+extension ProgrammeTiming {
+    /// "18 min left", or nil once it has ended or before it starts.
+    public func remainingText(at date: Date) -> String? {
+        guard isOnAir(at: date) else { return nil }
+        return HearthFormat.remaining(remaining(at: date))
+    }
+}
+
+/// What VoiceOver says for a channel card or row: one sentence instead of
+/// six separate fragments ("101", "Cityline News", "LIVE", …).
+public enum ChannelText {
+    /// "101 Cityline News", or the name alone when the source sends no
+    /// number.
+    public static func numberedName(number: Int?, name: String) -> String {
+        number.map { "\($0) \(name)" } ?? name
+    }
+
+    /// "101 Cityline News. Live: Evening Bulletin, 20:00 – 21:00, 18 min
+    /// left." Without a programme (no guide for the channel) it is just the
+    /// channel.
+    public static func spokenNowPlaying(number: Int?, name: String, programme: String?, timing: ProgrammeTiming?, isLive: Bool, at date: Date) -> String {
+        var sentence = numberedName(number: number, name: name)
+        guard let programme, !programme.isEmpty else { return sentence }
+        let prefix = isLive
+            ? String(localized: "Live", bundle: .module, comment: "Spoken before the programme on air now")
+            : String(localized: "Now", bundle: .module, comment: "Spoken before the current programme on a channel that is not live")
+        sentence += ". \(prefix): \(programme)"
+        if let timing {
+            sentence += ", \(timing.timeRange)"
+            if let left = timing.remainingText(at: date) { sentence += ", \(left)" }
+        }
+        return sentence
+    }
+}
+
+extension AvatarStackLayout {
+    /// Every name, not just the drawn ones: "Bhavik, Anya and Dad". VoiceOver
+    /// has room for the people the "+1" stands for.
+    public static func spokenNames(_ names: [String]) -> String {
+        names.formatted(.list(type: .and))
+    }
+}
+
+/// How `SegmentedPills` lays out its segments.
+public enum SegmentedPillsLayout {
+    /// Up to this many segments share the width equally, as the show
+    /// screen's three seasons do; more scroll sideways at their own widths
+    /// so "Season 12" never truncates.
+    public static let maxEqualSegments = 4
+
+    /// Equal widths for a short list at a non-accessibility text size.
+    public static func usesEqualWidths(count: Int, isAccessibilitySize: Bool) -> Bool {
+        count <= maxEqualSegments && !isAccessibilitySize
+    }
+}
