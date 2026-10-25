@@ -1,0 +1,343 @@
+import CatalogKit
+import Core
+import HouseholdKit
+import SourceKit
+import SwiftUI
+
+/// Which half of the library a grid lists.
+enum LibraryShelf: String, Sendable {
+    case movies
+    case shows
+
+    var title: String {
+        switch self {
+        case .movies: String(localized: "Movies", comment: "Screen title")
+        case .shows: String(localized: "Shows", comment: "Screen title")
+        }
+    }
+
+    var contentKind: ContentKind {
+        switch self {
+        case .movies: .vod
+        case .shows: .series
+        }
+    }
+
+    var favoriteKind: FavoriteKind {
+        switch self {
+        case .movies: .movie
+        case .shows: .series
+        }
+    }
+}
+
+/// One poster in a grid, resolved once per query so scrolling never touches
+/// the stores.
+struct GridEntry: Identifiable, Equatable {
+    var id: ItemKey
+    /// Position in the loaded list, for "load the next page" checks.
+    var index: Int
+    var title: String
+    var posterURL: URL?
+    var caption: String?
+    var decoration: PosterDecoration
+    var route: HearthRoute
+    /// For a movie's context menu: where Play starts.
+    var movieStart: MoviePlayState?
+}
+
+/// Movies or shows by category as a poster grid (VOD-1, SER-1): a large
+/// title with the sort menu, category chips, and posters that grow a page at a
+/// time. Its empty states come from the sources' refresh states, so a
+/// first-run import reads as "Loading…" rather than "No movies".
+struct CatalogGridScreen: View {
+    let shelf: LibraryShelf
+
+    @Environment(CatalogService.self) private var catalog
+    @Environment(HouseholdStore.self) private var store
+    @Environment(ProfileSession.self) private var session
+    @Environment(\.hearthLayout) private var layout
+    @Environment(\.openRoute) private var openRoute
+    @Environment(\.play) private var play
+
+    /// Remembered per window, so returning to the tab keeps the view.
+    @SceneStorage private var sortRaw: String
+    @SceneStorage private var storedCategoryID: String?
+
+    @State private var paging = GridPaging()
+    @State private var entries: [GridEntry] = []
+    @State private var chips = CategoryChips(categories: [], sourceNames: [:])
+    @State private var hasLoaded = false
+    private let metrics = PosterGridMetrics()
+
+    init(shelf: LibraryShelf) {
+        self.shelf = shelf
+        _sortRaw = SceneStorage(wrappedValue: CatalogSort.dateAdded.rawValue, "Library.\(shelf.rawValue).sort")
+        _storedCategoryID = SceneStorage("Library.\(shelf.rawValue).category")
+    }
+
+    private var sort: CatalogSort { CatalogSort(rawValue: sortRaw) ?? .dateAdded }
+
+    private var sortBinding: Binding<CatalogSort> {
+        Binding(get: { sort }, set: { sortRaw = $0.rawValue })
+    }
+
+    private var categoryID: String? { chips.validSelection(storedCategoryID) }
+
+    /// Everything a query depends on; a change re-runs it.
+    private struct QueryKey: Hashable {
+        var catalogRevision: Int
+        var storeRevision: Int
+        var profileID: UUID?
+        var categoryID: String?
+        var sort: CatalogSort
+        var limit: Int
+    }
+
+    private var queryKey: QueryKey {
+        QueryKey(catalogRevision: catalog.revision, storeRevision: store.revision, profileID: session.currentProfile?.id,
+                 categoryID: storedCategoryID, sort: sort, limit: paging.limit)
+    }
+
+    var body: some View {
+        let gutter = libraryGutter(layout)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                LibraryTitleRow(title: shelf.title) { sortMenu }
+                    .padding(.horizontal, gutter)
+                    .padding(.top, 4)
+                if chips.chips.count > 1 {
+                    chipRow(gutter: gutter)
+                }
+                content(gutter: gutter)
+            }
+            .padding(.bottom, 32)
+            .frame(maxWidth: libraryMaxContentWidth)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollRevealedTitle(shelf.title)
+        .hearthScreenBackground()
+        .onChange(of: queryKey, initial: true) { _, _ in reload() }
+        .onChange(of: storedCategoryID) { _, _ in paging.reset() }
+        .onChange(of: sortRaw) { _, _ in paging.reset() }
+    }
+
+    // MARK: Header
+
+    private var sortMenu: some View {
+        Menu {
+            Picker(selection: sortBinding) {
+                ForEach(CatalogSort.allCases, id: \.self) { option in
+                    Text(option.title).tag(option)
+                }
+            } label: {
+                Text("Sort by")
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(HearthColor.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(HearthColor.surface))
+                .contentShape(Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(Text("Sort"))
+        .accessibilityValue(Text(sort.title))
+    }
+
+    private func chipRow(gutter: CGFloat) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(chips.chips) { chip in
+                    PillChip(chip.title, isSelected: chip.categoryID == categoryID) {
+                        storedCategoryID = chip.categoryID
+                    }
+                }
+            }
+        }
+        .contentMargins(.horizontal, gutter, for: .scrollContent)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Categories"))
+    }
+
+    // MARK: Content
+
+    @ViewBuilder
+    private func content(gutter: CGFloat) -> some View {
+        switch shelfState {
+        case .content:
+            grid
+                .padding(.horizontal, gutter)
+                .padding(.top, 4)
+        case .noSources:
+            EmptyStateView(
+                systemName: "tray",
+                title: String(localized: "No sources yet"),
+                message: shelf == .movies
+                    ? String(localized: "Add a Stalker portal, Xtream login or M3U playlist and its movies appear here.")
+                    : String(localized: "Add a Stalker portal, Xtream login or M3U playlist and its shows appear here."),
+                actionTitle: session.canManageHousehold ? String(localized: "Add a source") : nil,
+                action: session.canManageHousehold ? { openRoute(.sourceEditor(sourceID: nil)) } : nil
+            )
+            .padding(.top, 40)
+        case .importing(let message, let progress):
+            LibraryLoadingView(message: message.isEmpty ? String(localized: "Loading your sources…") : message, progress: progress)
+                .padding(.top, 60)
+        case .failed(let message, let sourceID):
+            EmptyStateView(
+                systemName: "exclamationmark.triangle",
+                title: shelf == .movies ? String(localized: "Couldn't load movies") : String(localized: "Couldn't load shows"),
+                message: message,
+                actionTitle: String(localized: "Try again"),
+                action: { Task { await catalog.refresh(sourceID: sourceID, force: true) } }
+            )
+            .padding(.top, 40)
+        case .noneOffered:
+            EmptyStateView(
+                systemName: shelf == .movies ? "film" : "tv",
+                title: shelf == .movies ? String(localized: "No movies here") : String(localized: "No shows here"),
+                message: shelf == .movies
+                    ? String(localized: "Your sources don't offer movies, or haven't sent any yet.")
+                    : String(localized: "Your sources don't offer shows, or haven't sent any yet.")
+            )
+            .padding(.top, 40)
+        case .hiddenByProfile:
+            EmptyStateView(
+                systemName: "eye.slash",
+                title: String(localized: "Nothing to show on this profile"),
+                message: shelf == .movies
+                    ? String(localized: "This profile's rules hide every movie category. Someone who manages the household can change them.")
+                    : String(localized: "This profile's rules hide every show category. Someone who manages the household can change them.")
+            )
+            .padding(.top, 40)
+        case .categoryEmpty:
+            EmptyStateView(
+                systemName: "square.grid.2x2",
+                title: String(localized: "Nothing in this category"),
+                message: String(localized: "The provider sent this category empty."),
+                actionTitle: String(localized: "Show all"),
+                action: { storedCategoryID = nil }
+            )
+            .padding(.top, 40)
+        }
+    }
+
+    private var grid: some View {
+        LazyVGrid(columns: metrics.columns(for: layout), alignment: .leading, spacing: 20) {
+            ForEach(entries) { entry in
+                NavigationLink(value: entry.route) {
+                    PosterCell(title: entry.title, url: entry.posterURL, caption: entry.caption, decoration: entry.decoration)
+                }
+                .buttonStyle(.hearthTile)
+                .contextMenu { contextMenu(for: entry) }
+                .onAppear {
+                    if paging.shouldGrow(appearingIndex: entry.index, loaded: entries.count) {
+                        paging.grow()
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if paging.hasMore(loaded: entries.count) {
+                ProgressView()
+                    .tint(HearthColor.accent)
+                    .offset(y: 28)
+                    .accessibilityLabel(Text("Loading more"))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func contextMenu(for entry: GridEntry) -> some View {
+        if let start = entry.movieStart {
+            Button {
+                play(PlayIntent(itemKey: entry.id.rawValue, kind: .movie, title: entry.title,
+                                artworkURL: entry.posterURL, startPosition: start.startPosition))
+            } label: {
+                Label(start.title, systemImage: "play.fill")
+            }
+        }
+        if let profile = session.currentProfile, !profile.isGuest {
+            let isFavorite = store.isFavorite(profileID: profile.id, itemKey: entry.id.rawValue)
+            Button {
+                store.toggleFavorite(profileID: profile.id, itemKey: entry.id.rawValue, kind: shelf.favoriteKind)
+            } label: {
+                isFavorite
+                    ? Label("Remove from My List", systemImage: "heart.slash")
+                    : Label("Add to My List", systemImage: "heart")
+            }
+            if let start = entry.movieStart {
+                let watched = start.action == .playAgain
+                Button {
+                    store.setWatched(!watched, profileID: profile.id, itemKey: entry.id.rawValue)
+                } label: {
+                    watched
+                        ? Label("Mark as unwatched", systemImage: "circle")
+                        : Label("Mark as watched", systemImage: "checkmark.circle")
+                }
+            }
+        }
+    }
+
+    // MARK: State
+
+    private var sourceStates: [SourceRefreshState] {
+        catalog.sources.compactMap { catalog.refreshStates[$0.id] }
+    }
+
+    private var shelfState: ShelfState {
+        guard hasLoaded else {
+            return .importing(message: String(localized: "Loading…"), progress: nil)
+        }
+        let offered = sourceStates.reduce(0) { $0 + (shelf == .movies ? $1.movieCount : $1.seriesCount) }
+        return ShelfState.resolve(hasItems: !entries.isEmpty, categorySelected: categoryID != nil,
+                                  sourceCount: catalog.sources.count, states: sourceStates, offeredCount: offered)
+    }
+
+    /// Re-queries the catalog and the profile's progress. Synchronous: the
+    /// catalog reads from its main-queue context with a fetch limit.
+    private func reload() {
+        let sourceNames = Dictionary(catalog.sources.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        chips = CategoryChips(categories: catalog.categories(kind: shelf.contentKind), sourceNames: sourceNames)
+        let category = chips.validSelection(storedCategoryID)
+        let profileID = session.currentProfile.flatMap { $0.isGuest ? nil : $0.id }
+        let now = Date.now
+
+        switch shelf {
+        case .movies:
+            let movies = catalog.movies(categoryID: category, sort: sort, limit: paging.limit)
+            entries = movies.enumerated().map { index, movie in
+                let progress = profileID.flatMap { store.progress(profileID: $0, itemKey: movie.key.rawValue) }
+                return GridEntry(
+                    id: movie.key, index: index, title: movie.name, posterURL: movie.posterURL,
+                    caption: movie.year.map(String.init),
+                    decoration: .movie(addedAt: movie.addedAt, progress: progress, now: now),
+                    route: .movie(itemKey: movie.key.rawValue),
+                    movieStart: MoviePlayState(progress: progress)
+                )
+            }
+        case .shows:
+            let shows = catalog.series(categoryID: category, sort: sort, limit: paging.limit)
+            // One read for every show in progress, rather than one per poster.
+            let latest = profileID.map { id in
+                Dictionary(store.seriesInProgress(profileID: id, limit: 500).compactMap { row in row.seriesKey.map { ($0, row) } },
+                           uniquingKeysWith: { first, _ in first })
+            } ?? [:]
+            entries = shows.enumerated().map { index, show in
+                GridEntry(
+                    id: show.key, index: index, title: show.name, posterURL: show.posterURL,
+                    caption: show.year.map(String.init),
+                    decoration: .series(addedAt: show.addedAt, latest: latest[show.key.rawValue], now: now),
+                    route: .series(itemKey: show.key.rawValue),
+                    movieStart: nil
+                )
+            }
+        }
+        hasLoaded = true
+    }
+}

@@ -7,12 +7,17 @@ import SwiftUI
 // initialisers stay; what they draw is the feature implementation's to replace.
 // Services come from the environment: CatalogService, HouseholdStore and
 // ProfileSession (injected by the app), plus Core's \.play and \.openRoute.
+//
+// Each view expects to sit inside the app's NavigationStack (or a split
+// view's detail stack) that maps `HearthRoute` with
+// `.navigationDestination(for:)`: posters push `.movie` and `.series`, and
+// the empty states push `.sourceEditor`. None of them opens a stack of its own.
 
 /// Movies by category as a poster grid, sorted by date added, name or year (VOD-1).
 public struct MoviesView: View {
     public init() {}
     public var body: some View {
-        Text("Movies").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        CatalogGridScreen(shelf: .movies)
     }
 }
 
@@ -20,7 +25,7 @@ public struct MoviesView: View {
 public struct ShowsView: View {
     public init() {}
     public var body: some View {
-        Text("Shows").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        CatalogGridScreen(shelf: .shows)
     }
 }
 
@@ -28,7 +33,7 @@ public struct ShowsView: View {
 public struct MyListView: View {
     public init() {}
     public var body: some View {
-        Text("My List").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        MyListScreen()
     }
 }
 
@@ -36,7 +41,7 @@ public struct MyListView: View {
 public struct DownloadsView: View {
     public init() {}
     public var body: some View {
-        Text("Downloads").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        DownloadsScreen()
     }
 }
 
@@ -45,7 +50,7 @@ public struct MovieDetailView: View {
     let itemKey: String
     public init(itemKey: String) { self.itemKey = itemKey }
     public var body: some View {
-        Text("Movie").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        MovieDetailScreen(itemKey: ItemKey(rawValue: itemKey))
     }
 }
 
@@ -55,6 +60,6 @@ public struct ShowDetailView: View {
     let itemKey: String
     public init(itemKey: String) { self.itemKey = itemKey }
     public var body: some View {
-        Text("Show").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        ShowDetailScreen(itemKey: ItemKey(rawValue: itemKey))
     }
 }

@@ -2,6 +2,8 @@
 import PackageDescription
 
 // A feature package: Core plus the kits it needs, never another feature.
+// SourceKit is listed for `ContentKind` (category queries), which CatalogKit's
+// API uses but does not re-export.
 let package = Package(
     name: "LibraryFeature",
     defaultLocalization: "en",
@@ -9,10 +11,11 @@ let package = Package(
     products: [.library(name: "LibraryFeature", targets: ["LibraryFeature"])],
     dependencies: [
         .package(path: "../Core"),
+        .package(path: "../SourceKit"),
         .package(path: "../CatalogKit"),
         .package(path: "../HouseholdKit"),
     ],
     targets: [
-        .target(name: "LibraryFeature", dependencies: ["Core", "CatalogKit", "HouseholdKit"]),
+        .target(name: "LibraryFeature", dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit"]),
     ]
 )
