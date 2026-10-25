@@ -20,6 +20,8 @@ final class FakeSourceClient: SourceClient {
         /// Answer `notSupported` to lists without a category, and drop the
         /// category from items listed by one (as some portals do).
         var listsNeedCategory = false
+        /// How long each page takes, so a test can cancel mid-import.
+        var pageDelay: Duration?
         var failure: Failure?
     }
 
@@ -84,6 +86,7 @@ final class FakeSourceClient: SourceClient {
     func movies(categoryID: String?, page: Int) async throws -> Page<RemoteMovie> {
         record("movies(\(categoryID ?? "all"),\(page))")
         let fixture = self.fixture
+        if let pageDelay = fixture.pageDelay { try await Task.sleep(for: pageDelay) }
         if case .moviesPage(let failingPage, let error) = fixture.failure, failingPage == page { throw error }
         return try paged(fixture.movies, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
     }

@@ -615,3 +615,60 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
         #expect(RefreshPolicy.plan(for: state(catalogAge: -hour, guideAge: hour), hasFullGuide: false, now: now, force: false).catalog)
     }
 }
+
+@MainActor
+@Suite struct RobustnessTests {
+    @Test func cancellingARefreshKeepsTheCatalog() async throws {
+        let (service, fake) = await importedService()
+        let sourceID = fake.configuration.id
+        fake.update {
+            $0.pageSize = 1
+            $0.pageDelay = .milliseconds(200)
+            $0.channels[0].name = "Renamed"
+        }
+
+        let refresh = Task { await service.refresh(sourceID: sourceID, force: true) }
+        while fake.callCount("movies(all,0)") < 2 { await Task.yield() }
+        guard case .refreshing = service.refreshStates[sourceID]?.phase else {
+            Issue.record("expected the refresh to be under way")
+            return
+        }
+        refresh.cancel()
+        await refresh.value
+
+        #expect(service.refreshStates[sourceID]?.phase == .idle)
+        #expect(service.channels(applyingFilter: false).first?.name == "BBC One")
+        #expect(fake.callCount("movies(all,") < 10)
+
+        // cancelRefresh stops one started elsewhere (a background import).
+        let second = Task { await service.refresh(sourceID: sourceID, force: true) }
+        while fake.callCount("movies(all,0)") < 3 { await Task.yield() }
+        service.cancelRefresh(sourceID: sourceID)
+        await second.value
+        #expect(service.refreshStates[sourceID]?.phase == .idle)
+        #expect(service.channels(applyingFilter: false).first?.name == "BBC One")
+    }
+
+    @Test func anUnopenableStoreSurfacesInsteadOfCrashing() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "CatalogKitTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // A file where the store's folder should be: nothing can be created.
+        let blocker = directory.appending(path: "Catalog")
+        try Data().write(to: blocker)
+
+        let fake = FakeSourceClient(configuration: Fixtures.configuration(), fixture: Fixtures.catalog())
+        let service = CatalogService(storeURL: blocker.appending(path: "Catalog.sqlite"), clientFactory: { _ in fake })
+        service.setSources([fake.configuration])
+        await service.waitForBackgroundRefreshes()
+        guard case .failed(let message) = service.refreshStates[fake.configuration.id]?.phase else {
+            Issue.record("expected the store failure in the refresh state")
+            return
+        }
+        #expect(!message.isEmpty)
+        #expect(service.channels().isEmpty)
+        #expect(service.search("bbc").isEmpty)
+        #expect(!service.contains(.channel(source: fake.configuration.id, id: "101")))
+        #expect(fake.callCount("signIn") == 0)
+    }
+}

@@ -66,11 +66,12 @@ extension CatalogService {
         storeOpenAttempted = true
         do {
             let store = try CatalogStore.open(at: storeURL)
+            let earlierFailure = storeOpenFailure
             openedStore = store
             storeOpenFailure = nil
             persisted = (try? SourceStateRow.loadAll(in: store.viewContext)) ?? [:]
             store.viewContext.reset()
-            seedRefreshStates()
+            seedRefreshStates(clearing: earlierFailure)
             return store
         } catch {
             storeOpenFailure = String(localized: "The catalog couldn't be opened: \(error.localizedDescription)")
@@ -81,8 +82,9 @@ extension CatalogService {
 
     /// Gives every source a refresh state from what the store remembers, so
     /// the Household screen shows counts, last refresh and expiry at launch
-    /// (SRC-5) before any provider is asked.
-    func seedRefreshStates() {
+    /// (SRC-5) before any provider is asked. `clearing` is an earlier
+    /// store failure to take off sources now that the store has opened.
+    func seedRefreshStates(clearing earlierFailure: String? = nil) {
         for configuration in sources {
             let saved = persisted[configuration.id]
             updateRefreshState(configuration.id) { state in
@@ -96,7 +98,7 @@ extension CatalogService {
                 }
                 if let storeOpenFailure {
                     state.phase = .failed(message: storeOpenFailure)
-                } else if case .failed(let message) = state.phase, message.hasPrefix(String(localized: "The catalog couldn't be opened")) {
+                } else if case .failed(let message) = state.phase, message == earlierFailure {
                     state.phase = .idle
                 }
             }
