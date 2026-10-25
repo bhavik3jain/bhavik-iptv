@@ -14,16 +14,14 @@ Specs live in [docs/handoff](handoff/README.md): the [handoff](handoff/docs/1-Ha
 | Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 |
 | Bundle ids | `com.bhavikjain.hearth` (release), `com.bhavikjain.hearth.dev` (Debug) · iCloud `iCloud.com.bhavikjain.hearth` · team Y4M3S6H4NK |
 | Builds | Scaffold builds for iOS Simulator and macOS (unsigned) |
-| TestFlight | Not yet uploaded — see Blocked on the owner |
+| TestFlight | Not yet uploaded — local `scripts/testflight.sh` with Xcode's Apple ID (owner signing in, creating the app record) |
 
 ## Blocked on the owner
 
 These need you; nothing else waits on them until the upload step.
 
-- [ ] **App Store Connect app record.** Create an app named Hearth (or the final name) with bundle id `com.bhavikjain.hearth`, platforms iOS and macOS (Universal Purchase). App Store Connect's API can't create apps.
-- [ ] **Signing for uploads**, either:
-  - add the App Store Connect API key and dev certificate to this repo's GitHub environment `testflight` (same secret names as Multitrack: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`, `IOS_DEV_P12`, `IOS_DEV_P12_PASSWORD`), then run the TestFlight workflow; or
-  - sign in to Xcode (Settings → Accounts) with the team's Apple ID, then run `scripts/testflight.sh`.
+- [ ] **App Store Connect app record** (owner doing it, on appstoreconnect.apple.com → Apps → + → New App; the bundle id is now registered so it appears in the form): an app named Hearth (or the final name) with bundle id `com.bhavikjain.hearth`, platforms iOS and macOS (Universal Purchase). App Store Connect's API can't create apps.
+- [x] **Xcode signed in** (team Y4M3S6H4NK). Upload path: **local, `scripts/testflight.sh`**, signed by that account. Signed builds with `-allowProvisioningUpdates` registered `com.bhavikjain.hearth` and `com.bhavikjain.hearth.dev` for iOS and macOS, with the iCloud container `iCloud.com.bhavikjain.hearth` and push (team provisioning profiles made by Xcode). The GitHub TestFlight workflow stays in the repo but needs the `testflight` environment secrets before it can run.
 - [ ] **A real portal to probe.** Portal URL + MAC (never committed) for `-SourceProbe` — the protocol rows marked "unverified" must be checked against your provider.
 - [ ] **Open questions 2–8** in the handoff (stream limit per MAC, name, roles, downloads, Apple TV, Multitrack code sharing).
 
@@ -47,12 +45,12 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | # | Workstream | Owns | Requirements | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Scaffold and contracts | `project.yml`, all `Package.swift`, contract files | — | ☑ |
-| 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ☐ |
-| 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ☐ |
-| 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ☐ |
-| 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ☐ |
-| 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ☐ |
-| 6 | CI and release | `.github/`, `scripts/` | Build, release | ☐ |
+| 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ◐ |
+| 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ◐ |
+| 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ◐ |
+| 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ◐ |
+| 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ◐ |
+| 6 | CI and release | `.github/`, `scripts/` | Build, release | ◐ |
 | 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☐ |
 | 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☐ |
 | 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ☐ |
@@ -79,3 +77,7 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Wrote `project.yml` (iOS + macOS targets, `.dev` Debug ids, one iCloud container, ATS open for user-supplied servers, background audio/fetch/remote-notification), entitlements, asset catalog skeleton.
 - Wrote every package and its public contract: Core (theme, components, routes, play intent, Mac shims), SourceKit models and `SourceClient`, CatalogKit `ItemKey`, values and `CatalogService`, HouseholdKit values, `HouseholdStore`, `ProfileSession`, PlayerKit engine protocol, `PlayerModel`, `PlayerView`, and each feature's entry views. Implementations are placeholders marked `PLACEHOLDER`.
 - Both apps build unsigned for iOS Simulator and macOS; the placeholder app launches on the iPhone Duo simulator (`iPhone Duo`, iOS 27.1, 466×678 pt when open; the status bar runs down the right edge).
+- The Claude desktop app's simulator side panel shows the iPhone 18 Pro but not the iPhone Duo, even after an app restart; view the Duo in Xcode's **Device Hub** (it has the open/close/rotate controls). Agents drive the Duo headlessly either way.
+- Phase A launched as a workflow (`wf_e4b48df7-eed`): workstreams 1–6, one git worktree each, branched from `build/v0.1-foundation`.
+- Owner signed in to Xcode. Signed iOS and macOS builds (Release and Debug) registered both bundle ids with iCloud and push.
+- Phase A's first run (`wf_e4b48df7-eed`) was cut off by the account's session limit after ~16 min; every agent's partial work was committed as a `WIP <package>` commit on its worktree branch (`worktree-wf_e4b48df7-eed-1` SourceKit … `-6` infra). Resumed as `wf_7ca035c7-b66`, each agent continuing in its existing worktree.
