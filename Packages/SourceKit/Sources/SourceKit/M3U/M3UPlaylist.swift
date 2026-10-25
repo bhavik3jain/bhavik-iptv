@@ -230,9 +230,14 @@ enum M3UCatalog {
 
             var mode = (entry["catchup"] ?? entry["catchup-type"] ?? header["catchup"] ?? header["catchup-type"])?.lowercased()
             let source = entry["catchup-source"] ?? header["catchup-source"]
-            let days = Int(entry["catchup-days"] ?? entry["timeshift"] ?? header["catchup-days"] ?? header["timeshift"] ?? "")
+            // SIPTV's legacy `timeshift="3"` means shift mode with three days;
+            // `catchup-days` alone only sets the window. IPTV Simple needs a
+            // `catchup` tag (or a source template) before it offers an archive,
+            // so a playlist-wide `catchup-days` doesn't switch every channel on.
+            let timeshift = entry["timeshift"] ?? header["timeshift"]
+            let days = Int(entry["catchup-days"] ?? timeshift ?? header["catchup-days"] ?? "")
             if mode == nil, source != nil { mode = "default" }
-            if mode == nil, days != nil { mode = "shift" }
+            if mode == nil, timeshift != nil { mode = "shift" }
             if mode == "disabled" || mode == "none" { mode = nil }
             let hasArchive = mode != nil && (source != nil || !["default", "append"].contains(mode!))
 
