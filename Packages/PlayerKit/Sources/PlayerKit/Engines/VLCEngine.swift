@@ -259,7 +259,7 @@ final class VLCEngine: PlaybackEngine {
     /// Request headers become VLC's per-media options. VLC's HTTP module
     /// only takes a user agent and a referrer; any other header is dropped
     /// (Stalker's play links carry their token in the URL, not a cookie).
-    static func mediaOptions(for stream: StreamDescriptor) -> [String] {
+    nonisolated static func mediaOptions(for stream: StreamDescriptor) -> [String] {
         var options: [String] = []
         for (name, value) in stream.headers.sorted(by: { $0.key < $1.key }) {
             switch name.lowercased() {
