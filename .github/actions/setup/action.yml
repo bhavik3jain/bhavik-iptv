@@ -1,0 +1,42 @@
+name: Set up Xcode and the project
+description: >-
+  Selects Xcode 27.1, installs XcodeGen and xcbeautify, and generates
+  Hearth.xcodeproj from project.yml. Every job in tests.yml and testflight.yml
+  starts with it, after actions/checkout.
+
+runs:
+  using: composite
+  steps:
+    - name: Use Xcode 27.1
+      # Pinned, not "newest installed": Hearth needs the iOS 27.1 SDK (iPhone
+      # Duo's inner display only gets full-screen layout from apps built with
+      # it), and runner images also carry betas, which App Store Connect
+      # rejects. Multitrack moved to the xcode-27 image after macos-latest's
+      # older Xcode crashed in IRGen on code developed against 27; that image
+      # is a GitHub preview, so jobs can queue.
+      shell: bash
+      run: |
+        xcode=/Applications/Xcode_27.1.app
+        if [ ! -d "$xcode" ]; then
+          echo "::error::$xcode is not on this runner. Hearth needs Xcode 27.1 (iOS 27.1 SDK, for iPhone Duo). Installed Xcodes:"
+          ls -d /Applications/Xcode*.app || echo "(none)"
+          exit 1
+        fi
+        sudo xcode-select -s "$xcode"
+        xcodebuild -version
+
+    - name: Install XcodeGen and xcbeautify
+      # xcbeautify turns xcodebuild's output into readable GitHub annotations.
+      # Without it Multitrack's logs were either thousands of lines or, with
+      # -quiet, a red "the following command failed with exit code 0" after
+      # every compile step that merely had warnings, which read as failures
+      # when the build had passed. Every xcodebuild in the workflows pipes into
+      # it under `set -o pipefail`, so a real failure still fails the step.
+      shell: bash
+      run: brew install xcodegen xcbeautify
+
+    - name: Generate the project
+      # Hearth.xcodeproj is XcodeGen output and gitignored; project.yml is the
+      # source of truth for targets, schemes, signing and Info.plist keys.
+      shell: bash
+      run: xcodegen generate

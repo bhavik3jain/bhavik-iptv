@@ -1,0 +1,129 @@
+name: Tests
+
+# Every push to main or a build/ branch, every pull request, or by hand.
+# Pushes to other branches are left to their pull request, so one change
+# doesn't pay for two macOS runs. Changes to docs alone skip it: macOS runner
+# minutes are the expensive kind. If this check is ever made required in branch
+# protection, drop paths-ignore, or a docs-only pull request waits forever for
+# a check that never starts.
+#
+# No provider credentials and no Apple account here (technical spec, Testing →
+# CI): tests that need a real login skip by name, and nothing is signed.
+on:
+  push:
+    branches: [main, "build/**"]
+    paths-ignore: ["docs/**", "**.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**.md"]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Every xcodebuild clones its Swift packages here instead of into a
+  # throwaway DerivedData, so the cache step below can keep them. PlayerKit
+  # pulls VLCKit, a large binary framework, which otherwise downloads on every
+  # run. build/ is gitignored.
+  SOURCE_PACKAGES: build/SourcePackages
+
+jobs:
+  test:
+    name: Test the packages and build the iOS app
+    runs-on: xcode-27
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Restore Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SOURCE_PACKAGES }}
+          # Remote versions are pinned in the packages' manifests (the
+          # generated project's Package.resolved is gitignored with it), so
+          # the manifests are the key.
+          key: spm-xcode27.1-${{ hashFiles('Packages/*/Package.swift') }}
+          restore-keys: spm-xcode27.1-
+
+      - name: Pick a simulator
+        # iPhone Duo when the image has the iOS 27.1 runtime, else an iPhone
+        # on the newest runtime. Chosen at run time because the runners'
+        # simulator line-up changes; pinning a model that isn't installed
+        # fails the job before anything is built.
+        run: |
+          set -euo pipefail
+          udid=$(scripts/pick-simulator.sh)
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+
+      - name: Test every package and build the app
+        # One scheme (AllPackageTests in project.yml) for every package's
+        # tests, so Core and the kits compile once and the suites run side by
+        # side; Multitrack's nine separate `xcodebuild test` runs took 29
+        # minutes, nearly all of it rebuilding the same dependencies. The
+        # scheme's build target is the app itself, so this also catches
+        # anything that compiles per package but breaks once the modules are
+        # wired together. A package's tests left out of that scheme never run
+        # here, silently.
+        #
+        # The architecture is named because a simulator is listed once per
+        # architecture, and xcodebuild otherwise reports an ambiguous
+        # destination.
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project Hearth.xcodeproj \
+            -scheme AllPackageTests \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID,arch=$(uname -m)" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+            -resultBundlePath build/AllPackageTests.xcresult \
+            -parallel-testing-enabled YES | xcbeautify --renderer github-actions
+
+      - name: Keep the test results
+        # The result bundle holds every failure with its logs; open it in
+        # Xcode. Only kept when something failed.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AllPackageTests.xcresult
+          path: build/AllPackageTests.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
+  mac:
+    name: Build the Mac app
+    # Its own job so it runs alongside the tests instead of after them. The
+    # Mac target compiles the same sources as the iOS one, so an edit that
+    # builds for iOS can still break macOS, usually by reaching for UIKit-only
+    # API (features go through Core's MacCompat shims instead). Unsigned,
+    # because a runner is not a registered Mac and cannot get a profile.
+    runs-on: xcode-27
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Restore Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SOURCE_PACKAGES }}
+          key: spm-xcode27.1-${{ hashFiles('Packages/*/Package.swift') }}
+          restore-keys: spm-xcode27.1-
+
+      - name: Build the Mac app
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project Hearth.xcodeproj \
+            -scheme Hearth-macOS \
+            -destination "platform=macOS,arch=$(uname -m)" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
