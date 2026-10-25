@@ -145,6 +145,16 @@ enum RowWriter {
         return row
     }
 
+    static func removedItem(stableKey: String, kind: ItemKind, nameKey: String, sourceID: UUID, removedAt: Date) -> [String: Any] {
+        [
+            "sourceID": sourceID,
+            "kindRaw": kind.rawValue,
+            "stableKey": stableKey,
+            "nameKey": nameKey,
+            "removedAt": removedAt,
+        ]
+    }
+
     static func encodeHeaders(_ headers: [String: String]) -> String? {
         guard !headers.isEmpty else { return nil }
         let encoder = JSONEncoder()

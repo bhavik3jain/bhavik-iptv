@@ -1,5 +1,6 @@
 import CoreData
 import Foundation
+import SourceKit
 
 /// The catalog store's Core Data model, built in code rather than a
 /// `.xcdatamodeld`: diffable, commented, and with no compiled model resource
