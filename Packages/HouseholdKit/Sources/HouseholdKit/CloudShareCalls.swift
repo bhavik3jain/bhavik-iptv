@@ -35,6 +35,15 @@ extension NSPersistentCloudKitContainer {
         }
     }
 
+    /// Several objects' shares in one `fetchShares(matching:)`: the household
+    /// on screen (for `isShared`, the members and this device's role) and the
+    /// duplicate households a fold must not delete if one is a share root.
+    func fetchSharesInBackground(for objectIDs: [NSManagedObjectID], completion: @escaping @Sendable (Result<[NSManagedObjectID: CKShare], any Error>) -> Void) {
+        Self.lookupQueue.async {
+            completion(Result { try self.fetchShares(matching: objectIDs) })
+        }
+    }
+
     /// The record Core Data mirrors `objectID` to, from its local metadata,
     /// for the check for zones an earlier `share()` left behind.
     func recordIDInBackground(for objectID: NSManagedObjectID, completion: @escaping @Sendable (CKRecord.ID?) -> Void) {
@@ -50,7 +59,11 @@ extension NSPersistentCloudKitContainer {
         Self.shareQueue.async {
             let context = self.newBackgroundContext()
             let object = context.performAndWait { context.object(with: objectID) }
+            // The object only weakly knows its context; held here until
+            // CloudKit answers. Only touched on this queue and in that answer.
+            nonisolated(unsafe) let keepAlive = context
             self.share([object], to: nil) { _, share, _, error in
+                _ = keepAlive
                 if let share {
                     completion(.success(share))
                 } else {
@@ -58,6 +71,14 @@ extension NSPersistentCloudKitContainer {
                 }
             }
         }
+    }
+
+    /// The CloudKit database `store` mirrors: an accepted share lives in the
+    /// shared one, everything this person owns in the private one.
+    func databaseScope(of store: NSPersistentStore) -> CKDatabase.Scope {
+        persistentStoreDescriptions
+            .first { $0.url == store.url }?
+            .cloudKitContainerOptions?.databaseScope ?? .private
     }
 
     func persistUpdatedShareInBackground(_ share: CKShare, inStoreAt url: URL, completion: @escaping @Sendable (Result<CKShare, any Error>) -> Void) {

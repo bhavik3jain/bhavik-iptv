@@ -186,6 +186,7 @@ struct CloudEvent: Sendable, Equatable {
 final class CloudEventLedger: Sendable {
     struct State: Sendable, Equatable {
         var inFlight: [UUID: CloudEvent] = [:]
+        var lastSetupEnd: [String: Date] = [:]
         var lastImportEnd: [String: Date] = [:]
         var lastExportEnd: [String: Date] = [:]
         var lastSuccessAt: Date?
@@ -229,6 +230,7 @@ final class CloudEventLedger: Sendable {
             if event.succeeded {
                 state.lastSuccessAt = max(state.lastSuccessAt ?? end, end)
                 switch event.kind {
+                case .setup: state.lastSetupEnd[event.store] = end
                 case .import: state.lastImportEnd[event.store] = end
                 case .export: state.lastExportEnd[event.store] = end
                 default: break
@@ -242,6 +244,10 @@ final class CloudEventLedger: Sendable {
             Logger.household.debug("Import \(event.succeeded ? "succeeded" : "failed", privacy: .public) on store \(event.store, privacy: .public)")
         }
         listener.withLock { $0 }?()
+    }
+
+    func hasSetUp(store: String) -> Bool {
+        state.withLock { $0.lastSetupEnd[store] != nil }
     }
 
     func hasImported(store: String) -> Bool {
@@ -258,6 +264,11 @@ final class CloudEventLedger: Sendable {
 
     func isSyncing(in stores: Set<String>) -> Bool {
         state.withLock { state in state.inFlight.values.contains { stores.contains($0.store) } }
+    }
+
+    /// When the oldest unfinished event in `stores` started, if one is running.
+    func syncingSince(in stores: Set<String>) -> Date? {
+        state.withLock { state in state.inFlight.values.filter { stores.contains($0.store) }.map(\.start).min() }
     }
 
     /// Polls `condition` until it holds or `timeout` passes (or the task is

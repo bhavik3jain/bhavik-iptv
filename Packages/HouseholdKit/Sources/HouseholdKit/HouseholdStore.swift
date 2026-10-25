@@ -80,10 +80,11 @@ public final class HouseholdStore {
     @ObservationIgnored var shareState = ShareState()
     @ObservationIgnored var shareLookupTask: Task<Void, Never>?
     @ObservationIgnored var householdFoldTask: Task<Void, Never>?
+    @ObservationIgnored var lastHouseholdFoldAttempt: Date?
     @ObservationIgnored var lastNudgeAt: Date?
     @ObservationIgnored var refreshTask: Task<Void, Never>?
     @ObservationIgnored var shareCalls = ShareCallLedger<NSManagedObjectID>()
-    @ObservationIgnored var runningShareCalls: [NSManagedObjectID: Task<Result<CKShare, any Error>, Never>] = [:]
+    @ObservationIgnored var runningShareCalls: [NSManagedObjectID: Task<Result<CKShare, ShareCallError>, Never>] = [:]
     @ObservationIgnored private var accountStatus: CKAccountStatus?
 
     var viewContext: NSManagedObjectContext { container.viewContext }
@@ -117,6 +118,9 @@ public final class HouseholdStore {
     /// The last save that failed, in Core Data's words, or nil. The change
     /// was rolled back.
     public private(set) var lastWriteError: String?
+    /// What `prepareShare` is doing ("Creating the share in iCloud…"), for
+    /// the invite sheet; nil when it isn't running.
+    public internal(set) var sharePreparationStatus: String?
 
     private func startObserving() {
         let center = NotificationCenter.default

@@ -266,13 +266,15 @@ enum MemberList {
 
 /// Which profile a device opens at launch (PRF-2, PRF-9).
 enum ProfileRestore {
-    /// The always-open profile, else the only one, else nil (the gate asks).
-    /// Never the last-used one when there are several, as Netflix does.
+    /// The always-open profile, else the only one if it has no PIN, else nil
+    /// (the gate asks). Never the last-used one when there are several, as
+    /// Netflix does.
     static func pick(alwaysOpen: UUID?, profiles: [ProfileRecord]) -> ProfileRecord? {
         if let alwaysOpen, let profile = profiles.first(where: { $0.id == alwaysOpen }) {
             return profile
         }
-        return profiles.count == 1 ? profiles[0] : nil
+        guard profiles.count == 1, !profiles[0].hasPIN else { return nil }
+        return profiles[0]
     }
 }
 
