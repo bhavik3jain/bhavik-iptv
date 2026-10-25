@@ -17,7 +17,9 @@
 #     member of team Y4M3S6H4NK.
 #
 # BUILD_NUMBER overrides the build number. It defaults to the UTC time as
-# yymmddHHMM, which only goes up. Those numbers sit far above the workflow's
+# yyDDDHHMM (year, day of the year, hour, minute), which only goes up and
+# stays under 2^31 — yymmddHHMM (2610251000…) doesn't, and a build number
+# component that large risks App Store Connect's validation. Those numbers sit far above the workflow's
 # (run number + 100), so after a local upload the workflow relies on the
 # export raising its number (Xcode's manageAppVersionAndBuildNumber, left at
 # its default) or on its build_number input.
@@ -44,7 +46,7 @@ die() { echo "error: $*" >&2; exit 1; }
 usage() {
     echo "usage: scripts/testflight.sh ios|mac|all [--no-upload]" >&2
     echo "  Signs with ASC_KEY_ID + ASC_ISSUER_ID + ASC_KEY_PATH when all are set, else the Apple ID in Xcode." >&2
-    echo "  BUILD_NUMBER overrides the build number (default: UTC yymmddHHMM)." >&2
+    echo "  BUILD_NUMBER overrides the build number (default: UTC yyDDDHHMM)." >&2
     exit 2
 }
 
@@ -100,7 +102,7 @@ fi
 
 # MARK: - Build number and paths
 
-BUILD_NUMBER=${BUILD_NUMBER:-$(date -u +%y%m%d%H%M)}
+BUILD_NUMBER=${BUILD_NUMBER:-$(date -u +%y%j%H%M)}
 build_number_shape='^[0-9]+(\.[0-9]+){0,2}$'
 [[ $BUILD_NUMBER =~ $build_number_shape ]] || die "BUILD_NUMBER must be digits, at most three dot-separated numbers; got '$BUILD_NUMBER'"
 

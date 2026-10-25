@@ -133,7 +133,7 @@ scripts/testflight.sh ios                  # local: ios, mac or all; --no-upload
 ```
 
 - **The workflow:** builds both platforms in parallel jobs. Build numbers are the run number + 100; the `build_number` input overrides it. A tag doesn't run Tests, so tag a commit whose tests passed.
-- **`scripts/testflight.sh`:** uses the API key when `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_PATH` (the `.p8` file) are all set, otherwise the Apple ID in Xcode. Build numbers default to UTC `yymmddHHMM`; `BUILD_NUMBER` overrides it. Archives, exports and logs land in `build/testflight/<build>/`. When an upload fails, it explains the usual causes: no account, no app record, an unregistered bundle id, the wrong key role, or a duplicate build number.
+- **`scripts/testflight.sh`:** uses the API key when `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_PATH` (the `.p8` file) are all set, otherwise the Apple ID in Xcode. Build numbers default to UTC `yyDDDHHMM` (day of the year, so it stays under 2^31); `BUILD_NUMBER` overrides it. Archives, exports and logs land in `build/testflight/<build>/`. When an upload fails, it explains the usual causes: no account, no app record, an unregistered bundle id, the wrong key role, or a duplicate build number.
 - **The Mac build, both ways:** archived unsigned, then signed ad hoc with `App-macOS.entitlements` (`scripts/codesign-app.sh`), because a Mac development profile only covers registered Macs. The App Store export re-signs it.
 
 **The CloudKit schema ritual.** Do this before any build that adds a household entity or attribute. Production never creates record types on its own, so a build shipped without it saves locally and never syncs.

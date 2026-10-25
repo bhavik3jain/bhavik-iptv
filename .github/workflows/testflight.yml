@@ -39,7 +39,7 @@ env:
   # Mac one lower than the last, so this only ever goes up. run_number is
   # monotonic per workflow and never repeats, even across re-runs. Both jobs
   # use the same number so one run's two builds are easy to match. Builds
-  # uploaded with scripts/testflight.sh are numbered by date (yymmddHHMM),
+  # uploaded with scripts/testflight.sh are numbered by date (yyDDDHHMM),
   # far above these; the export's default manageAppVersionAndBuildNumber lets
   # Xcode raise a number App Store Connect has already passed, and the
   # build_number input above overrides it outright.
