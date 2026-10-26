@@ -124,8 +124,9 @@ struct MyListHeartButton: View {
 /// Column widths for poster grids: phone-sized posters in the compact layout,
 /// a little larger in the sidebar layout (iPad, Mac, the opened iPhone Duo),
 /// where the grid gains columns rather than giant posters. Scaled with Dynamic
-/// Type so captions keep room at large sizes.
-struct PosterGridMetrics {
+/// Type so captions keep room at large sizes. A `DynamicProperty`, so the
+/// scaled metrics inside it follow the text size of the view that holds it.
+struct PosterGridMetrics: DynamicProperty {
     @ScaledMetric(relativeTo: .body) private var compactMinimum: CGFloat = 100
     @ScaledMetric(relativeTo: .body) private var sidebarMinimum: CGFloat = 124
 
@@ -188,6 +189,80 @@ struct PosterCell: View {
             parts.append(String(localized: "\(progress.formatted(.percent.precision(.fractionLength(0)))) watched"))
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// A poster in a grid that opens its detail screen, with a context menu to
+/// play or resume a movie, keep it in My List and mark it watched.
+///
+/// The profile's progress and My List state are read here, in the cell, and
+/// not when the grid's query runs: each read is a household store fetch, and
+/// a lazy grid builds only the cells on screen, so a thousand loaded titles
+/// cost a screenful of reads rather than a thousand.
+struct LibraryPosterLink: View {
+    let entry: GridEntry
+
+    @Environment(HouseholdStore.self) private var store
+    @Environment(ProfileSession.self) private var session
+    @Environment(\.play) private var play
+
+    /// The profile that saves progress and lists; nil for a Guest.
+    private var profile: ProfileRecord? {
+        session.currentProfile.flatMap { $0.isGuest ? nil : $0 }
+    }
+
+    var body: some View {
+        let _ = store.revision
+        let now = Date.now
+        let decoration: PosterDecoration
+        let movieState: MoviePlayState?
+        switch entry.kind {
+        case .movie:
+            let progress = profile.flatMap { store.progress(profileID: $0.id, itemKey: entry.id.rawValue) }
+            decoration = .movie(addedAt: entry.addedAt, progress: progress, now: now)
+            movieState = MoviePlayState(progress: progress)
+        case .series(let latest):
+            decoration = .series(addedAt: entry.addedAt, latest: latest, now: now)
+            movieState = nil
+        }
+        return NavigationLink(value: entry.route) {
+            PosterCell(title: entry.title, url: entry.posterURL, caption: entry.caption, decoration: decoration)
+        }
+        .buttonStyle(.hearthTile)
+        .contextMenu { menu(movieState: movieState) }
+    }
+
+    @ViewBuilder
+    private func menu(movieState: MoviePlayState?) -> some View {
+        if let movieState {
+            Button {
+                play(PlayIntent(itemKey: entry.id.rawValue, kind: .movie, title: entry.title,
+                                subtitle: entry.caption, artworkURL: entry.posterURL,
+                                startPosition: movieState.startPosition))
+            } label: {
+                Label(movieState.title, systemImage: "play.fill")
+            }
+        }
+        if let profile {
+            let isFavorite = store.isFavorite(profileID: profile.id, itemKey: entry.id.rawValue)
+            Button {
+                store.toggleFavorite(profileID: profile.id, itemKey: entry.id.rawValue, kind: entry.favoriteKind)
+            } label: {
+                isFavorite
+                    ? Label("Remove from My List", systemImage: "heart.slash")
+                    : Label("Add to My List", systemImage: "heart")
+            }
+            if let movieState {
+                let watched = movieState.action == .playAgain
+                Button {
+                    store.setWatched(!watched, profileID: profile.id, itemKey: entry.id.rawValue)
+                } label: {
+                    watched
+                        ? Label("Mark as unwatched", systemImage: "arrow.uturn.backward.circle")
+                        : Label("Mark as watched", systemImage: "checkmark.circle")
+                }
+            }
+        }
     }
 }
 

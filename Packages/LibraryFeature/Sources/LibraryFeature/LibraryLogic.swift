@@ -87,9 +87,11 @@ struct SeasonGrouping: Equatable {
 /// "Resume S2 E5", "Play S2 E6", "Play S1 E1" or "Play again" (SER-2).
 ///
 /// The profile's most recently touched episode decides, as Continue watching
-/// does: unfinished, it resumes; finished, the next unwatched episode after it
-/// plays; with nothing after it, the first unwatched one anywhere; with every
-/// episode watched, the show starts again.
+/// does: unfinished, it is where the person is (resumed when there is a
+/// resume point, from the top when it was barely started or just marked
+/// unwatched); finished, the next unwatched episode after it plays; with
+/// nothing after it, the first unwatched one anywhere; with every episode
+/// watched, the show starts again.
 struct ShowPlayTarget: Equatable {
     enum Action: Equatable {
         /// Resume at a position, in seconds.
@@ -143,8 +145,8 @@ struct ShowPlayTarget: Equatable {
         guard let (index, episode, row) = latest else {
             return ShowPlayTarget(episode: first, action: .play)
         }
-        if !row.watched, row.position > 0 {
-            return ShowPlayTarget(episode: episode, action: .resume(row.position))
+        if !row.watched {
+            return target(for: episode, progress: progress)
         }
         if let next = episodes[(index + 1)...].first(where: { !isWatched($0) })
             ?? episodes.first(where: { !isWatched($0) }) {
@@ -153,9 +155,10 @@ struct ShowPlayTarget: Equatable {
         return ShowPlayTarget(episode: first, action: .playAgain)
     }
 
-    /// An unwatched episode: resumed if it was started, else from the top.
+    /// An unwatched episode: resumed if it was properly started, else from
+    /// the top (a few seconds in is a false start, as for movies).
     private static func target(for episode: CatalogEpisode, progress: [String: ProgressRecord]) -> ShowPlayTarget {
-        if let row = progress[episode.key.rawValue], !row.watched, row.position > 0 {
+        if let row = progress[episode.key.rawValue], !row.watched, row.position >= MoviePlayState.minimumResume {
             return ShowPlayTarget(episode: episode, action: .resume(row.position))
         }
         return ShowPlayTarget(episode: episode, action: .play)

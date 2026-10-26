@@ -27,6 +27,9 @@ struct DetailScaffold<Actions: View, Aside: View, Content: View>: View {
     @ViewBuilder var content: Content
 
     @Environment(\.hearthLayout) private var layout
+    /// The sidebar layout's width, measured, to choose between side by side
+    /// and stacked (0 until the first layout pass).
+    @State private var width: CGFloat = 0
 
     var body: some View {
         ScrollView {
@@ -69,44 +72,68 @@ struct DetailScaffold<Actions: View, Aside: View, Content: View>: View {
 
     // MARK: Sidebar
 
+    /// Below this width the sidebar layout keeps the poster beside the title
+    /// but runs the buttons and the text under both, full width: the opened
+    /// iPhone Duo (about 466 pt) and an iPad in a narrow split would
+    /// otherwise squeeze "Resume 41:12" into a third of the screen.
+    private static var narrowSidebarWidth: CGFloat { 640 }
+
     private var sidebarBody: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            HStack(alignment: .top, spacing: 28) {
-                ArtworkView(url: artworkURL, title: title, aspectRatio: 2.0 / 3.0, showsTitleOnPlaceholder: true)
-                    .clipShape(RoundedRectangle(cornerRadius: HearthMetrics.groupedCardRadius, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: HearthMetrics.groupedCardRadius, style: .continuous)
-                            .strokeBorder(HearthColor.hairline, lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
-                    // A third of the width, between a small-phone poster and
-                    // one that would crowd the text on a wide Mac window.
-                    .containerRelativeFrame(.horizontal) { length, _ in
-                        min(max(length * 0.3, 128), 300)
-                    }
-                VStack(alignment: .leading, spacing: 18) {
+        let isNarrow = width > 0 && width < Self.narrowSidebarWidth
+        return VStack(alignment: .leading, spacing: isNarrow ? 20 : 28) {
+            if isNarrow {
+                HStack(alignment: .bottom, spacing: 20) {
+                    poster
+                        .frame(width: min(max(width * 0.3, 112), 160))
                     DetailTitleBlock(title: title, metaParts: metaParts, onArtwork: false)
-                    // A phone-width button row: stretched across a Mac
-                    // column, "Resume" turns into a banner.
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                VStack(alignment: .leading, spacing: 18) {
                     actions
-                        .frame(maxWidth: 460, alignment: .leading)
                     aside
                 }
-                .frame(maxWidth: 640, alignment: .leading)
+            } else {
+                HStack(alignment: .top, spacing: 28) {
+                    poster
+                        // A third of the width, between a small poster and
+                        // one that would crowd the text on a wide Mac window.
+                        .frame(width: min(max(width * 0.3, 160), 300))
+                    VStack(alignment: .leading, spacing: 18) {
+                        DetailTitleBlock(title: title, metaParts: metaParts, onArtwork: false)
+                        // A phone-width button row: stretched across a Mac
+                        // column, "Resume" turns into a banner.
+                        actions
+                            .frame(maxWidth: 460, alignment: .leading)
+                        aside
+                    }
+                    .frame(maxWidth: 640, alignment: .leading)
+                }
             }
             content
                 .frame(maxWidth: 980, alignment: .leading)
         }
-        .padding(.horizontal, libraryGutter(.sidebar))
+        .padding(.horizontal, isNarrow ? HearthMetrics.screenPadding : libraryGutter(.sidebar))
         .padding(.top, 20)
         .padding(.bottom, 40)
         .frame(maxWidth: libraryMaxContentWidth, alignment: .leading)
         .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .background(alignment: .top) {
             DetailBackdrop(url: artworkURL, title: title, isWash: true)
                 .frame(height: 460)
                 .ignoresSafeArea()
         }
+    }
+
+    private var poster: some View {
+        ArtworkView(url: artworkURL, title: title, aspectRatio: 2.0 / 3.0, showsTitleOnPlaceholder: true)
+            .clipShape(RoundedRectangle(cornerRadius: HearthMetrics.groupedCardRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: HearthMetrics.groupedCardRadius, style: .continuous)
+                    .strokeBorder(HearthColor.hairline, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
+            .accessibilityHidden(true)
     }
 }
 

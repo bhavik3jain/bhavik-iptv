@@ -8,6 +8,9 @@ struct MyListEntry: Identifiable, Equatable {
     enum Status: Equatable {
         /// In the catalog and visible to this profile.
         case available(GridEntry)
+        /// Its source hasn't finished its first import on this device (a
+        /// new device, or a source just added): not gone, just not here yet.
+        case pending
         /// No longer offered by its provider: drawn greyed as "Unavailable"
         /// with a way to take it off the list.
         case unavailable
@@ -17,14 +20,23 @@ struct MyListEntry: Identifiable, Equatable {
     var status: Status
     var id: UUID { favorite.id }
 
-    /// How a favorite resolves against the catalog. An item the catalog
-    /// still holds but this profile's rules hide is left off the list rather
-    /// than shown as gone (it isn't, and a Kids profile shouldn't learn its
-    /// name); one the catalog no longer holds is unavailable. Favorites of a
-    /// removed source never reach here: the store hides them (SRC-9).
-    static func status(found: GridEntry?, catalogContains: Bool) -> Status? {
+    /// How a favorite resolves against the catalog.
+    ///
+    /// - An item the catalog still holds but this profile's rules hide is
+    ///   left off the list (nil) rather than shown as gone: it isn't, and a
+    ///   Kids profile shouldn't learn its name.
+    /// - An item whose source this device hasn't imported yet is pending:
+    ///   My List syncs through iCloud long before a new device has
+    ///   downloaded a 40 000-title catalog, and calling everything
+    ///   "Unavailable" then would invite removing it.
+    /// - Otherwise an item the catalog doesn't hold is unavailable.
+    ///
+    /// Favorites of a removed source never reach here: the store hides them
+    /// (SRC-9).
+    static func status(found: GridEntry?, catalogContains: Bool, sourceImported: Bool) -> Status? {
         if let found { return .available(found) }
-        return catalogContains ? nil : .unavailable
+        if catalogContains { return nil }
+        return sourceImported ? .unavailable : .pending
     }
 }
 
@@ -35,10 +47,9 @@ struct MyListScreen: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
     @Environment(\.hearthLayout) private var layout
-    @Environment(\.play) private var play
 
     @State private var pendingRemoval: FavoriteRecord?
-    private let metrics = PosterGridMetrics()
+    private var metrics = PosterGridMetrics()
 
     var body: some View {
         let _ = (catalog.revision, store.revision)
@@ -81,25 +92,7 @@ struct MyListScreen: View {
                 )
                 .padding(.top, 40)
             } else {
-                let movies = entries(profileID: profile.id, kind: .movie)
-                let shows = entries(profileID: profile.id, kind: .series)
-                if movies.isEmpty && shows.isEmpty {
-                    EmptyStateView(
-                        systemName: "heart",
-                        title: String(localized: "Nothing in My List yet"),
-                        message: String(localized: "Tap the heart on a movie or show to keep it here. My List follows your profile to every device in the household.")
-                    )
-                    .frame(maxWidth: 520)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
-                } else {
-                    if !movies.isEmpty {
-                        section(String(localized: "Movies"), entries: movies, profileID: profile.id)
-                    }
-                    if !shows.isEmpty {
-                        section(String(localized: "Shows"), entries: shows, profileID: profile.id)
-                    }
-                }
+                list(profileID: profile.id)
             }
         } else {
             EmptyStateView(systemName: "person.crop.circle", title: String(localized: "Choose a profile to see its list"))
@@ -107,12 +100,47 @@ struct MyListScreen: View {
         }
     }
 
-    private func section(_ title: String, entries: [MyListEntry], profileID: UUID) -> some View {
+    @ViewBuilder
+    private func list(profileID: UUID) -> some View {
+        let movies = entries(profileID: profileID, kind: .movie)
+        let shows = entries(profileID: profileID, kind: .series)
+        let visibleMovies = movies.filter { $0.status != .pending }
+        let visibleShows = shows.filter { $0.status != .pending }
+        let pendingCount = (movies.count - visibleMovies.count) + (shows.count - visibleShows.count)
+
+        if visibleMovies.isEmpty && visibleShows.isEmpty {
+            if pendingCount > 0 {
+                LibraryLoadingView(message: String(localized: "Loading My List from your sources…"))
+                    .padding(.top, 60)
+            } else {
+                EmptyStateView(
+                    systemName: "heart",
+                    title: String(localized: "Nothing in My List yet"),
+                    message: String(localized: "Tap the heart on a movie or show to keep it here. My List follows your profile to every device in the household.")
+                )
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+            }
+        } else {
+            if !visibleMovies.isEmpty {
+                section(String(localized: "Movies"), entries: visibleMovies)
+            }
+            if !visibleShows.isEmpty {
+                section(String(localized: "Shows"), entries: visibleShows)
+            }
+            if pendingCount > 0 {
+                pendingNote(count: pendingCount)
+            }
+        }
+    }
+
+    private func section(_ title: String, entries: [MyListEntry]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title)
             LazyVGrid(columns: metrics.columns(for: layout), alignment: .leading, spacing: 20) {
                 ForEach(entries) { entry in
-                    tile(entry, profileID: profileID)
+                    tile(entry)
                 }
             }
         }
@@ -120,28 +148,10 @@ struct MyListScreen: View {
     }
 
     @ViewBuilder
-    private func tile(_ entry: MyListEntry, profileID: UUID) -> some View {
+    private func tile(_ entry: MyListEntry) -> some View {
         switch entry.status {
         case .available(let item):
-            NavigationLink(value: item.route) {
-                PosterCell(title: item.title, url: item.posterURL, caption: item.caption, decoration: item.decoration)
-            }
-            .buttonStyle(.hearthTile)
-            .contextMenu {
-                if let start = item.movieStart {
-                    Button {
-                        play(PlayIntent(itemKey: item.id.rawValue, kind: .movie, title: item.title,
-                                        artworkURL: item.posterURL, startPosition: start.startPosition))
-                    } label: {
-                        Label(start.title, systemImage: "play.fill")
-                    }
-                }
-                Button(role: .destructive) {
-                    remove(entry.favorite)
-                } label: {
-                    Label("Remove from My List", systemImage: "heart.slash")
-                }
-            }
+            LibraryPosterLink(entry: item)
         case .unavailable:
             Button {
                 pendingRemoval = entry.favorite
@@ -163,7 +173,23 @@ struct MyListScreen: View {
                     Label("Remove from My List", systemImage: "heart.slash")
                 }
             }
+        case .pending:
+            EmptyView()
         }
+    }
+
+    /// Titles whose source is still importing on this device.
+    private func pendingNote(count: Int) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(HearthColor.accent)
+            Text("\(count) more from sources still loading on this device")
+                .font(.hearthFootnote)
+                .foregroundStyle(HearthColor.textSecondary)
+        }
+        .frame(minHeight: HearthMetrics.minimumHitTarget)
+        .accessibilityElement(children: .combine)
     }
 
     private func remove(_ favorite: FavoriteRecord) {
@@ -174,33 +200,36 @@ struct MyListScreen: View {
     /// The profile's favorites of one kind, in the list's own order,
     /// resolved against the catalog.
     private func entries(profileID: UUID, kind: FavoriteKind) -> [MyListEntry] {
-        let now = Date.now
-        return store.favorites(profileID: profileID, kind: kind).enumerated().compactMap { index, favorite in
+        let favorites = store.favorites(profileID: profileID, kind: kind)
+        guard !favorites.isEmpty else { return [] }
+        // Shows: the profile's latest episode of each, in one read.
+        let latest: [String: ProgressRecord] = kind == .series
+            ? Dictionary(store.seriesInProgress(profileID: profileID, limit: 1_000).compactMap { row in row.seriesKey.map { ($0, row) } },
+                         uniquingKeysWith: { first, _ in first })
+            : [:]
+        return favorites.enumerated().compactMap { index, favorite in
             let key = ItemKey(rawValue: favorite.itemKey)
             let found: GridEntry?
             switch kind {
             case .movie:
-                found = catalog.movie(key).map { movie in
-                    let progress = store.progress(profileID: profileID, itemKey: movie.key.rawValue)
-                    return GridEntry(id: movie.key, index: index, title: movie.name, posterURL: movie.posterURL,
-                                     caption: movie.year.map(String.init),
-                                     decoration: .movie(addedAt: movie.addedAt, progress: progress, now: now),
-                                     route: .movie(itemKey: movie.key.rawValue), movieStart: MoviePlayState(progress: progress))
-                }
+                found = catalog.movie(key).map { GridEntry(movie: $0, index: index) }
             case .series:
-                found = catalog.seriesItem(key).map { show in
-                    let latest = store.seriesProgress(profileID: profileID, seriesKey: show.key.rawValue)
-                        .max { $0.updatedAt < $1.updatedAt }
-                    return GridEntry(id: show.key, index: index, title: show.name, posterURL: show.posterURL,
-                                     caption: show.year.map(String.init),
-                                     decoration: .series(addedAt: show.addedAt, latest: latest, now: now),
-                                     route: .series(itemKey: show.key.rawValue), movieStart: nil)
-                }
+                found = catalog.seriesItem(key).map { GridEntry(series: $0, index: index, latest: latest[$0.key.rawValue]) }
             case .channel:
                 found = nil
             }
-            return MyListEntry.status(found: found, catalogContains: found != nil || catalog.contains(key))
+            let contains = found != nil || catalog.contains(key)
+            return MyListEntry.status(found: found, catalogContains: contains, sourceImported: isImported(sourceOf: key))
                 .map { MyListEntry(favorite: favorite, status: $0) }
         }
+    }
+
+    /// Whether this device has finished a first import of the key's source.
+    /// A source the catalog doesn't know at all (deleted from the household
+    /// outright) counts as imported, so its leftovers read as unavailable and
+    /// can be removed.
+    private func isImported(sourceOf key: ItemKey) -> Bool {
+        guard let sourceID = key.sourceID, catalog.sources.contains(where: { $0.id == sourceID }) else { return true }
+        return catalog.refreshStates[sourceID]?.catalogRefreshedAt != nil
     }
 }

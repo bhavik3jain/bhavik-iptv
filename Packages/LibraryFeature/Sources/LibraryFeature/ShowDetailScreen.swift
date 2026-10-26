@@ -241,23 +241,7 @@ private struct ShowDetailContent: View {
     @ViewBuilder
     private func episodesSection(grouping: SeasonGrouping, progress: [String: ProgressRecord], target: ShowPlayTarget?) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            if grouping.seasons.count > 1 {
-                SegmentedPills(
-                    String(localized: "Seasons"),
-                    options: grouping.seasonNumbers,
-                    selection: Binding(
-                        get: { season(in: grouping)?.number ?? grouping.seasonNumbers.first ?? 1 },
-                        set: { selectedSeason = $0 }
-                    )
-                ) { number in
-                    grouping.season(number)?.title ?? ""
-                }
-                // Three seasons stretched across a Mac window read as a
-                // toolbar, not a picker.
-                .frame(maxWidth: layout == .sidebar ? 600 : .infinity, alignment: .leading)
-            } else if let only = grouping.seasons.first {
-                SectionHeader(only.title)
-            }
+            seasonPicker(grouping: grouping)
 
             if episodes.isEmpty {
                 emptyEpisodes
@@ -276,6 +260,68 @@ private struct ShowDetailContent: View {
         }
         .padding(.top, layout == .compact ? 0 : 4)
     }
+
+    /// Up to `maxSegmentedSeasons` seasons as segments (mockup 04); a long
+    /// run (soaps, 20-season anime) as a menu, where the open season can't
+    /// scroll out of sight. A refresh behind cached episodes shows as a small
+    /// spinner beside it.
+    @ViewBuilder
+    private func seasonPicker(grouping: SeasonGrouping) -> some View {
+        let selection = Binding(
+            get: { season(in: grouping)?.number ?? grouping.seasonNumbers.first ?? 1 },
+            set: { selectedSeason = $0 }
+        )
+        let isRefreshing = loadState == .loading && !episodes.isEmpty
+        HStack(spacing: 12) {
+            if grouping.seasons.count > Self.maxSegmentedSeasons {
+                Menu {
+                    Picker(String(localized: "Season"), selection: selection) {
+                        ForEach(grouping.seasons) { season in
+                            Text(season.title).tag(season.number)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(grouping.season(selection.wrappedValue)?.title ?? "")
+                            .font(.hearthText(15, weight: .semibold, relativeTo: .body))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .accessibilityHidden(true)
+                    }
+                    .foregroundStyle(HearthColor.textPrimary)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: HearthMetrics.minimumHitTarget)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(HearthColor.surface))
+                    .contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel(Text("Season"))
+                .accessibilityValue(Text(grouping.season(selection.wrappedValue)?.title ?? ""))
+                Spacer(minLength: 0)
+            } else if grouping.seasons.count > 1 {
+                SegmentedPills(String(localized: "Seasons"), options: grouping.seasonNumbers, selection: selection) { number in
+                    grouping.season(number)?.title ?? ""
+                }
+                // Three seasons stretched across a Mac window read as a
+                // toolbar, not a picker.
+                .frame(maxWidth: layout == .sidebar ? 600 : .infinity, alignment: .leading)
+            } else if let only = grouping.seasons.first {
+                SectionHeader(only.title)
+            }
+            if isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(HearthColor.textSecondary)
+                    .accessibilityLabel(Text("Checking for new episodes"))
+            }
+        }
+    }
+
+    private static let maxSegmentedSeasons = 6
 
     @ViewBuilder
     private var emptyEpisodes: some View {

@@ -31,19 +31,59 @@ enum LibraryShelf: String, Sendable {
     }
 }
 
-/// One poster in a grid, resolved once per query so scrolling never touches
-/// the stores.
+/// One poster in a grid: what the catalog says about a title, resolved once
+/// per query so scrolling never touches the catalog. The profile's own state
+/// (progress, My List) is read by the cell itself, see `LibraryPosterLink`.
 struct GridEntry: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case movie
+        /// A show, with the profile's latest episode row from one bulk read
+        /// (`seriesInProgress`) rather than one read per poster.
+        case series(latest: ProgressRecord?)
+    }
+
     var id: ItemKey
     /// Position in the loaded list, for "load the next page" checks.
     var index: Int
     var title: String
     var posterURL: URL?
     var caption: String?
-    var decoration: PosterDecoration
-    var route: HearthRoute
-    /// For a movie's context menu: where Play starts.
-    var movieStart: MoviePlayState?
+    var addedAt: Date?
+    var kind: Kind
+
+    init(movie: CatalogMovie, index: Int) {
+        id = movie.key
+        self.index = index
+        title = movie.name
+        posterURL = movie.posterURL
+        caption = movie.year.map(String.init)
+        addedAt = movie.addedAt
+        kind = .movie
+    }
+
+    init(series: CatalogSeries, index: Int, latest: ProgressRecord?) {
+        id = series.key
+        self.index = index
+        title = series.name
+        posterURL = series.posterURL
+        caption = series.year.map(String.init)
+        addedAt = series.addedAt
+        kind = .series(latest: latest)
+    }
+
+    var route: HearthRoute {
+        switch kind {
+        case .movie: .movie(itemKey: id.rawValue)
+        case .series: .series(itemKey: id.rawValue)
+        }
+    }
+
+    var favoriteKind: FavoriteKind {
+        switch kind {
+        case .movie: .movie
+        case .series: .series
+        }
+    }
 }
 
 /// Movies or shows by category as a poster grid (VOD-1, SER-1): a large
@@ -58,7 +98,6 @@ struct CatalogGridScreen: View {
     @Environment(ProfileSession.self) private var session
     @Environment(\.hearthLayout) private var layout
     @Environment(\.openRoute) private var openRoute
-    @Environment(\.play) private var play
 
     /// Remembered per window, so returning to the tab keeps the view.
     @SceneStorage private var sortRaw: String
@@ -68,7 +107,7 @@ struct CatalogGridScreen: View {
     @State private var entries: [GridEntry] = []
     @State private var chips = CategoryChips(categories: [], sourceNames: [:])
     @State private var hasLoaded = false
-    private let metrics = PosterGridMetrics()
+    private var metrics = PosterGridMetrics()
 
     init(shelf: LibraryShelf) {
         self.shelf = shelf
@@ -95,7 +134,10 @@ struct CatalogGridScreen: View {
     }
 
     private var queryKey: QueryKey {
-        QueryKey(catalogRevision: catalog.revision, storeRevision: store.revision, profileID: session.currentProfile?.id,
+        // A movie cell reads its own progress; only the shows' bulk read of
+        // latest episodes depends on the household store.
+        QueryKey(catalogRevision: catalog.revision, storeRevision: shelf == .shows ? store.revision : 0,
+                 profileID: session.currentProfile?.id,
                  categoryID: storedCategoryID, sort: sort, limit: paging.limit)
     }
 
@@ -230,16 +272,12 @@ struct CatalogGridScreen: View {
     private var grid: some View {
         LazyVGrid(columns: metrics.columns(for: layout), alignment: .leading, spacing: 20) {
             ForEach(entries) { entry in
-                NavigationLink(value: entry.route) {
-                    PosterCell(title: entry.title, url: entry.posterURL, caption: entry.caption, decoration: entry.decoration)
-                }
-                .buttonStyle(.hearthTile)
-                .contextMenu { contextMenu(for: entry) }
-                .onAppear {
-                    if paging.shouldGrow(appearingIndex: entry.index, loaded: entries.count) {
-                        paging.grow()
+                LibraryPosterLink(entry: entry)
+                    .onAppear {
+                        if paging.shouldGrow(appearingIndex: entry.index, loaded: entries.count) {
+                            paging.grow()
+                        }
                     }
-                }
             }
         }
         .overlay(alignment: .bottom) {
@@ -248,38 +286,6 @@ struct CatalogGridScreen: View {
                     .tint(HearthColor.accent)
                     .offset(y: 28)
                     .accessibilityLabel(Text("Loading more"))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func contextMenu(for entry: GridEntry) -> some View {
-        if let start = entry.movieStart {
-            Button {
-                play(PlayIntent(itemKey: entry.id.rawValue, kind: .movie, title: entry.title,
-                                artworkURL: entry.posterURL, startPosition: start.startPosition))
-            } label: {
-                Label(start.title, systemImage: "play.fill")
-            }
-        }
-        if let profile = session.currentProfile, !profile.isGuest {
-            let isFavorite = store.isFavorite(profileID: profile.id, itemKey: entry.id.rawValue)
-            Button {
-                store.toggleFavorite(profileID: profile.id, itemKey: entry.id.rawValue, kind: shelf.favoriteKind)
-            } label: {
-                isFavorite
-                    ? Label("Remove from My List", systemImage: "heart.slash")
-                    : Label("Add to My List", systemImage: "heart")
-            }
-            if let start = entry.movieStart {
-                let watched = start.action == .playAgain
-                Button {
-                    store.setWatched(!watched, profileID: profile.id, itemKey: entry.id.rawValue)
-                } label: {
-                    watched
-                        ? Label("Mark as unwatched", systemImage: "circle")
-                        : Label("Mark as watched", systemImage: "checkmark.circle")
-                }
             }
         }
     }
@@ -299,45 +305,33 @@ struct CatalogGridScreen: View {
                                   sourceCount: catalog.sources.count, states: sourceStates, offeredCount: offered)
     }
 
-    /// Re-queries the catalog and the profile's progress. Synchronous: the
-    /// catalog reads from its main-queue context with a fetch limit.
+    /// Re-queries the catalog (and, for shows, the profile's latest episode
+    /// of each). Synchronous: the catalog reads from its main-queue context
+    /// with a fetch limit. A movie's progress is read by its cell instead.
     private func reload() {
         let sourceNames = Dictionary(catalog.sources.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         chips = CategoryChips(categories: catalog.categories(kind: shelf.contentKind), sourceNames: sourceNames)
         let category = chips.validSelection(storedCategoryID)
-        let profileID = session.currentProfile.flatMap { $0.isGuest ? nil : $0.id }
-        let now = Date.now
 
         switch shelf {
         case .movies:
-            let movies = catalog.movies(categoryID: category, sort: sort, limit: paging.limit)
-            entries = movies.enumerated().map { index, movie in
-                let progress = profileID.flatMap { store.progress(profileID: $0, itemKey: movie.key.rawValue) }
-                return GridEntry(
-                    id: movie.key, index: index, title: movie.name, posterURL: movie.posterURL,
-                    caption: movie.year.map(String.init),
-                    decoration: .movie(addedAt: movie.addedAt, progress: progress, now: now),
-                    route: .movie(itemKey: movie.key.rawValue),
-                    movieStart: MoviePlayState(progress: progress)
-                )
-            }
+            entries = catalog.movies(categoryID: category, sort: sort, limit: paging.limit)
+                .enumerated()
+                .map { GridEntry(movie: $1, index: $0) }
         case .shows:
-            let shows = catalog.series(categoryID: category, sort: sort, limit: paging.limit)
-            // One read for every show in progress, rather than one per poster.
-            let latest = profileID.map { id in
-                Dictionary(store.seriesInProgress(profileID: id, limit: 500).compactMap { row in row.seriesKey.map { ($0, row) } },
-                           uniquingKeysWith: { first, _ in first })
-            } ?? [:]
-            entries = shows.enumerated().map { index, show in
-                GridEntry(
-                    id: show.key, index: index, title: show.name, posterURL: show.posterURL,
-                    caption: show.year.map(String.init),
-                    decoration: .series(addedAt: show.addedAt, latest: latest[show.key.rawValue], now: now),
-                    route: .series(itemKey: show.key.rawValue),
-                    movieStart: nil
-                )
-            }
+            let latest = latestEpisodeBySeries()
+            entries = catalog.series(categoryID: category, sort: sort, limit: paging.limit)
+                .enumerated()
+                .map { GridEntry(series: $1, index: $0, latest: latest[$1.key.rawValue]) }
         }
         hasLoaded = true
+    }
+
+    /// The profile's latest episode row of every show it has touched, in one
+    /// read rather than one per poster. Empty for a Guest.
+    private func latestEpisodeBySeries() -> [String: ProgressRecord] {
+        guard let profile = session.currentProfile, !profile.isGuest else { return [:] }
+        let rows = store.seriesInProgress(profileID: profile.id, limit: 1_000)
+        return Dictionary(rows.compactMap { row in row.seriesKey.map { ($0, row) } }, uniquingKeysWith: { first, _ in first })
     }
 }
