@@ -17,7 +17,7 @@ public struct LiveTVView: View {
     public init() {}
 
     public var body: some View {
-        Text("Live TV").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        LiveTVScreen()
     }
 }
 
@@ -30,16 +30,30 @@ public struct ChannelDetailView: View {
     }
 
     public var body: some View {
-        Text("Channel").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        ChannelDetailScreen(itemKey: ItemKey(rawValue: itemKey))
     }
 }
 
 /// Two or four live tiles, one with sound; a tile the stream limits rule out
 /// says why (PLY-9, MAC-5; mockup 07). Shown from Live TV's toolbar.
+///
+/// On its own it draws its "Live TV  Guide | Multi-view" title bar, and
+/// Guide dismisses it; inside Live TV's sidebar layout the toolbar has that
+/// control, and Guide switches back in place.
 public struct MultiViewScreen: View {
-    public init() {}
+    let showsModePicker: Bool
+    let onShowGuide: (() -> Void)?
+
+    public init() {
+        self.init(showsModePicker: true, onShowGuide: nil)
+    }
+
+    init(showsModePicker: Bool, onShowGuide: (() -> Void)?) {
+        self.showsModePicker = showsModePicker
+        self.onShowGuide = onShowGuide
+    }
 
     public var body: some View {
-        Text("Multi-view").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        MultiViewContent(showsModePicker: showsModePicker, onShowGuide: onShowGuide)
     }
 }

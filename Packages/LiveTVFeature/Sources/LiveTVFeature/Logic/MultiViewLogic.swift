@@ -89,6 +89,13 @@ enum SourceLimits {
         }
         return maxStreams > 0 ? maxStreams : nil
     }
+
+    /// The owner's setting before they change it, for a source the household
+    /// store hasn't synced yet: one stream per MAC for a Stalker portal,
+    /// unlimited otherwise (Xtream reports its own).
+    static func defaultMaxStreams(kindRaw: String) -> Int {
+        kindRaw == "stalker" ? 1 : 0
+    }
 }
 
 /// What an empty tile and the channel picker say about stream limits.

@@ -140,3 +140,22 @@ enum ChipMemory {
         profileID?.uuidString ?? "none"
     }
 }
+
+/// The channels a chip lists, read from the catalog: the screen's guide and
+/// list, and multi-view's channel picker, ask this rather than each
+/// repeating the switch.
+enum ChipChannels {
+    /// - Parameter favoriteKeys: The profile's favorite item keys, in its
+    ///   own order (FAV-1); empty for a Guest.
+    @MainActor
+    static func channels(for chip: LiveChip, favoriteKeys: [String], catalog: CatalogService) -> [CatalogChannel] {
+        switch chip {
+        case .favorites:
+            catalog.channels(keys: ChannelOrdering.favoriteKeys(favoriteKeys))
+        case .all:
+            catalog.channels()
+        case .category(let ids, _):
+            ChannelOrdering.merge(ids.map { catalog.channels(categoryID: $0) })
+        }
+    }
+}
