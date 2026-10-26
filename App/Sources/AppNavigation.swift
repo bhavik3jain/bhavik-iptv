@@ -232,5 +232,9 @@ struct RouteSheet: View {
             navigation.open(route, gateShowing: false)
         })
         .hearthScreenBackground()
+        #if os(macOS)
+        // A Mac sheet takes its content's size; give the page room.
+        .frame(minWidth: 720, idealWidth: 820, minHeight: 560, idealHeight: 680)
+        #endif
     }
 }
