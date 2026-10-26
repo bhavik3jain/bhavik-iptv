@@ -155,6 +155,11 @@ struct LiveTVScreen: View {
         .onChange(of: presentationRaw) { _, _ in
             selection = nil
         }
+        .onChange(of: profileID) { _, _ in
+            // Another profile has its own remembered chip.
+            pickedChipID = nil
+            selection = nil
+        }
     }
 
     /// The phone's header: the large title, and round buttons for the list
@@ -162,7 +167,7 @@ struct LiveTVScreen: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
             Text("Live TV")
-                .font(.hearthTitle)
+                .font(.hearthLargeTitle)
                 .tracking(HearthMetrics.titleTracking)
                 .foregroundStyle(HearthColor.textPrimary)
                 .accessibilityAddTraits(.isHeader)
@@ -369,19 +374,10 @@ struct LiveTVScreen: View {
     private func reload() {
         let favoriteRecords = keepsFavorites ? (profileID.map { store.favorites(profileID: $0, kind: .channel) } ?? []) : []
         let favoriteKeys = favoriteRecords.map(\.itemKey)
-        let favorites = catalog.channels(keys: ChannelOrdering.favoriteKeys(favoriteKeys))
         let chips = LiveChip.chips(categories: catalog.categories(kind: .live), showsFavorites: keepsFavorites)
         let remembered = pickedChipID ?? ChipMemory.remembered(in: chipMemory, profileID: profileID)
-        let chip = LiveChip.resolve(rememberedID: remembered, chips: chips, hasFavorites: !favorites.isEmpty)
-        let channels: [CatalogChannel]
-        switch chip {
-        case .favorites:
-            channels = favorites
-        case .all:
-            channels = catalog.channels()
-        case .category(let ids, _):
-            channels = ChannelOrdering.merge(ids.map { catalog.channels(categoryID: $0) })
-        }
+        let chip = LiveChip.resolve(rememberedID: remembered, chips: chips, hasFavorites: !favoriteKeys.isEmpty)
+        let channels = ChipChannels.channels(for: chip, favoriteKeys: favoriteKeys, catalog: catalog)
         content = LiveContent(
             chips: chips,
             chip: chip,

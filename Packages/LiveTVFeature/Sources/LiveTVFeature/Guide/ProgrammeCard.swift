@@ -68,6 +68,13 @@ struct ProgrammeCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let reason {
+                Label(reason, systemImage: "clock.badge.xmark")
+                    .font(.hearthFootnote)
+                    .foregroundStyle(HearthColor.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if !actions.isEmpty {
                 HStack(spacing: 10) {
                     if let primary = actions.primary {
@@ -115,17 +122,19 @@ struct ProgrammeCard: View {
         return ProgrammeText.cardSubtitle(channelNumber: channel.number, channelName: channel.name, start: programme.start, end: programme.end, now: now)
     }
 
-    /// The summary, or a line saying why there's nothing to play.
+    /// The programme's summary, when the guide has one.
     private var detail: String? {
-        if let summary = programme?.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
-            return summary
-        }
-        if phase == .aired, actions.primary == nil {
-            return channel.hasArchive
-                ? String(localized: "This programme has left the channel's archive.")
-                : String(localized: "This channel doesn't keep past programmes.")
-        }
-        return nil
+        guard let summary = programme?.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty else { return nil }
+        return summary
+    }
+
+    /// Why there's nothing to play, for an aired programme the archive
+    /// doesn't have.
+    private var reason: String? {
+        guard phase == .aired, actions.primary == nil else { return nil }
+        return channel.hasArchive
+            ? String(localized: "This programme has left the channel's archive.")
+            : String(localized: "This channel doesn't keep past programmes.")
     }
 
     private func button(_ action: ProgrammeAction, isPrimary: Bool) -> some View {

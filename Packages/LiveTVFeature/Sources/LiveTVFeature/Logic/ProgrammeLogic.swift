@@ -55,22 +55,19 @@ struct ProgrammeActions: Hashable, Sendable {
     var secondary: ProgrammeAction?
 
     /// - On now: Watch live, and From the start when the channel keeps an
-    ///   archive (the mockup's card).
-    /// - Aired and in the archive: Play from the start, and Watch live for
-    ///   the channel as it is now.
-    /// - Aired and gone, or upcoming: details, and Watch live for the
-    ///   channel as it is now, as the secondary.
+    ///   archive (the mockup's card, LIV-3, LIV-4).
+    /// - Aired and in the archive: Play from the start (LIV-4).
+    /// - Aired and gone, or upcoming: details only — the card says why
+    ///   there's nothing to play.
     /// - No guide: Watch live.
     static func make(phase: ProgrammePhase?, channelHasArchive: Bool, isPlayable: Bool) -> ProgrammeActions {
         switch phase {
         case .onAir:
-            ProgrammeActions(primary: .watchLive, secondary: channelHasArchive ? .fromTheStart : nil)
+            ProgrammeActions(primary: .watchLive, secondary: channelHasArchive && isPlayable ? .fromTheStart : nil)
         case .aired:
-            isPlayable
-                ? ProgrammeActions(primary: .playFromStart, secondary: .watchLive)
-                : ProgrammeActions(primary: nil, secondary: .watchLive)
+            ProgrammeActions(primary: isPlayable ? .playFromStart : nil, secondary: nil)
         case .upcoming:
-            ProgrammeActions(primary: nil, secondary: .watchLive)
+            ProgrammeActions(primary: nil, secondary: nil)
         case nil:
             ProgrammeActions(primary: .watchLive, secondary: nil)
         }
