@@ -100,6 +100,13 @@ private struct SearchScreen: View {
             fieldFocused = true
         }
         .onChange(of: query) { _, _ in expanded = [] }
+        // The app may hand over a new query to a screen already showing (the
+        // Mac sidebar's search submitted again): take it, as typing would.
+        .onChange(of: initialQuery) { _, newValue in
+            guard !newValue.isEmpty, newValue != query else { return }
+            query = newValue
+            remember(newValue)
+        }
     }
 
     private var horizontalPadding: CGFloat {
