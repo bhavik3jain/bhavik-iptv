@@ -7,16 +7,18 @@ import SwiftUI
 /// circle so they read as a pair.
 struct HomeHeader<ProfileSwitcher: View>: View {
     let profileSwitcher: ProfileSwitcher
-    /// No switcher here (the Mac keeps it in the sidebar): say where we are.
-    let showsTitle: Bool
+    /// Nil shows the switcher. Otherwise the switcher lives elsewhere (the
+    /// Mac's sidebar) and this greeting stands in its place.
+    let greeting: String?
 
     var body: some View {
         HStack(spacing: 8) {
-            if showsTitle {
-                Text("Home", bundle: .module)
+            if let greeting {
+                Text(greeting)
                     .font(.hearthLargeTitle)
                     .foregroundStyle(HearthColor.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
                     .accessibilityAddTraits(.isHeader)
             } else {
                 profileSwitcher

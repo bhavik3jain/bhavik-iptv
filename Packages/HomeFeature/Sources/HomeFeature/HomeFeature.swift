@@ -39,7 +39,7 @@ public struct HomeView<ProfileSwitcher: View>: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: HearthMetrics.sectionSpacing) {
-                HomeHeader(profileSwitcher: profileSwitcher, showsTitle: ProfileSwitcher.self == EmptyView.self)
+                HomeHeader(profileSwitcher: profileSwitcher, greeting: greeting)
                     .padding(.horizontal, gutter)
                 content
             }
@@ -49,9 +49,9 @@ public struct HomeView<ProfileSwitcher: View>: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
             .frame(maxWidth: .infinity)
         }
-        .scrollIndicators(.automatic, axes: .vertical)
         .hearthScreenBackground()
         .navigationTitle(Text("Home", bundle: .module))
+        .inlineNavigationTitle()
         // The phone's header is the mockup's own row, not a navigation bar
         // (`.automatic` is the navigation bar on iOS). In the sidebar layout
         // the bar stays: on iPad and iPhone Duo it holds the sidebar button,
@@ -63,6 +63,13 @@ public struct HomeView<ProfileSwitcher: View>: View {
     }
 
     private var gutter: CGFloat { HomeLayoutMetrics.gutter(layout: layout, width: contentWidth) }
+
+    /// Nil while the app passes a real switcher; with `EmptyView`, the
+    /// profile's greeting.
+    private var greeting: String? {
+        guard ProfileSwitcher.self == EmptyView.self else { return nil }
+        return HomeGreeting.text(name: session.currentProfile?.name, at: .now)
+    }
 
     // MARK: Content
 

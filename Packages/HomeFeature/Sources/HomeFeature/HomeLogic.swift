@@ -349,6 +349,25 @@ enum SyncChipContent {
     }
 }
 
+/// The header's text where the profile switcher would be (the Mac keeps the
+/// switcher in its sidebar). The window's toolbar already says "Home", so the
+/// header greets the profile instead of repeating it.
+enum HomeGreeting {
+    static func text(name: String?, at date: Date, calendar: Calendar = .current) -> String {
+        guard let name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
+            return String(localized: "Home", bundle: .module)
+        }
+        switch calendar.component(.hour, from: date) {
+        case 5..<12:
+            return String(localized: "Good morning, \(name)", bundle: .module)
+        case 12..<17:
+            return String(localized: "Good afternoon, \(name)", bundle: .module)
+        default:
+            return String(localized: "Good evening, \(name)", bundle: .module)
+        }
+    }
+}
+
 // MARK: - Layout maths
 
 /// Widths for the two layouts. `.sidebar` covers a 466-pt iPhone Duo inner
@@ -380,5 +399,27 @@ enum PosterGridFit {
     /// At most `rows` full rows, so a 20-movie list doesn't become a page.
     static func visibleCount(total: Int, columns: Int, rows: Int) -> Int {
         min(total, max(columns, 1) * max(rows, 1))
+    }
+}
+
+/// Fixed-width cards (favorite channels) wrapped into rows. Past `maxRows`
+/// the last slot is kept for a "more in the guide" card, so the grid never
+/// grows a third row.
+enum CardGrid {
+    static func rows<Item>(_ items: [Item], columns: Int, maxRows: Int) -> (rows: [[Item]], hiddenCount: Int) {
+        let columns = max(columns, 1)
+        let capacity = columns * max(maxRows, 1)
+        let shown = items.count > capacity ? capacity - 1 : items.count
+        let visible = Array(items.prefix(shown))
+        let rows = stride(from: 0, to: visible.count, by: columns).map { start in
+            Array(visible[start..<min(start + columns, visible.count)])
+        }
+        return (rows, items.count - shown)
+    }
+
+    /// The sidebar wraps favorites once three cards fit side by side; with
+    /// fewer (iPhone Duo open) a sideways row wastes less of the width.
+    static func wrapsFavorites(layout: HearthLayout, columns: Int) -> Bool {
+        layout == .sidebar && columns >= 3
     }
 }
