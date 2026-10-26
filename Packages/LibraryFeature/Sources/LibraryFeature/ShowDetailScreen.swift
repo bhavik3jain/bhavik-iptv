@@ -178,29 +178,45 @@ private struct ShowDetailContent: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionLabel(String(localized: "In this household"), style: .card)
                 ForEach(lines) { line in
-                    HStack(spacing: 10) {
-                        if let person = profiles[line.id] {
-                            AvatarTile(name: person.name, palette: person.avatarColor, symbol: person.avatarSymbol, size: 26)
-                        }
-                        Text(verbatim: "\(line.name) · \(line.episodeCode)")
-                            .font(.hearthText(14, relativeTo: .callout))
-                            .foregroundStyle(HearthColor.textPrimary)
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
-                        Text(line.trailing)
-                            .font(.hearthMono(12, relativeTo: .caption))
-                            .foregroundStyle(HearthColor.textSecondary)
-                            .lineLimit(1)
-                    }
-                    .frame(minHeight: 30)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(Text(line.spokenText))
+                    householdRow(line, person: profiles[line.id])
+                        .frame(minHeight: 30)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(line.spokenText))
                 }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(HearthColor.surface))
             .accessibilityElement(children: .contain)
+        }
+    }
+
+    /// "Anya · S3 E1 ……… ahead of you" on one line where it fits; in a narrow
+    /// column (the opened iPhone Duo's detail pane, large text) the trailing
+    /// text drops under the name rather than truncating either.
+    private func householdRow(_ line: HouseholdShowLine, person: ProfileRecord?) -> some View {
+        let avatar = person.map { AvatarTile(name: $0.name, palette: $0.avatarColor, symbol: $0.avatarSymbol, size: 26) }
+        let name = Text(verbatim: "\(line.name) · \(line.episodeCode)")
+            .font(.hearthText(14, relativeTo: .callout))
+            .foregroundStyle(HearthColor.textPrimary)
+        let trailing = Text(line.trailing)
+            .font(.hearthMono(12, relativeTo: .caption))
+            .foregroundStyle(HearthColor.textSecondary)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                avatar
+                name.fixedSize()
+                Spacer(minLength: 12)
+                trailing.fixedSize()
+            }
+            HStack(alignment: .top, spacing: 10) {
+                avatar
+                VStack(alignment: .leading, spacing: 2) {
+                    name.fixedSize(horizontal: false, vertical: true)
+                    trailing.fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
         }
     }
 
@@ -236,6 +252,9 @@ private struct ShowDetailContent: View {
                 ) { number in
                     grouping.season(number)?.title ?? ""
                 }
+                // Three seasons stretched across a Mac window read as a
+                // toolbar, not a picker.
+                .frame(maxWidth: layout == .sidebar ? 600 : .infinity, alignment: .leading)
             } else if let only = grouping.seasons.first {
                 SectionHeader(only.title)
             }

@@ -46,8 +46,10 @@ struct DetailScaffold<Actions: View, Aside: View, Content: View>: View {
             DetailTitleBlock(title: title, metaParts: metaParts, onArtwork: true)
                 .padding(.horizontal, HearthMetrics.screenPadding)
                 // Room for the artwork above the title, as in mockup 04; the
-                // bars' height comes on top of this through the safe area.
-                .padding(.top, 150)
+                // status and navigation bars' height comes on top of this
+                // through the safe area, putting the title near the
+                // mockup's 245 pt.
+                .padding(.top, 136)
                 .padding(.bottom, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(alignment: .bottom) {
@@ -84,7 +86,10 @@ struct DetailScaffold<Actions: View, Aside: View, Content: View>: View {
                     }
                 VStack(alignment: .leading, spacing: 18) {
                     DetailTitleBlock(title: title, metaParts: metaParts, onArtwork: false)
+                    // A phone-width button row: stretched across a Mac
+                    // column, "Resume" turns into a banner.
                     actions
+                        .frame(maxWidth: 460, alignment: .leading)
                     aside
                 }
                 .frame(maxWidth: 640, alignment: .leading)
