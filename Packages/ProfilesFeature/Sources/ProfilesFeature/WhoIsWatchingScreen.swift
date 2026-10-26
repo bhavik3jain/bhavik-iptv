@@ -48,24 +48,36 @@ struct WhoIsWatchingScreen: View {
         let _ = store.revision
         GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 32) {
+                // Spacing is explicit rather than the stack's, so the flexible
+                // spacers don't each add a fixed gap of their own: on a short
+                // screen (iPhone Duo opened) those gaps alone pushed the
+                // household card below the fold.
+                VStack(spacing: 0) {
                     header
-                    if isSidebar { Spacer(minLength: 0) }
+                    // Extra height goes above the title and above the card on
+                    // the phone (the card settles towards the bottom, as in
+                    // the mockup); in the sidebar layout it centres the block
+                    // under the header.
+                    Spacer(minLength: metrics.gap)
                     titleBlock
-                    if store.hasHousehold {
-                        profileGrid
-                    } else {
-                        waitingForHousehold
+                    Group {
+                        if store.hasHousehold {
+                            profileGrid
+                        } else {
+                            waitingForHousehold
+                        }
                     }
-                    if !isSidebar { Spacer(minLength: 0) }
+                    .padding(.top, metrics.gap)
+                    if !isSidebar { Spacer(minLength: metrics.gap + 4) }
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         householdCard(now: context.date)
                     }
-                    if isSidebar { Spacer(minLength: 0) }
+                    .padding(.top, isSidebar ? metrics.gap + 4 : 0)
+                    if isSidebar { Spacer(minLength: metrics.gap) }
                 }
                 .padding(.horizontal, HearthMetrics.screenPadding)
-                .padding(.top, isSidebar ? 28 : 16)
-                .padding(.bottom, 24)
+                .padding(.top, metrics.isShort ? 12 : (isSidebar ? 28 : 16))
+                .padding(.bottom, metrics.isShort ? 16 : 24)
                 .frame(maxWidth: isSidebar ? GateTileMetrics.sidebarColumnWidth : .infinity)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
@@ -165,7 +177,7 @@ struct WhoIsWatchingScreen: View {
 
     private var profileGrid: some View {
         let columns = [GridItem(.adaptive(minimum: avatarSize, maximum: avatarSize + 44), spacing: GateTileMetrics.spacing, alignment: .top)]
-        return LazyVGrid(columns: columns, spacing: 26) {
+        return LazyVGrid(columns: columns, spacing: metrics.isShort ? 18 : 26) {
             ForEach(store.profiles) { profile in
                 profileButton(profile)
             }
@@ -396,23 +408,37 @@ private struct ManageHouseholdButtonStyle: ButtonStyle {
     }
 }
 
-/// How big the gate's avatars are: the mockup's 96 pt on the phone, bigger in
-/// the sidebar layout, and never so big that a row holds fewer than three
-/// (a narrow phone, or iPhone Duo folded) or that the grid and the household
-/// card stop fitting a short screen (iPhone Duo opened is about 466 × 678).
+/// How big the gate's avatars are and how far apart its sections sit: the
+/// mockup's 96 pt avatars and roomy gaps on the phone, bigger avatars in the
+/// sidebar layout, and never so big that a row holds fewer than three (a
+/// narrow phone, or iPhone Duo folded) or that two rows of profiles and the
+/// household card stop fitting a short screen (iPhone Duo opened is about
+/// 466 × 678 pt).
 struct GateTileMetrics: Equatable {
     static let spacing: CGFloat = 18
     /// The readable column the sidebar layout centres everything in.
     static let sidebarColumnWidth: CGFloat = 640
     static let minimumAvatar: CGFloat = 72
+    /// Below this height the gate tightens: smaller avatars, smaller gaps.
+    static let shortHeight: CGFloat = 720
 
     var avatarSize: CGFloat
+    /// The least space between the header, the title, the grid and the card.
+    var gap: CGFloat
+    var isShort: Bool
 
     init(container: CGSize, isSidebar: Bool) {
+        isShort = container.height < Self.shortHeight
         let columnWidth = isSidebar ? min(container.width, Self.sidebarColumnWidth) : container.width
         let contentWidth = max(0, columnWidth - 2 * HearthMetrics.screenPadding)
-        let preferred: CGFloat = isSidebar ? (container.height < 760 ? 100 : 112) : 96
+        let preferred: CGFloat = switch (isSidebar, isShort) {
+        case (true, true): 84
+        case (true, false): container.height < 820 ? 100 : 112
+        case (false, true): 84
+        case (false, false): 96
+        }
         let threeAcross = ((contentWidth - 2 * Self.spacing) / 3).rounded(.down)
         avatarSize = max(Self.minimumAvatar, min(preferred, threeAcross))
+        gap = isShort ? 18 : 28
     }
 }
