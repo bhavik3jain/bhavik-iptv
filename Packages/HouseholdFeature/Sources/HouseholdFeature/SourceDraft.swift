@@ -42,7 +42,8 @@ struct SourceDraft: Hashable {
         macAddress = MACAddress.normalized(login.macAddress) ?? login.macAddress
         username = login.username
         password = login.password
-        playlistURL = login.playlistURL
+        // Today's path to a playlist file: saving heals a stale one.
+        playlistURL = PlaylistFile.resolved(login.playlistURL)
         guideURL = login.guideURL
         serialNumber = login.serialNumber
         deviceID = login.deviceID
@@ -211,6 +212,19 @@ enum PlaylistFile {
             try manager.copyItem(at: picked, to: destination)
             return destination
         }.value
+    }
+
+    /// A saved playlist link as it reads on this device now. iOS moves an
+    /// app's container when the app is updated or reinstalled, so the
+    /// absolute `file://` URL saved with the source goes stale while the copy
+    /// itself stays in Application Support/Playlists under the same name: a
+    /// file URL in a folder of that name is re-rooted at today's folder.
+    /// Web links, and files anywhere else, come back as they are.
+    static func resolved(_ stored: String) -> String {
+        guard let url = URL(string: stored.trimmingCharacters(in: .whitespacesAndNewlines)), url.isFileURL,
+              !url.lastPathComponent.isEmpty,
+              url.deletingLastPathComponent().lastPathComponent == directory.lastPathComponent else { return stored }
+        return directory.appending(path: url.lastPathComponent).absoluteString
     }
 }
 

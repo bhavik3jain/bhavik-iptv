@@ -34,7 +34,9 @@ public enum SourceMapping {
             username: trimmed(login.username),
             // Passwords keep their spaces: a provider may really use one.
             password: login.password,
-            playlistURL: known ? trimmed(login.playlistURL) : "",
+            // A playlist file's path as it is on this device today (iOS
+            // moves the app's container on update).
+            playlistURL: known ? PlaylistFile.resolved(trimmed(login.playlistURL)) : "",
             guideURL: trimmed(login.guideURL),
             serialNumber: trimmed(login.serialNumber),
             deviceID: trimmed(login.deviceID),

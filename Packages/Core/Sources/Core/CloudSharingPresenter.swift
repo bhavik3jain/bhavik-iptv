@@ -10,8 +10,9 @@ import AppKit
 // The system iCloud sharing UI for an existing share (HH-2), behind one
 // modifier so the Household feature needs no `#if os(...)`. iOS has
 // `UICloudSharingController`; the Mac has the Cloud Sharing service
-// (`NSSharingService(named: .cloudSharing)`) driven by an item provider that
-// carries the share. Both are handed a share that is already saved with a
+// (`NSSharingService(named: .cloudSharing)`, or `NSSharingServicePicker` when
+// the service declines) driven by an item provider that carries the share.
+// Both are handed a share that is already saved with a
 // link — HouseholdKit's `prepareShare()` makes it off the main thread with
 // every wait bounded — never the deprecated preparation-handler form, which
 // ran `share()` inside the controller with no way to say why it spun
@@ -177,30 +178,73 @@ private struct CloudSharingAnchor: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject {
         var onDismiss: @MainActor () -> Void = {}
-        private weak var anchor: NSView?
+        fileprivate weak var anchor: NSView?
         /// The service while its window is up; it is released when it closes.
-        private var service: NSSharingService?
+        fileprivate var service: NSSharingService?
+        /// The fallback picker while it is up.
+        fileprivate var picker: NSSharingServicePicker?
         private var presentedID: UUID?
 
         func present(_ invitation: CloudShareInvitation, from anchor: NSView) {
             guard presentedID != invitation.id else { return }
             presentedID = invitation.id
-            guard service == nil, let service = NSSharingService(named: .cloudSharing) else { return }
+            guard service == nil, picker == nil else { return }
             let provider = NSItemProvider()
             provider.registerCloudKitShare(invitation.share, container: invitation.container)
-            guard service.canPerform(withItems: [provider]) else { return }
             self.anchor = anchor
+            if let service = NSSharingService(named: .cloudSharing), service.canPerform(withItems: [provider]) {
+                self.service = service
+                service.delegate = self
+                service.perform(withItems: [provider])
+            } else if anchor.window != nil {
+                // The Cloud Sharing service declined the item directly; the
+                // share picker offers the same people-and-permissions UI
+                // among its entries, so Invite never silently does nothing.
+                let picker = NSSharingServicePicker(items: [provider])
+                picker.delegate = self
+                self.picker = picker
+                picker.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+            } else {
+                onDismiss()
+            }
+        }
+
+        fileprivate func finish() {
+            service = nil
+            picker = nil
+            onDismiss()
+        }
+    }
+}
+
+extension CloudSharingAnchor.Coordinator: @preconcurrency NSSharingServicePickerDelegate {
+    /// The chosen service reports back here, so its completion closes up.
+    func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, delegateFor sharingService: NSSharingService) -> (any NSSharingServiceDelegate)? {
+        self
+    }
+
+    func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?) {
+        picker = nil
+        if let service {
             self.service = service
-            service.delegate = self
-            service.perform(withItems: [provider])
+        } else {
+            finish()
         }
     }
 }
 
 extension CloudSharingAnchor.Coordinator: @preconcurrency NSCloudSharingServiceDelegate {
     func sharingService(_ sharingService: NSSharingService, didCompleteForItems items: [Any], error: (any Error)?) {
-        service = nil
-        onDismiss()
+        finish()
+    }
+
+    // A service other than Cloud Sharing, picked from the fallback picker.
+    func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {
+        finish()
+    }
+
+    func sharingService(_ sharingService: NSSharingService, didFailToShareItems items: [Any], error: any Error) {
+        finish()
     }
 
     func options(for cloudKitSharingService: NSSharingService, share provider: NSItemProvider) -> NSSharingService.CloudKitOptions {
