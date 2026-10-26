@@ -270,14 +270,7 @@ struct HouseholdShowLine: Equatable, Identifiable {
     /// The current profile's line: time left in the episode, or "watched".
     static func mine(id: UUID, progress: ProgressRecord) -> HouseholdShowLine? {
         guard let season = progress.season, let episode = progress.episode else { return nil }
-        let trailing: String
-        if progress.watched {
-            trailing = String(localized: "watched", comment: "In this household: your latest episode is finished")
-        } else if progress.duration > 0, progress.remaining >= 60 {
-            trailing = LibraryFormat.remaining(progress.remaining)
-        } else {
-            trailing = String(localized: "started", comment: "In this household: an episode begun with no known length")
-        }
+        let trailing = state(of: progress)
         return HouseholdShowLine(id: id, name: String(localized: "You", comment: "In this household: the current profile"),
                                  season: season, episode: episode, trailing: trailing, isCurrentProfile: true)
     }
@@ -294,14 +287,26 @@ struct HouseholdShowLine: Equatable, Identifiable {
             case .behind: trailing = String(localized: "behind you", comment: "In this household: another profile is earlier in the show")
             case .sameEpisode: trailing = String(localized: "same episode", comment: "In this household: another profile is on your episode")
             }
-        } else if progress.watched {
-            trailing = String(localized: "watched", comment: "In this household: their latest episode is finished")
-        } else if progress.duration > 0, progress.remaining >= 60 {
-            trailing = LibraryFormat.remaining(progress.remaining)
         } else {
-            trailing = String(localized: "started")
+            trailing = state(of: progress)
         }
         return HouseholdShowLine(id: id, name: name, season: season, episode: episode, trailing: trailing, isCurrentProfile: false)
+    }
+
+    /// How far into their latest episode someone is: "watched", "31 min
+    /// left", "up next" (not really begun, or just marked unwatched), or
+    /// "started" when the provider never said how long it runs.
+    static func state(of progress: ProgressRecord) -> String {
+        if progress.watched {
+            return String(localized: "watched", comment: "In this household: the latest episode is finished")
+        }
+        if progress.position < MoviePlayState.minimumResume {
+            return String(localized: "up next", comment: "In this household: the latest episode is not begun yet")
+        }
+        if progress.duration > 0, progress.remaining >= 60 {
+            return LibraryFormat.remaining(progress.remaining)
+        }
+        return String(localized: "started", comment: "In this household: an episode begun with no known length")
     }
 
     /// "Anya, season 3, episode 1, ahead of you".
