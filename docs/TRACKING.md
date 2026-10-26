@@ -13,7 +13,7 @@ Specs live in [docs/handoff](handoff/README.md): the [handoff](handoff/docs/1-Ha
 | Branch | `build/v0.1-foundation` (main has no commits yet) |
 | Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 |
 | Bundle ids | `com.bhavikjain.hearth` (release), `com.bhavikjain.hearth.dev` (Debug) · iCloud `iCloud.com.bhavikjain.hearth` · team Y4M3S6H4NK |
-| Builds | Scaffold builds for iOS Simulator and macOS (unsigned) |
+| Builds | The whole app builds clean for iOS Simulator and macOS; runs on iPhone 18 Pro, iPhone Duo (iOS 27.1) and the Mac with the demo provider |
 | TestFlight | Not yet uploaded — local `scripts/testflight.sh` with Xcode's Apple ID (owner signing in, creating the app record) |
 
 ## Blocked on the owner
@@ -54,20 +54,20 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | 6 | CI and release | `.github/`, `scripts/`, `README.md` | Build, release | ☑ merged |
 | 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☑ merged |
 | 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☑ merged |
-| 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ◐ |
+| 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ☑ merged |
 | 10 | Library feature | `Packages/LibraryFeature` | VOD-1…3, SER-1…3, FAV-3 | ☑ merged |
 | 11 | Household feature | `Packages/HouseholdFeature` | HH-2…6, SRC-1…5, SRC-8/9 | ☑ merged |
-| 12 | Search and Settings | `Packages/SearchFeature`, `Packages/SettingsFeature` | SRCH-1…3, MAC-4 | ◐ |
-| 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ◐ |
-| 14 | Integration | whole tree | both platforms build, tests pass, runs on iPhone / Duo / Mac | ☐ |
+| 12 | Search and Settings | `Packages/SearchFeature`, `Packages/SettingsFeature` | SRCH-1…3, MAC-4 | ☑ merged |
+| 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ☑ merged |
+| 14 | Integration | whole tree | both platforms build, tests pass, runs on iPhone / Duo / Mac | ◐ runs on iPhone, Duo, Mac |
 | 15 | TestFlight | signing, upload | Distribution | ⚠ owner |
 
 ## Next up
 
-1. Phase A (parallel): workstreams 1–6.
-2. Phase B (parallel): workstreams 7–13, against the finished kits.
-3. Phase C: integration build and fixes, run on iPhone, iPhone Duo and Mac simulators with `-StubProvider YES -InMemoryStores YES`.
-4. TestFlight once the owner's items above are done.
+1. Owner: add the real Stalker portal in the simulator (Household → Add a portal; Test, then Save) and report what the Test step and the guide show. Run the app with `scripts/run-sim.sh "iPhone 18 Pro"` minus `-InMemoryStores` so the source persists (or build from Xcode).
+2. TestFlight: archive + export verified locally (`scripts/testflight.sh all --no-upload`); upload once the App Store Connect app record exists. Before relying on iCloud in TestFlight, run `scripts/cloudkit/init-schema.sh` and Deploy Schema Changes to Production.
+3. Tune AVPlayer's 6 s start timeout against the real provider (Apple's 4K demo stream fell back to VLCKit in the simulator before playing).
+4. Tests (deferred by the owner): kit suites exist; HouseholdKit's suite hung on the merged branch; features have none.
 
 ## Session log
 
@@ -92,3 +92,6 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Phase B second run (`wf_a1f2311c-a6e`) hit the usage limit after ~19 min. Six features left WIP commits (worktrees `wf_a1f2311c-a6e-1`…`-6`: Profiles, Home, Live TV, Library, Household, Search+Settings); the app shell never started (seventh in a six-agent queue). Resumed 2026-10-26 01:20 as `wf_6a88bfbc-e62`: features continue in their worktrees, the app shell starts first in its own worktree `phase-b-appshell`.
 - Phase B third run: Profiles, Home, Library and Household finished and are merged; both apps build clean with them. Live TV (3 WIP commits, ~3,800 lines), Search + Settings (5, ~2,500) and the app shell (1, ~1,900) were cut off again and resumed at 06:15 (`wf_6a88bfbc-e62`, same run id, finished agents cached).
 - Follow-ups from the finished features (for later): HouseholdKit bulk `progress(profileID:)` read and a public "this device's playback" check; participant pending/accepted status; CatalogKit backdrop artwork and movie director / series cast fields; M3U file playlists stored relative to Application Support; My List reordering UI; the app shell must use HouseholdFeature's public `SourceMapping` (it has a private copy).
+- Phase B finished (fourth run): Live TV, Search + Settings and the app shell merged. The whole app builds clean on both platforms.
+- First real run, demo provider, in-memory stores: Who's watching (mockup 01), Home (02), the Live TV guide and programme card (03) and the player all work on the iPhone 18 Pro; live playback of Apple's sample stream plays (after the AVPlayer→VLCKit start-timeout fallback). On the iPhone Duo opened (landscape, regular width) the tab bar becomes the Duo's vertical bar with Search/Household/Settings, Home's favorites wrap into a grid. The Mac app launches (ad hoc, no iCloud) with no errors or crash reports; owner to eyeball it (computer-use access was declined).
+- Fixed: sidebar-only tabs pushed My List behind "More" on the iPhone (now regular-width only); the demo seed skipped Who's watching.
