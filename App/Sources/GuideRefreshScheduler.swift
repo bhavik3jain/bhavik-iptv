@@ -29,8 +29,12 @@ enum GuideRefreshScheduler {
         #if os(iOS)
         // A second registration of one identifier throws too.
         guard !isRegistered else { return }
-        isRegistered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { task in
-            // `using: .main` delivers on the main queue.
+        isRegistered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { @Sendable task in
+            // `using: .main` delivers on the main queue; `@Sendable` keeps Swift 6
+            // from treating this as a main-actor closure it would check at runtime.
+            // BGTask isn't Sendable; it is used only on the main queue it
+            // arrived on.
+            nonisolated(unsafe) let task = task
             MainActor.assumeIsolated { run(task, model: model) }
         }
         #endif

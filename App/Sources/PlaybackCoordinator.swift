@@ -14,6 +14,9 @@ final class PlayerSession: Identifiable {
     /// The window that asked; its root presents the player (iOS) and any
     /// prompt. Nil when a launch argument started it.
     let sceneID: UUID?
+    /// The window's layout when it asked: the multi-view button is offered
+    /// only in the sidebar layout.
+    let layout: HearthLayout
     let profileID: UUID
     let isGuest: Bool
     let model: PlayerModel
@@ -24,8 +27,9 @@ final class PlayerSession: Identifiable {
     var heartbeat: Task<Void, Never>?
     var keepAlive: Task<Void, Never>?
 
-    init(sceneID: UUID?, profile: ProfileRecord, model: PlayerModel, items: PlayerItemFactory) {
+    init(sceneID: UUID?, layout: HearthLayout, profile: ProfileRecord, model: PlayerModel, items: PlayerItemFactory) {
         self.sceneID = sceneID
+        self.layout = layout
         self.profileID = profile.id
         self.isGuest = profile.isGuest
         self.model = model
@@ -266,7 +270,7 @@ final class PlaybackCoordinator {
         })
         // PLY-6: the profile's audio and subtitle languages.
         model.setPreferredLanguages(audio: profile.audioLanguage, subtitle: profile.subtitleLanguage)
-        let playerSession = PlayerSession(sceneID: sceneID, profile: profile, model: model, items: factory)
+        let playerSession = PlayerSession(sceneID: sceneID, layout: layout, profile: profile, model: model, items: factory)
         model.onEvent = { [weak self, weak playerSession] event in
             guard let self, let playerSession else { return }
             self.handle(event, in: playerSession)
@@ -284,7 +288,7 @@ final class PlaybackCoordinator {
             }
         }
         current = playerSession
-        updateTryAnotherSource(playerSession)
+        updateTryAnotherSource(playerSession, itemID: prepared.item.id)
 
         if prepared.startsFromBeginning {
             // Opens live, then at once the programme from its start: the
@@ -298,15 +302,16 @@ final class PlaybackCoordinator {
     /// PLY-4's last step: after the retry failed too, the same channel on
     /// another source, when the household has one. Re-read on every channel
     /// change, since the channel is what decides it.
-    private func updateTryAnotherSource(_ playerSession: PlayerSession) {
-        let context = playerSession.items.context(for: playerSession.model.item.id)
+    private func updateTryAnotherSource(_ playerSession: PlayerSession, itemID: String) {
+        let context = playerSession.items.context(for: itemID)
         guard let channel = context?.channel, let alternative = alternatives(to: channel).first else {
             playerSession.model.onTryAnotherSource = nil
             return
         }
         let sceneID = playerSession.sceneID
+        let layout = playerSession.layout
         playerSession.model.onTryAnotherSource = { [weak self] in
-            self?.play(Self.liveIntent(for: alternative, queue: []), sceneID: sceneID, layout: .compact)
+            self?.play(Self.liveIntent(for: alternative, queue: []), sceneID: sceneID, layout: layout)
         }
     }
 
@@ -361,8 +366,9 @@ final class PlaybackCoordinator {
         case .failed(_, let message):
             logger.notice("Playback failed: \(message, privacy: .private)")
 
-        case .switched:
-            updateTryAnotherSource(playerSession)
+        case .switched(_, let toItemID):
+            // Sent before the model's item changes, so the new id comes from the event.
+            updateTryAnotherSource(playerSession, itemID: toItemID)
         }
     }
 
