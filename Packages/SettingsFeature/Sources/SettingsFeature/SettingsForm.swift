@@ -22,7 +22,11 @@ struct SettingsForm: View {
                     PlaybackSection(profile: profile)
                 }
             }
-            DeviceSection()
+            // A Guest is a visitor: it doesn't get to decide what this device
+            // opens into (PRF-2, PRF-5).
+            if !session.isGuest {
+                DeviceSection()
+            }
             SourcesSection()
             CloudSection()
             StorageSection()

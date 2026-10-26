@@ -56,6 +56,7 @@ private struct SearchScreen: View {
     @State private var query: String
     @State private var outcome: SearchOutcome?
     @State private var expanded: Set<SearchSection> = []
+    @State private var hasAppeared = false
     @FocusState private var fieldFocused: Bool
 
     init(initialQuery: String, recentsKey: String, keepsRecents: Bool) {
@@ -86,6 +87,13 @@ private struct SearchScreen: View {
             await runSearch()
         }
         .task {
+            // First arrival only: coming back from a movie or channel pushed
+            // from the results shouldn't raise the keyboard again.
+            guard !hasAppeared else { return }
+            hasAppeared = true
+            // A query handed over by the Mac sidebar's "Search everything"
+            // was submitted there: it counts as a search.
+            if !initialQuery.isEmpty { remember(initialQuery) }
             // Focused on arrival (SRCH-1), after the push or tab switch has
             // settled: focusing during the transition is dropped on iOS.
             try? await Task.sleep(for: .milliseconds(350))

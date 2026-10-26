@@ -48,6 +48,10 @@ public struct SettingsView: View {
             }
         }
         .tint(HearthColor.accent)
+        // Hearth is dark only. The Mac's Settings window is its own scene and
+        // doesn't inherit the main window's scheme, so ask for it here too;
+        // otherwise its pickers and toggles would draw in light mode.
+        .preferredColorScheme(.dark)
         .frame(idealWidth: 560, idealHeight: 700)
     }
 }
