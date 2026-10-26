@@ -98,11 +98,11 @@ if [[ ${REAL:-NO} == YES ]]; then
 else
     args=(-StubProvider YES -InMemoryStores YES "$@")
 fi
-echo "Launching with ${args[*]}"
+echo "Launching with ${args[*]-(no arguments)}"
 if [[ ${CONSOLE:-NO} == YES ]]; then
     echo "(attached: Ctrl-C quits the app)"
-    xcrun simctl launch --console-pty --terminate-running-process "$udid" "$bundle_id" "${args[@]}"
+    xcrun simctl launch --console-pty --terminate-running-process "$udid" "$bundle_id" ${args[@]+"${args[@]}"}
 else
-    xcrun simctl launch --terminate-running-process "$udid" "$bundle_id" "${args[@]}" > /dev/null
+    xcrun simctl launch --terminate-running-process "$udid" "$bundle_id" ${args[@]+"${args[@]}"} > /dev/null
     echo "Running. CONSOLE=YES keeps the terminal attached to the app's output."
 fi
