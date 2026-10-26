@@ -56,8 +56,8 @@ struct SearchResultsList: View {
         let total = groups.count(of: section)
         let isExpanded = expanded.contains(section)
         let visible = SearchResultLimits.visibleCount(total: total, section: section, layout: layout, expanded: isExpanded)
-        ResultSection(section: section, count: total) {
-            GroupedCard {
+        ResultSection(section: section, count: total, isCapped: groups.isCapped(section)) {
+            GroupedCard(footer: capNote(section, visible: visible)) {
                 switch section {
                 case .channels:
                     let queue = groups.channels.map(\.key.rawValue)
@@ -84,7 +84,7 @@ struct SearchResultsList: View {
         let total = groups.count(of: section)
         let isExpanded = expanded.contains(section)
         let visible = SearchResultLimits.visibleCount(total: total, section: section, layout: layout, expanded: isExpanded)
-        ResultSection(section: section, count: total) {
+        ResultSection(section: section, count: total, isCapped: groups.isCapped(section)) {
             if layout == .sidebar {
                 VStack(alignment: .leading, spacing: HearthMetrics.itemSpacing) {
                     LazyVGrid(
@@ -102,6 +102,9 @@ struct SearchResultsList: View {
                         }
                         .buttonStyle(.hearthSecondary(shape: .rounded, size: .small))
                     }
+                    if let note = capNote(section, visible: visible) {
+                        CapNote(text: note)
+                    }
                 }
             } else {
                 ScrollView(.horizontal) {
@@ -116,8 +119,18 @@ struct SearchResultsList: View {
                 // Posters run to the screen's edges; the section's padding
                 // is the scroll content's inset instead.
                 .padding(.horizontal, -HearthMetrics.screenPadding)
+                if let note = capNote(section, visible: visible) {
+                    CapNote(text: note)
+                }
             }
         }
+    }
+
+    /// "Showing the first 50…" under a group the catalog cut short, once all
+    /// of what it returned is on screen.
+    private func capNote(_ section: SearchSection, visible: Int) -> String? {
+        guard groups.isCapped(section), visible >= groups.count(of: section) else { return nil }
+        return String(localized: "Showing the first \(SearchResultLimits.perGroup). Type more of the name to narrow it down.", bundle: .module, comment: "Under a search group that hit its limit")
     }
 
     @ViewBuilder private func posters(_ section: SearchSection, limit: Int) -> some View {
@@ -152,16 +165,32 @@ struct SearchResultsList: View {
     }
 }
 
+/// The note under a poster group the catalog cut short, styled like a
+/// grouped card's footer.
+private struct CapNote: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.hearthFootnote)
+            .foregroundStyle(HearthColor.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
+    }
+}
+
 /// A group's title ("Channels") with its count, and its content.
 private struct ResultSection<Content: View>: View {
     let section: SearchSection
     let count: Int
+    /// The catalog stopped at its limit: the count reads "50+".
+    let isCapped: Bool
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: HearthMetrics.itemSpacing) {
             SectionHeader(section.title) {
-                Text(verbatim: count.formatted())
+                Text(verbatim: isCapped ? "\(count.formatted())+" : count.formatted())
                     .font(.hearthMono(13, relativeTo: .footnote))
                     .foregroundStyle(HearthColor.textTertiary)
                     .accessibilityLabel(Text(section.spokenCount(count)))

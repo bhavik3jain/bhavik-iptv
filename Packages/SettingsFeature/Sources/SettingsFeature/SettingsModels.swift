@@ -101,6 +101,15 @@ enum AlwaysOpenRule {
     static func needsPIN(for profile: ProfileRecord, currentProfileID: UUID?) -> Bool {
         profile.hasPIN && profile.id != currentProfileID
     }
+
+    /// The profiles the picker offers, in the household's order. Not the
+    /// Guest: it keeps nothing and is cleared on leaving (PRF-5), so opening
+    /// into it at every launch would leave this device with no history and
+    /// no favorites. A Guest already chosen (on an older build) still shows,
+    /// so the picker never reads blank while it is in effect.
+    static func choices(_ profiles: [ProfileRecord], current alwaysOpenID: UUID?) -> [ProfileRecord] {
+        profiles.filter { !$0.isGuest || $0.id == alwaysOpenID }
+    }
 }
 
 // MARK: - Sync and refresh wording

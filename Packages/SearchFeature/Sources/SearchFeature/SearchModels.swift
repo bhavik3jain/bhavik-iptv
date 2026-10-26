@@ -124,6 +124,13 @@ struct SearchResultGroups: Hashable, Sendable {
         }
     }
 
+    /// True when the catalog stopped at its per-group limit, so there may be
+    /// more matches than the group lists. The screen then says to keep
+    /// typing rather than implying "Show all" really is all.
+    func isCapped(_ section: SearchSection) -> Bool {
+        count(of: section) >= SearchResultLimits.perGroup
+    }
+
     /// Guide hits as the On TV section lists them: what's on now (a tap
     /// plays it) above what's coming, each part in a predictable order.
     /// Programmes that ended while the screen sat open drop out unless the
@@ -149,6 +156,11 @@ struct SearchResultGroups: Hashable, Sendable {
 /// group short so all four fit in a scroll or two; the sidebar layout has the
 /// room for more.
 enum SearchResultLimits {
+    /// How many hits per group the catalog is asked for. A big portal has
+    /// thousands of channels with "HD" or "News" in the name; past fifty the
+    /// person is better served by a longer query than by a longer list.
+    static let perGroup = 50
+
     static func collapsedCount(for section: SearchSection, layout: HearthLayout) -> Int {
         switch (section, layout) {
         case (.channels, .compact), (.onTV, .compact): 5

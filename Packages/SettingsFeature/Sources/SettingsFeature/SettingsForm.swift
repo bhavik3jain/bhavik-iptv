@@ -162,7 +162,7 @@ private struct DeviceSection: View {
         Section {
             Picker(selection: alwaysOpen) {
                 Text("Ask who's watching", bundle: .module).tag(UUID?.none)
-                ForEach(store.profiles) { profile in
+                ForEach(AlwaysOpenRule.choices(store.profiles, current: session.alwaysOpenProfileID)) { profile in
                     Text(Self.choiceName(profile)).tag(Optional(profile.id))
                 }
             } label: {

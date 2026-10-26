@@ -48,6 +48,11 @@ public struct SettingsView: View {
             }
         }
         .tint(HearthColor.accent)
+        // The Mac's Settings window is its own scene, outside the main
+        // window's root where the app sets the layout; derive it here too so
+        // Acknowledgements lays out for a window, not a phone. Inside a sheet
+        // this reads the sheet's own size class, which is what it should use.
+        .hearthLayoutFromSizeClass()
         // Hearth is dark only. The Mac's Settings window is its own scene and
         // doesn't inherit the main window's scheme, so ask for it here too;
         // otherwise its pickers and toggles would draw in light mode.

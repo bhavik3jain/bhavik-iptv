@@ -208,7 +208,7 @@ private struct SearchScreen: View {
             if Task.isCancelled { return }
         }
         let now = Date.now
-        let results = catalog.search(query, now: now)
+        let results = catalog.search(query, now: now, limitPerGroup: SearchResultLimits.perGroup)
         outcome = SearchOutcome(normalizedQuery: normalized, groups: SearchResultGroups(results, now: now))
 
         // Stalker portals have no full guide: ask for the short guide of the
