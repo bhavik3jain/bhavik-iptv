@@ -15,6 +15,8 @@ enum AppTab: String, Hashable, CaseIterable, Sendable {
 
     /// The five tabs of the phone's tab bar (mockup 02).
     static let primary: [AppTab] = [.home, .live, .movies, .shows, .myList]
+    /// The Mac sidebar's sections, in ⌘1–⌘6 order (mockup 07).
+    static let macSections: [AppTab] = [.home, .live, .movies, .shows, .myList, .downloads]
 
     var title: String {
         switch self {

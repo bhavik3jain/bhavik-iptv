@@ -12,6 +12,7 @@ import SwiftUI
 /// Who may open which route: Kids can't reach Household or Settings (PRF-4),
 /// guests have no Household either, and the editors need a member who
 /// manages (SRC-8). Features hide the links; this stops a stale link.
+@MainActor
 enum RouteAccess {
     static func allows(_ route: HearthRoute, session: ProfileSession) -> Bool {
         switch route {
@@ -54,6 +55,9 @@ final class AppNavigation {
     var sheet: Sheet?
     /// The Mac sidebar's search, once submitted.
     var submittedSearch = ""
+    /// The Mac opens Settings in its own window (MAC-4) rather than a sheet;
+    /// its root sets this to SwiftUI's `openSettings`.
+    @ObservationIgnored var showSettings: (() -> Void)?
 
     func path(for tab: AppTab) -> Binding<[HearthRoute]> {
         Binding(
@@ -95,7 +99,7 @@ final class AppNavigation {
             case .settings:
                 kept.removeLast()
                 paths[tab] = kept
-                sheet = Sheet(root: .settings)
+                openSettings()
                 return
             default:
                 break
@@ -120,7 +124,7 @@ final class AppNavigation {
             paths[.live] = []
             selection = .live
         case .settings:
-            sheet = Sheet(root: .settings)
+            openSettings()
         default:
             if gateShowing {
                 sheet = Sheet(root: route)
@@ -129,6 +133,14 @@ final class AppNavigation {
             } else {
                 paths[selection, default: []].append(route)
             }
+        }
+    }
+
+    private func openSettings() {
+        if let showSettings {
+            showSettings()
+        } else {
+            sheet = Sheet(root: .settings)
         }
     }
 

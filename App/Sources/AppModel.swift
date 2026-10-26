@@ -6,6 +6,11 @@ import HouseholdKit
 import Observation
 import os
 import SourceKit
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// The services every screen reads, created once for the app.
 @MainActor
@@ -42,7 +47,7 @@ final class AppModel {
     }
 
     /// The one iCloud container, as in the entitlements.
-    static let containerIdentifier = "iCloud.com.bhavikjain.hearth"
+    nonisolated static let containerIdentifier = "iCloud.com.bhavikjain.hearth"
 
     let launch: LaunchOptions
     private(set) var phase: Phase = .starting
@@ -55,12 +60,11 @@ final class AppModel {
     var pendingLaunchRoute: HearthRoute?
     /// What accepting a household invitation said, when it failed (HH-3).
     var shareAcceptError: String?
-    /// iCloud account state for the "this device only" note.
-    private(set) var iCloudSignedIn: Bool?
 
     @ObservationIgnored private var observers: [Task<Void, Never>] = []
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var refreshedAt: [UUID: Date] = [:]
+    @ObservationIgnored private var terminationObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var readyWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored private let logger = Logger(subsystem: "com.bhavikjain.hearth", category: "app")
 
@@ -81,6 +85,11 @@ final class AppModel {
         }
         #endif
         openStores()
+    }
+
+    /// The schema ritual ended; its screen says how.
+    func schemaInitializerFinished(_ outcome: String) {
+        phase = .schemaInitializer(outcome)
     }
 
     /// "Try again" on the failure screen.
@@ -115,7 +124,6 @@ final class AppModel {
     /// a local household straight away, and it persists across launches.
     private func prepare() async {
         guard let services else { return }
-        checkICloudAccount()
         let names = HouseholdNaming.names(fullName: DeviceOwner.fullName)
         await services.store.prepareHousehold(defaultName: names.household, firstProfileName: names.profile)
         services.session.restore()
@@ -129,6 +137,20 @@ final class AppModel {
         #endif
         refreshIfStale()
         GuideRefreshScheduler.schedule()
+        observeTermination()
+    }
+
+    /// Quitting stops the stream properly: its who's-watching row goes and
+    /// its progress is saved (the Mac rarely passes through "background").
+    private func observeTermination() {
+        #if os(macOS)
+        let name = NSApplication.willTerminateNotification
+        #else
+        let name = UIApplication.willTerminateNotification
+        #endif
+        terminationObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.services?.playback.closeCurrent() }
+        }
     }
 
     /// Returns once the services are ready (the background refresh task can
@@ -136,14 +158,6 @@ final class AppModel {
     func waitUntilReady() async {
         if phase == .ready { return }
         await withCheckedContinuation { readyWaiters.append($0) }
-    }
-
-    private func checkICloudAccount() {
-        guard !launch.inMemoryStores else { iCloudSignedIn = false; return }
-        Task { [weak self] in
-            let status = try? await CKContainer(identifier: Self.containerIdentifier).accountStatus()
-            self?.iCloudSignedIn = status == .available
-        }
     }
 
     // MARK: Keeping the services in step
@@ -156,7 +170,7 @@ final class AppModel {
         observers = [
             // The household's sources, as SourceKit configurations. An edited
             // login gets a fresh client; a new source is imported (SRC-6).
-            observeChanges(of: { SourceMapping.configurations(from: store.sources) }) { configurations in
+            observeChanges(of: { AppSourceMapping.configurations(from: store.sources) }) { configurations in
                 catalog.setSources(configurations)
             },
             // An edit or a sync may rename, change or delete the profile in

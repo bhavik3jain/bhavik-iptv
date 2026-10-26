@@ -16,7 +16,7 @@ import SourceKit
 
 /// HouseholdKit never imports SourceKit (it stores the kind as a string), so
 /// the app maps each household source to the configuration CatalogKit reads.
-enum SourceMapping {
+enum AppSourceMapping {
     /// The household's sources as SourceKit configurations, in the
     /// household's order. A source of a kind this build doesn't know (written
     /// by a newer build on another device) is left out rather than guessed.

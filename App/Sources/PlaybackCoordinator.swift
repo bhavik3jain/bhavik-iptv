@@ -111,9 +111,17 @@ final class PlaybackCoordinator {
         self.session = session
     }
 
-    /// The player this window presents, if any.
+    /// Whether something addressed to `target` belongs to this window: its
+    /// own, or — when a launch argument started it with no window — the
+    /// window used last.
+    func targets(_ target: UUID?, scene sceneID: UUID) -> Bool {
+        target == sceneID || (target == nil && lastSceneID == sceneID)
+    }
+
+    /// The player this window presents, if any (iOS; the Mac's player has a
+    /// window of its own).
     func presentedSession(forScene sceneID: UUID) -> PlayerSession? {
-        guard openPlayerWindow == nil, let current, current.sceneID == sceneID || current.sceneID == nil && lastSceneID == sceneID else { return nil }
+        guard openPlayerWindow == nil, let current, targets(current.sceneID, scene: sceneID) else { return nil }
         return current
     }
 
