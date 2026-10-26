@@ -31,12 +31,14 @@ enum CategoryGrouping {
     /// - Parameters:
     ///   - sources: The household's sources in order, with their names.
     ///   - query: Narrows to names containing it, ignoring case and accents.
+    ///   - adultKeys: Categories the household marked adult by hand, on top
+    ///     of the catalog's name match (`CatalogCategory.isAdult`).
     ///   - excludingAdult: The Kids list leaves adult categories out: they
     ///     never show on a Kids profile, so offering them would only mislead.
-    static func groups(_ categories: [CatalogCategory], sources: [(id: UUID, name: String)], query: String, excludingAdult: Bool) -> [CategoryGroup] {
+    static func groups(_ categories: [CatalogCategory], sources: [(id: UUID, name: String)], query: String, adultKeys: Set<String> = [], excludingAdult: Bool) -> [CategoryGroup] {
         let needle = SearchKey.normalize(query)
         let kept = categories.filter { category in
-            if excludingAdult, category.isAdult { return false }
+            if excludingAdult, isAdult(category, adultKeys: adultKeys) { return false }
             return needle.isEmpty || SearchKey.normalize(category.name).contains(needle)
         }
         let bySource = Dictionary(grouping: kept, by: \.sourceID)
@@ -57,6 +59,11 @@ enum CategoryGrouping {
             ))
         }
         return groups
+    }
+
+    /// Adult by the catalog's name match or by the household's own list.
+    static func isAdult(_ category: CatalogCategory, adultKeys: Set<String>) -> Bool {
+        category.isAdult || adultKeys.contains(category.id)
     }
 
     private static func sorted(_ list: [CatalogCategory]) -> [CatalogCategory] {
@@ -90,8 +97,11 @@ struct CategoryRulesView: View {
 
     var body: some View {
         let _ = catalog.revision
+        let _ = store.revision
         let all = categories(for: tab)
-        let groups = CategoryGrouping.groups(all, sources: sourceNames, query: query, excludingAdult: mode == .allowed)
+        let groups = CategoryGrouping.groups(
+            all, sources: sourceNames, query: query, adultKeys: store.household.adultCategoryKeys, excludingAdult: mode == .allowed
+        )
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
                 Text(introduction)
@@ -201,7 +211,7 @@ struct CategoryRulesView: View {
                     .foregroundStyle(isOn && mode == .hidden ? HearthColor.textSecondary : HearthColor.textPrimary)
                     .strikethrough(isOn && mode == .hidden, color: HearthColor.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if category.isAdult {
+                if CategoryGrouping.isAdult(category, adultKeys: store.household.adultCategoryKeys) {
                     StatusChip(String(localized: "Adult", bundle: .module))
                 }
             }

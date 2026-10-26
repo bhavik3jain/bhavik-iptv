@@ -21,6 +21,8 @@ struct WhoIsWatchingScreen: View {
     @Environment(\.hearthLayout) private var layout
 
     @State private var isEditing = false
+    /// The screen's size, for `GateTileMetrics`.
+    @State private var containerSize = CGSize(width: 390, height: 844)
     @State private var editorTarget: EditorTarget?
     @State private var pinRequest: PINFlowRequest?
 
@@ -31,7 +33,11 @@ struct WhoIsWatchingScreen: View {
     }
 
     private var isSidebar: Bool { layout == .sidebar }
-    private var avatarSize: CGFloat { isSidebar ? 112 : 96 }
+    private var metrics: GateTileMetrics {
+        GateTileMetrics(container: containerSize, isSidebar: isSidebar)
+    }
+
+    private var avatarSize: CGFloat { metrics.avatarSize }
 
     /// Managing is the member's right (owner or manager), checked here with
     /// whatever profile is open: a Kids or Guest profile never manages.
@@ -60,10 +66,12 @@ struct WhoIsWatchingScreen: View {
                 .padding(.horizontal, HearthMetrics.screenPadding)
                 .padding(.top, isSidebar ? 28 : 16)
                 .padding(.bottom, 24)
-                .frame(maxWidth: isSidebar ? 640 : .infinity)
+                .frame(maxWidth: isSidebar ? GateTileMetrics.sidebarColumnWidth : .infinity)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .onAppear { containerSize = proxy.size }
+            .onChange(of: proxy.size) { _, size in containerSize = size }
         }
         .hearthScreenBackground()
         .sheet(item: $editorTarget) { target in
@@ -156,7 +164,7 @@ struct WhoIsWatchingScreen: View {
     // MARK: Profiles
 
     private var profileGrid: some View {
-        let columns = [GridItem(.adaptive(minimum: avatarSize, maximum: avatarSize + 44), spacing: 18, alignment: .top)]
+        let columns = [GridItem(.adaptive(minimum: avatarSize, maximum: avatarSize + 44), spacing: GateTileMetrics.spacing, alignment: .top)]
         return LazyVGrid(columns: columns, spacing: 26) {
             ForEach(store.profiles) { profile in
                 profileButton(profile)
@@ -385,5 +393,26 @@ private struct ManageHouseholdButtonStyle: ButtonStyle {
                     .fill(configuration.isPressed ? HearthColor.surfaceRaised : HearthColor.surfaceButton)
             )
             .contentShape(Rectangle())
+    }
+}
+
+/// How big the gate's avatars are: the mockup's 96 pt on the phone, bigger in
+/// the sidebar layout, and never so big that a row holds fewer than three
+/// (a narrow phone, or iPhone Duo folded) or that the grid and the household
+/// card stop fitting a short screen (iPhone Duo opened is about 466 × 678).
+struct GateTileMetrics: Equatable {
+    static let spacing: CGFloat = 18
+    /// The readable column the sidebar layout centres everything in.
+    static let sidebarColumnWidth: CGFloat = 640
+    static let minimumAvatar: CGFloat = 72
+
+    var avatarSize: CGFloat
+
+    init(container: CGSize, isSidebar: Bool) {
+        let columnWidth = isSidebar ? min(container.width, Self.sidebarColumnWidth) : container.width
+        let contentWidth = max(0, columnWidth - 2 * HearthMetrics.screenPadding)
+        let preferred: CGFloat = isSidebar ? (container.height < 760 ? 100 : 112) : 96
+        let threeAcross = ((contentWidth - 2 * Self.spacing) / 3).rounded(.down)
+        avatarSize = max(Self.minimumAvatar, min(preferred, threeAcross))
     }
 }

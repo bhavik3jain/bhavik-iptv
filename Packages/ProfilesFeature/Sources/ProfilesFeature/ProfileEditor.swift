@@ -55,6 +55,11 @@ struct ProfileEditorScreen: View {
     @State private var confirmsDelete = false
     @State private var confirmsGuest = false
     @State private var saveError: String?
+    /// "Open at launch on this device" (PRF-2). A setting of this device's,
+    /// not of the profile, so it lives outside the draft; staged the same way
+    /// and applied on Save.
+    @State private var opensHere = false
+    @State private var initialOpensHere = false
     @FocusState private var nameIsFocused: Bool
 
     private var editedID: UUID? { profileID ?? createdID }
@@ -64,7 +69,7 @@ struct ProfileEditorScreen: View {
     }
 
     private var canManage: Bool { session.canManageHousehold }
-    private var isDirty: Bool { draft != initialDraft }
+    private var isDirty: Bool { draft != initialDraft || opensHere != initialOpensHere }
 
     var body: some View {
         let _ = store.revision
@@ -152,6 +157,8 @@ struct ProfileEditorScreen: View {
             nameIsFocused = true
         }
         initialDraft = draft
+        opensHere = profileID != nil && session.alwaysOpenProfileID == profileID
+        initialOpensHere = opensHere
     }
 
     // MARK: Form
@@ -173,6 +180,7 @@ struct ProfileEditorScreen: View {
                     }
                     seesSection(draft)
                     languagesSection(draft)
+                    deviceSection(draft.wrappedValue)
                     deleteSection
                 }
                 .disabled(!canManage)
@@ -516,6 +524,17 @@ struct ProfileEditorScreen: View {
         .frame(minHeight: 48)
     }
 
+    // MARK: This device (PRF-2)
+
+    private func deviceSection(_ draft: ProfileDraft) -> some View {
+        let footer = draft.willHavePIN(hadPIN: original?.hasPIN ?? false)
+            ? String(localized: "Skips “Who’s watching?” on this device, without asking for the PIN. Other devices still ask.", bundle: .module)
+            : String(localized: "Skips “Who’s watching?” on this device. Other devices still ask.", bundle: .module)
+        return GroupedCard(title: String(localized: "This device", bundle: .module), footer: footer) {
+            CardToggleRow(String(localized: "Open this profile at launch", bundle: .module), isOn: $opensHere)
+        }
+    }
+
     // MARK: Delete
 
     @ViewBuilder
@@ -615,6 +634,11 @@ struct ProfileEditorScreen: View {
             saveError = error
             return
         }
+        if opensHere {
+            session.alwaysOpenProfileID = id
+        } else if session.alwaysOpenProfileID == id {
+            session.alwaysOpenProfileID = nil
+        }
         // The open profile may be the one edited: its new kind, PIN or rules
         // take effect now.
         session.refresh()
@@ -625,6 +649,9 @@ struct ProfileEditorScreen: View {
     private func delete() {
         guard let original else { return }
         store.deleteProfile(id: original.id)
+        if session.alwaysOpenProfileID == original.id {
+            session.alwaysOpenProfileID = nil
+        }
         session.refresh()
         isFinished = true
         dismiss()

@@ -61,6 +61,7 @@ struct PINPad<Header: View>: View {
         }
         .focusable()
         .focused($hasKeyboardFocus)
+        .defaultFocus($hasKeyboardFocus, true)
         .focusEffectDisabled()
         .onKeyPress(characters: .decimalDigits, phases: .down) { press in
             guard let digit = press.characters.first, digit.isASCII else { return .ignored }
