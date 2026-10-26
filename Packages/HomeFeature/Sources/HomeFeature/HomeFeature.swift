@@ -28,6 +28,9 @@ public struct HomeView<ProfileSwitcher: View>: View {
     @Environment(\.hearthLayout) private var layout
 
     @State private var snapshot = HomeSnapshot.empty
+    /// False until the first read: before it, an empty snapshot would flash
+    /// "Pin your favorite channels" at a profile that has some.
+    @State private var hasLoaded = false
     /// The width Home lays out in (after the readable-width cap), for the
     /// gutters, the sidebar hero and how many poster columns fit.
     @State private var contentWidth: CGFloat = 0
@@ -89,7 +92,7 @@ public struct HomeView<ProfileSwitcher: View>: View {
                 .padding(.horizontal, gutter)
                 .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length * 0.7 }
         case .ready:
-            sections
+            if hasLoaded { sections }
         }
     }
 
@@ -110,7 +113,9 @@ public struct HomeView<ProfileSwitcher: View>: View {
         FavoriteChannelsSection(
             channels: snapshot.favoriteChannels,
             catalogRevision: catalog.revision,
+            layout: layout,
             gutter: gutter,
+            contentWidth: contentWidth,
             profileID: canKeepLists ? profileID : nil,
             isGuest: session.isGuest,
             syncStatus: store.syncStatus
@@ -167,6 +172,7 @@ public struct HomeView<ProfileSwitcher: View>: View {
     private func reload() {
         let next = HomeLoader(catalog: catalog, store: store).load(profileID: session.currentProfile?.id)
         if next != snapshot { snapshot = next }
+        hasLoaded = true
     }
 
     /// SER-2 needs each show's episodes; a show this device never opened has
@@ -189,11 +195,12 @@ public struct HomeView<ProfileSwitcher: View>: View {
     }
 
     /// Stalker portals have no full guide, so the favorites' now-playing
-    /// comes from the short guide (CatalogKit throttles it per channel).
-    /// Asked again every quarter hour while Home is on screen, so the cards
-    /// don't run out of programmes.
+    /// comes from the short guide (CatalogKit throttles it per channel, and
+    /// skips sources with a full guide). Asked again every quarter hour while
+    /// Home is on screen, so the cards don't run out of programmes. Only the
+    /// favorites the row can show: a portal isn't asked about the rest.
     private func keepFavoriteGuidesFresh() async {
-        let channels = snapshot.favoriteChannels
+        let channels = Array(snapshot.favoriteChannels.prefix(FavoriteChannelsSection.rowLimit))
         guard !channels.isEmpty else { return }
         while !Task.isCancelled {
             await catalog.loadShortGuide(for: channels)

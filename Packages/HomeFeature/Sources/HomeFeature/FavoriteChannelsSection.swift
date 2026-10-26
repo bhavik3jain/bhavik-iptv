@@ -8,12 +8,19 @@ import SwiftUI
 /// channel live, with the favorites as the channel up/down list; its menu
 /// unfavorites it or opens the channel's page. Logos fall back to monogram
 /// tiles (LIV-7, inside `ChannelNowCard`).
+///
+/// On the phone the cards are the mockup's sideways row. In the sidebar
+/// layout, once three or more fit across, they wrap into two rows instead:
+/// a wide screen of one sideways row hides most favorites off the edge.
 struct FavoriteChannelsSection: View {
     let channels: [CatalogChannel]
     /// Passed so a guide landing (which bumps it) redraws the cards' now
     /// playing even when the favorites themselves didn't change.
     let catalogRevision: Int
+    let layout: HearthLayout
     let gutter: CGFloat
+    /// The width Home lays out in, for how many cards fit across.
+    let contentWidth: CGFloat
     /// The profile whose favorites the menu may change; nil for a Guest.
     let profileID: UUID?
     let isGuest: Bool
@@ -21,6 +28,11 @@ struct FavoriteChannelsSection: View {
 
     /// The row stops here and hands over to the guide, which lists them all.
     static let rowLimit = 40
+    /// The sidebar grid's height cap; the last slot then points to the guide.
+    static let gridRows = 2
+
+    /// `ChannelNowCard`'s own width, so the grid can work out how many fit.
+    @ScaledMetric(relativeTo: .footnote) private var cardWidth: CGFloat = 164
 
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
@@ -35,7 +47,7 @@ struct FavoriteChannelsSection: View {
                 FavoritesHintCard(isGuest: isGuest)
                     .padding(.horizontal, gutter)
             } else {
-                row
+                cards
             }
         }
     }
@@ -62,37 +74,75 @@ struct FavoriteChannelsSection: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text("Open the guide", bundle: .module))
+            // The visible word stays the label (Voice Control users say what
+            // they see); the hint says where it goes.
+            .accessibilityHint(Text("Opens the guide", bundle: .module))
         }
     }
 
-    // MARK: Row
+    // MARK: Cards
 
-    private var row: some View {
-        let shown = Array(channels.prefix(Self.rowLimit))
+    private var columns: Int {
+        PosterGridFit.columns(width: max(contentWidth - gutter * 2, 0), minimum: cardWidth, spacing: HearthMetrics.itemSpacing)
+    }
+
+    private var cards: some View {
         let queue = channels.map(\.key.rawValue)
+        let columns = columns
+        let wraps = CardGrid.wrapsFavorites(layout: layout, columns: columns)
         // Once a minute the programme on air may have changed; the cards'
         // own bars move between these on their own.
         return TimelineView(.everyMinute) { context in
             // Read here so a guide landing re-runs this closure (and its
             // now-playing lookups) without resetting the row's scroll.
             let _ = catalogRevision
-            ScrollView(.horizontal) {
+            if wraps {
+                grid(columns: columns, queue: queue, at: context.date)
+            } else {
+                row(queue: queue, at: context.date)
+            }
+        }
+    }
+
+    private func row(queue: [String], at date: Date) -> some View {
+        let shown = Array(channels.prefix(Self.rowLimit))
+        return ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: HearthMetrics.itemSpacing) {
+                ForEach(shown) { channel in
+                    card(for: channel, queue: queue, at: date)
+                }
+                if channels.count > shown.count {
+                    MoreInGuideCard(hiddenCount: channels.count - shown.count, width: nil)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .scrollTargetLayout()
+        }
+        .contentMargins(.horizontal, gutter, for: .scrollContent)
+        .scrollIndicators(.hidden)
+        .scrollTargetBehavior(.viewAligned)
+    }
+
+    /// Rows of fixed-width cards, left-aligned: the cards keep the mockup's
+    /// size rather than stretching, so the slack (less than one card) sits at
+    /// the trailing edge. Each row is one height, like the phone's row.
+    private func grid(columns: Int, queue: [String], at date: Date) -> some View {
+        let layout = CardGrid.rows(channels, columns: columns, maxRows: Self.gridRows)
+        return VStack(alignment: .leading, spacing: HearthMetrics.itemSpacing) {
+            ForEach(Array(layout.rows.enumerated()), id: \.offset) { index, row in
                 HStack(alignment: .top, spacing: HearthMetrics.itemSpacing) {
-                    ForEach(shown) { channel in
-                        card(for: channel, queue: queue, at: context.date)
+                    ForEach(row) { channel in
+                        card(for: channel, queue: queue, at: date)
                     }
-                    if channels.count > shown.count {
-                        MoreInGuideCard(hiddenCount: channels.count - shown.count)
+                    if index == layout.rows.count - 1, layout.hiddenCount > 0 {
+                        MoreInGuideCard(hiddenCount: layout.hiddenCount, width: cardWidth)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .scrollTargetLayout()
             }
-            .contentMargins(.horizontal, gutter, for: .scrollContent)
-            .scrollIndicators(.hidden)
-            .scrollTargetBehavior(.viewAligned)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, gutter)
     }
 
     private func card(for channel: CatalogChannel, queue: [String], at date: Date) -> some View {
@@ -199,11 +249,13 @@ private struct FavoritesHintCard: View {
     }
 }
 
-/// The end of a long favorites row: the rest are in the guide.
+/// The end of a long favorites row or a full grid: the rest are in the guide.
 private struct MoreInGuideCard: View {
     let hiddenCount: Int
+    /// A grid slot's width; nil is the narrower end-of-row card.
+    let width: CGFloat?
 
-    @ScaledMetric(relativeTo: .footnote) private var width: CGFloat = 120
+    @ScaledMetric(relativeTo: .footnote) private var rowWidth: CGFloat = 120
 
     var body: some View {
         NavigationLink(value: HearthRoute.liveGuide) {
@@ -218,7 +270,7 @@ private struct MoreInGuideCard: View {
                     .multilineTextAlignment(.center)
             }
             .padding(14)
-            .frame(width: width)
+            .frame(width: width ?? rowWidth)
             .frame(maxHeight: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: HearthMetrics.groupedCardRadius, style: .continuous)
@@ -227,5 +279,6 @@ private struct MoreInGuideCard: View {
             .contentShape(RoundedRectangle(cornerRadius: HearthMetrics.groupedCardRadius, style: .continuous))
         }
         .buttonStyle(.hearthTile)
+        .accessibilityHint(Text("Opens the guide", bundle: .module))
     }
 }
