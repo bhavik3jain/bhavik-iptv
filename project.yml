@@ -95,6 +95,12 @@ targets:
       path: App/Resources/Info.plist
       properties:
         CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        # From the build settings, not XcodeGen's literal defaults ("1.0",
+        # "1"): with literals, MARKETING_VERSION never reached the app and
+        # the build number passed to the archive (scripts/testflight.sh, the
+        # TestFlight workflow) was ignored, every archive saying build 1.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
           UIColorName: LaunchBackground
         # Several windows on iPad and iPhone Duo's inner display.
@@ -160,6 +166,9 @@ targets:
       path: App/Resources/Info-macOS.plist
       properties:
         CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        # See the iOS target.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Required by the Mac App Store; an upload without one fails validation.
         LSApplicationCategoryType: public.app-category.entertainment
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
