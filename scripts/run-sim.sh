@@ -6,6 +6,13 @@
 #   scripts/run-sim.sh "iPhone Duo"
 #   scripts/run-sim.sh "iPhone 18 Pro" -AppleLanguages "(fr)"   # extra launch arguments go to the app
 #   CONSOLE=YES scripts/run-sim.sh "iPhone Duo"                 # stay attached, printing the app's output
+#   REAL=YES scripts/run-sim.sh "iPhone 18 Pro"                 # no demo: your own sources, kept on disk
+#
+# REAL=YES drops -StubProvider and -InMemoryStores: the household store lives
+# on disk in the simulator (no iCloud account needed; it simply stays on that
+# simulator), so a real portal added in Household → Add a portal survives
+# relaunches. Type the portal URL and MAC into the app yourself — never put
+# them in a script or a launch argument (PRIV-2).
 #
 # The simulator is booted if it isn't already, and a booted one of that name
 # is preferred over others (scripts/pick-simulator.sh); Device Hub (Xcode 27's
@@ -86,7 +93,11 @@ echo "Installing $bundle_id…"
 xcrun simctl install "$udid" "$app"
 
 [[ $name != "iPhone Duo" ]] || echo "Open, close and rotate the iPhone Duo from Device Hub."
-args=(-StubProvider YES -InMemoryStores YES "$@")
+if [[ ${REAL:-NO} == YES ]]; then
+    args=("$@")
+else
+    args=(-StubProvider YES -InMemoryStores YES "$@")
+fi
 echo "Launching with ${args[*]}"
 if [[ ${CONSOLE:-NO} == YES ]]; then
     echo "(attached: Ctrl-C quits the app)"

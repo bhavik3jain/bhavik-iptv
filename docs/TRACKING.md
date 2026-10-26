@@ -64,7 +64,7 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 
 ## Next up
 
-1. Owner: add the real Stalker portal in the simulator (Household → Add a portal; Test, then Save) and report what the Test step and the guide show. Run the app with `scripts/run-sim.sh "iPhone 18 Pro"` minus `-InMemoryStores` so the source persists (or build from Xcode).
+1. Owner: add the real Stalker portal in the simulator (Household → Add a portal; Test, then Save) and report what the Test step and the guide show. Run it with `REAL=YES scripts/run-sim.sh "iPhone 18 Pro"` (no demo, store kept on disk).
 2. TestFlight: archive + export verified locally (`scripts/testflight.sh all --no-upload`); upload once the App Store Connect app record exists. Before relying on iCloud in TestFlight, run `scripts/cloudkit/init-schema.sh` and Deploy Schema Changes to Production.
 3. Tune AVPlayer's 6 s start timeout against the real provider (Apple's 4K demo stream fell back to VLCKit in the simulator before playing).
 4. Tests (deferred by the owner): kit suites exist; HouseholdKit's suite hung on the merged branch; features have none.
