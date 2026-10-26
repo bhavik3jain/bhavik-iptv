@@ -88,7 +88,7 @@ struct GuideGridView: View {
                         metrics: metrics,
                         window: window,
                         now: now,
-                        visibleDay: GuideDay.containing(snapshot?.leadingDate ?? now, now: now),
+                        visibleDay: GuideDay.containing(snapshot?.centreDate ?? now, now: now),
                         days: GuideDay.days(in: timeline, now: now)
                     ) { date in
                         jump(to: date)
@@ -159,11 +159,15 @@ struct GuideGridView: View {
         return .some(selection.programme?.id)
     }
 
+    /// A tap raises the programme card; a tap on the selected cell puts it
+    /// away again.
     private func select(_ programme: CatalogProgramme?, on channel: CatalogChannel) {
-        if let selection, selection.isSelected(programme, on: channel) {
-            self.selection = nil
-        } else {
-            selection = GuideSelection(channel: channel, programme: programme)
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
+            if let selection, selection.isSelected(programme, on: channel) {
+                self.selection = nil
+            } else {
+                selection = GuideSelection(channel: channel, programme: programme)
+            }
         }
     }
 
@@ -188,6 +192,10 @@ struct GuideScrollSnapshot: Equatable {
     var window: GuideWindow
     /// The moment at the left edge of the timeline, to the quarter hour.
     var leadingDate: Date
+    /// The moment in the middle of the screen, to the quarter hour: the day
+    /// the header names, so opening at 00:10 with 23:30 at the edge still
+    /// says "Today".
+    var centreDate: Date
     var viewportWidth: CGFloat
     var isLaidOut: Bool
     /// Whether now is on screen, or which side it went off.
@@ -200,6 +208,8 @@ struct GuideScrollSnapshot: Equatable {
         nowSide = timeline.side(of: now, offsetX: offsetX, viewportWidth: max(timelineViewport, 0))
         let leading = timeline.date(atX: offsetX)
         leadingDate = Date(timeIntervalSince1970: (leading.timeIntervalSince1970 / 900).rounded(.down) * 900)
+        let centre = timeline.date(atX: offsetX + max(timelineViewport, 0) / 2)
+        centreDate = Date(timeIntervalSince1970: (centre.timeIntervalSince1970 / 900).rounded(.down) * 900)
         viewportWidth = geometry.containerSize.width.rounded()
         isLaidOut = geometry.contentSize.width > geometry.containerSize.width && geometry.containerSize.width > 0
     }

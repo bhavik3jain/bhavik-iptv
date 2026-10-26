@@ -84,7 +84,7 @@ struct ChannelDetailScreen: View {
 
     private func header(_ channel: CatalogChannel, now: Date) -> some View {
         let current = programmes.first(where: { $0.isOn(at: now) }) ?? catalog.nowAndNext(for: channel, at: now).now
-        let isFavorite = isFavorite(channel)
+        let favorite = isFavorite(channel)
         return VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .center, spacing: 16) {
                 ChannelLogo(name: channel.name, url: channel.logoURL, size: layout == .compact ? 64 : 76)
@@ -114,7 +114,7 @@ struct ChannelDetailScreen: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if keepsFavorites {
-                    FavoriteHeartButton(isFavorite: isFavorite, fill: HearthColor.surface) {
+                    FavoriteHeartButton(isFavorite: favorite, fill: HearthColor.surface) {
                         if let profileID {
                             store.toggleFavorite(profileID: profileID, itemKey: channel.key.rawValue, kind: .channel)
                         }
