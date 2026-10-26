@@ -33,7 +33,8 @@ struct ContinueWatchingHero: View {
                         .clipShape(RoundedRectangle(cornerRadius: HearthMetrics.heroRadius, style: .continuous))
                 }
                 .buttonStyle(.hearthTile)
-                .accessibilityLabel(Text(detailsTitle))
+                .accessibilityLabel(Text(item.title))
+                .accessibilityHint(Text(detailsTitle))
             }
         } else {
             card(backdropURL: item.backdropURL ?? item.posterURL)
@@ -54,7 +55,24 @@ struct ContinueWatchingHero: View {
         .contentShape(RoundedRectangle(cornerRadius: HearthMetrics.heroRadius, style: .continuous))
         .onTapGesture { openRoute(item.route) }
         .contextMenu { menu }
+        // VoiceOver can't reach a tap gesture or actions on HeroCard's
+        // container, so the card is one element: it reads like the card,
+        // activating it resumes (the card's own button), and "Go to show"
+        // is an action — the same two things a sighted tap can do.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(Text("Resumes playing", bundle: .module))
+        .accessibilityAction { play(item.playIntent) }
         .accessibilityAction(named: Text(detailsTitle)) { openRoute(item.route) }
+    }
+
+    /// "Continue watching, Salt & Signal, S2 · E5 — The Lighthouse Keeper,
+    /// 31 min left".
+    private var accessibilityLabel: String {
+        [String(localized: "Continue watching", bundle: .module), item.title, item.subtitle, item.remainingText]
+            .compactMap { $0 }
+            .joined(separator: ", ")
     }
 
     @ViewBuilder
