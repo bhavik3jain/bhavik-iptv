@@ -18,7 +18,7 @@ public struct WhoIsWatchingView: View {
     }
 
     public var body: some View {
-        Text("Who's watching?").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        WhoIsWatchingScreen(onManageHousehold: onManageHousehold)
     }
 }
 
@@ -34,12 +34,16 @@ public struct ProfileSwitcherMenu: View {
     }
 
     public var body: some View {
-        Text("Profile")
+        ProfileSwitcher(style: style)
     }
 }
 
 /// Create (nil) or edit a profile: name, avatar colour and symbol, kind, PIN,
 /// Kids categories, hidden categories and sources (PRF-1, PRF-3, PRF-4, PRF-6).
+///
+/// Pushed by the app (`HearthRoute.profileEditor`) it shows Save and relies
+/// on the back button to discard; the profile gate presents it in a sheet of
+/// its own with Cancel and Save.
 public struct ProfileEditorView: View {
     let profileID: UUID?
 
@@ -48,7 +52,7 @@ public struct ProfileEditorView: View {
     }
 
     public var body: some View {
-        Text("Profile editor").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        ProfileEditorScreen(profileID: profileID)
     }
 }
 
@@ -66,6 +70,13 @@ public struct PINEntryView: View {
     }
 
     public var body: some View {
-        Text("PIN").foregroundStyle(HearthColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).hearthScreenBackground()
+        PINPad(
+            title: title,
+            onSubmit: { onSubmit($0) ? .accepted : .rejected },
+            onCancel: onCancel
+        ) {
+            PINLockGlyph()
+        }
+        .hearthScreenBackground()
     }
 }
