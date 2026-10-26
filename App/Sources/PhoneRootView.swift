@@ -50,8 +50,18 @@ struct PhoneRootView: View {
         }
     }
 
+    /// Search, Household and Settings are sidebar rows only. `.sidebarOnly`
+    /// alone doesn't keep them out of a compact tab bar: with eight tabs the
+    /// iPhone folds the extras into "More" and My List disappears behind it.
+    /// So they exist only while there is a sidebar (regular width: iPad,
+    /// iPhone Duo opened); on the phone they're reached from Home's search
+    /// button and the profile menu.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var hasSidebar: Bool { horizontalSizeClass == .regular }
+
     private var availableTabs: Set<AppTab> {
-        Set(AppTab.primary + [.search] + [AppTab.household, .settings].filter { RouteAccess.allows($0, session: session) })
+        guard hasSidebar else { return Set(AppTab.primary) }
+        return Set(AppTab.primary + [.search] + [AppTab.household, .settings].filter { RouteAccess.allows($0, session: session) })
     }
 
     private var tabs: some View {
@@ -63,23 +73,25 @@ struct PhoneRootView: View {
                 }
             }
             // The sidebar's own rows: never in the phone's tab bar.
-            TabSection(String(localized: "More")) {
-                Tab(AppTab.search.title, systemImage: AppTab.search.systemImage, value: AppTab.search) {
-                    TabStack(tab: .search, navigation: navigation)
-                }
-                .tabPlacement(.sidebarOnly)
+            if hasSidebar {
+                TabSection(String(localized: "More")) {
+                    Tab(AppTab.search.title, systemImage: AppTab.search.systemImage, value: AppTab.search) {
+                        TabStack(tab: .search, navigation: navigation)
+                    }
+                    .tabPlacement(.sidebarOnly)
 
-                if RouteAccess.allows(AppTab.household, session: session) {
-                    Tab(AppTab.household.title, systemImage: AppTab.household.systemImage, value: AppTab.household) {
-                        TabStack(tab: .household, navigation: navigation)
+                    if RouteAccess.allows(AppTab.household, session: session) {
+                        Tab(AppTab.household.title, systemImage: AppTab.household.systemImage, value: AppTab.household) {
+                            TabStack(tab: .household, navigation: navigation)
+                        }
+                        .tabPlacement(.sidebarOnly)
                     }
-                    .tabPlacement(.sidebarOnly)
-                }
-                if RouteAccess.allows(AppTab.settings, session: session) {
-                    Tab(AppTab.settings.title, systemImage: AppTab.settings.systemImage, value: AppTab.settings) {
-                        TabStack(tab: .settings, navigation: navigation)
+                    if RouteAccess.allows(AppTab.settings, session: session) {
+                        Tab(AppTab.settings.title, systemImage: AppTab.settings.systemImage, value: AppTab.settings) {
+                            TabStack(tab: .settings, navigation: navigation)
+                        }
+                        .tabPlacement(.sidebarOnly)
                     }
-                    .tabPlacement(.sidebarOnly)
                 }
             }
         }

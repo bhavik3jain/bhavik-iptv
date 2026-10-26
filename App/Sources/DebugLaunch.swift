@@ -26,6 +26,11 @@ enum DebugLaunch {
         let seeded = launch.stubProvider ? seedDemoHousehold(services, pin: launch.seedPIN) : false
         if let name = launch.selectProfile {
             selectProfile(named: name, session: services.session, store: services.store)
+        } else if seeded {
+            // The household opened with one profile, which restore() rightly
+            // chose; the seed has just added three more, so ask, as a real
+            // household of four would at launch.
+            services.session.signOut()
         }
         if let name = launch.sourceProbe {
             runSourceProbe(named: name, store: services.store)
