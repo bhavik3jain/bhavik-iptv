@@ -8,8 +8,6 @@ struct StreamLimitSheet: View {
     let prompt: StreamLimitPrompt
     let onDecision: (PlaybackCoordinator.LimitDecision) -> Void
 
-    @Environment(\.hearthLayout) private var layout
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: HearthMetrics.sectionSpacing) {
@@ -45,7 +43,10 @@ struct StreamLimitSheet: View {
         .hearthScreenBackground()
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(false)
+        #if os(macOS)
+        // A Mac sheet sizes to its content; a scroll view has none of its own.
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 420, idealHeight: 520)
+        #endif
     }
 
     private var header: some View {

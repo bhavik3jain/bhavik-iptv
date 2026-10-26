@@ -88,6 +88,8 @@ enum DebugLaunch {
         let catalog = services.catalog
         let store = services.store
         guard await waitFor({ !catalog.channels(applyingFilter: false).isEmpty }) else { return }
+        // Movies and shows may land a moment after the channels.
+        _ = await waitFor { !catalog.movies(limit: 1).isEmpty && !catalog.series(limit: 1).isEmpty }
 
         if var kids = store.profiles.first(where: { $0.kind == .kids }) {
             kids.allowedCategoryKeys = DemoSeed.kidsCategoryIDs(
@@ -179,12 +181,21 @@ enum DebugLaunch {
         case .firstChannel:
             guard await waitFor({ !catalog.channels().isEmpty }), let channel = catalog.channels().first else { return }
             services.playback.play(PlaybackCoordinator.liveIntent(for: channel, queue: catalog.channels().map(\.key.rawValue)),
-                                   sceneID: nil, layout: .compact)
+                                   sceneID: nil, layout: launchLayout)
         case .firstMovie:
             guard await waitFor({ !catalog.movies(limit: 1).isEmpty }), let movie = catalog.movies(limit: 1).first else { return }
             services.playback.play(PlayIntent(itemKey: movie.key.rawValue, kind: .movie, title: movie.name, artworkURL: movie.posterURL),
-                                   sceneID: nil, layout: .compact)
+                                   sceneID: nil, layout: launchLayout)
         }
+    }
+
+    /// The layout a play from a launch argument assumes (no window asked).
+    private static var launchLayout: HearthLayout {
+        #if os(macOS)
+        .sidebar
+        #else
+        .compact
+        #endif
     }
 
     /// Polls until `condition` holds or the wait ends; true when it held.
