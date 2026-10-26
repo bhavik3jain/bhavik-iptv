@@ -34,17 +34,21 @@ struct SourceStreamRow: Identifiable, Hashable {
 }
 
 /// "STREAMS RIGHT NOW" on Household: a bar per source with who is watching
-/// what where ("Anya · Living Room iPad · Lantern Drama").
+/// what where ("Anya · Living Room iPad · Lantern Drama"). Redrawn each
+/// minute as well as on every household change, so a stream whose device
+/// went quiet drops off within the minute HH-5 allows.
 struct StreamsRightNowSection: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(CatalogService.self) private var catalog
 
     var body: some View {
-        let rows = SourceStreamRow.rows(sources: store.sources, playbacks: store.activePlaybacks, account: catalog.account(sourceID:))
-        if !rows.isEmpty {
-            GroupedCard(title: String(localized: "Streams right now"), rowPadding: 15) {
-                ForEach(rows) { row in
-                    StreamBar(row.name, usage: row.usage, caption: StreamCaption.lines(row.playbacks, profiles: store.profiles))
+        TimelineView(.everyMinute) { context in
+            let rows = SourceStreamRow.rows(sources: store.sources, playbacks: store.activePlaybacks, account: catalog.account(sourceID:), now: context.date)
+            if !rows.isEmpty {
+                GroupedCard(title: String(localized: "Streams right now"), rowPadding: 15) {
+                    ForEach(rows) { row in
+                        StreamBar(row.name, usage: row.usage, caption: StreamCaption.lines(row.playbacks, profiles: store.profiles))
+                    }
                 }
             }
         }
@@ -52,8 +56,9 @@ struct StreamsRightNowSection: View {
 }
 
 /// Each source's streams in use, as bars ("Provider B  2 of 2 · This device
-/// and Anya's iPad"): the foot of the Mac sidebar (MAC-1). Draws nothing
-/// while the household has no sources.
+/// and Anya's iPad"): the foot of the Mac sidebar (MAC-1). Only sources with
+/// a limit, or with something playing: an idle unlimited playlist has
+/// nothing to say down there. Draws nothing when no source qualifies.
 public struct StreamUsageSummaryView: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(CatalogService.self) private var catalog
@@ -61,21 +66,24 @@ public struct StreamUsageSummaryView: View {
     public init() {}
 
     public var body: some View {
-        let rows = SourceStreamRow.rows(sources: store.sources, playbacks: store.activePlaybacks, account: catalog.account(sourceID:))
-        if !rows.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(rows) { row in
-                    StreamBar(
-                        row.name,
-                        usage: row.usage,
-                        caption: StreamCaption.devices(row.playbacks, thisDevice: DeviceName.current),
-                        size: .compact
-                    )
+        TimelineView(.everyMinute) { context in
+            let rows = SourceStreamRow.rows(sources: store.sources, playbacks: store.activePlaybacks, account: catalog.account(sourceID:), now: context.date)
+                .filter { $0.usage.limit != nil || $0.usage.inUse > 0 }
+            if !rows.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(rows) { row in
+                        StreamBar(
+                            row.name,
+                            usage: row.usage,
+                            caption: StreamCaption.devices(row.playbacks, profiles: store.profiles, thisDevice: DeviceName.current),
+                            size: .compact
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text("Streams in use"))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(Text("Streams in use"))
         }
     }
 }

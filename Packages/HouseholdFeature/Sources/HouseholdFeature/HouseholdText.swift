@@ -252,17 +252,36 @@ enum StreamCaption {
             .joined(separator: "\n")
     }
 
-    /// "This device and Anya's iPad": the Mac sidebar's foot, devices only.
-    /// This device first, then the others in the order they started.
-    static func devices(_ playbacks: [PlaybackRecord], thisDevice: String) -> String? {
+    /// "This device and Anya's iPad": the Mac sidebar's foot, one entry per
+    /// device. This device first, then the others in the order they started.
+    ///
+    /// A device named after its person ("Anya's iPad") is shown as it is;
+    /// one with a plain name ("iPad", all iOS gives an app without the
+    /// device-name entitlement) gets the profile watching: "Anya on iPad".
+    /// This device is recognised by name: HouseholdKit keeps which rows are
+    /// its own to itself.
+    static func devices(_ playbacks: [PlaybackRecord], profiles: [ProfileRecord], thisDevice: String) -> String? {
         guard !playbacks.isEmpty else { return nil }
-        var names: [String] = []
-        let own = playbacks.contains { $0.deviceName == thisDevice }
-        if own { names.append(String(localized: "This device")) }
-        for playback in playbacks.sorted(by: { $0.startedAt < $1.startedAt }) where playback.deviceName != thisDevice {
-            if !names.contains(playback.deviceName) { names.append(playback.deviceName) }
+        let profileNames = Dictionary(profiles.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        var entries: [String] = []
+        if playbacks.contains(where: { $0.deviceName == thisDevice }) {
+            entries.append(String(localized: "This device"))
         }
-        return names.formatted(.list(type: .and))
+        for playback in playbacks.sorted(by: { $0.startedAt < $1.startedAt }) where playback.deviceName != thisDevice {
+            let entry = deviceEntry(device: playback.deviceName, profile: profileNames[playback.profileID])
+            if !entries.contains(entry) { entries.append(entry) }
+        }
+        return entries.formatted(.list(type: .and))
+    }
+
+    static func deviceEntry(device: String, profile: String?) -> String {
+        let device = device.trimmingCharacters(in: .whitespaces)
+        guard let profile = profile?.trimmingCharacters(in: .whitespaces), !profile.isEmpty else {
+            return device.isEmpty ? String(localized: "another device") : device
+        }
+        if device.isEmpty { return profile }
+        if device.localizedCaseInsensitiveContains(profile) { return device }
+        return String(localized: "\(profile) on \(device)", comment: "Who is streaming where: 'Anya on iPad'")
     }
 }
 

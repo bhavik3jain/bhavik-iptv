@@ -9,8 +9,10 @@ import SwiftUI
 // StreamUsageSummaryView() (StreamUsageViews.swift). Their names and
 // initialisers stay. Services come from the environment: CatalogService,
 // HouseholdStore and ProfileSession (injected by the app), plus Core's
-// \.openRoute. `SourceMapping` is public too, for the app's
-// `catalog.setSources`.
+// \.openRoute. Also public, additive only: `SourceEditorSheet(sourceID:)`
+// (the editor with its own navigation, for a sheet), `SourceMapping` (for the
+// app's `catalog.setSources`) and `StreamLimit` (the limit the app's
+// playback coordinator hands `HouseholdStore.streamUsage`, HH-6).
 
 /// Household (mockup 05): members and roles with Invite, streams right now,
 /// profiles, sources with status, and the sync switch.
@@ -33,6 +35,8 @@ public struct HouseholdView: View {
     private static let twoColumnWidth: CGFloat = 880
     /// The single column never stretches wider than this on a big window.
     private static let readableWidth: CGFloat = 640
+    /// Nor do the two columns, on a full-screen Mac.
+    private static let twoColumnMaxWidth: CGFloat = 1180
 
     public var body: some View {
         Group {
@@ -76,6 +80,7 @@ public struct HouseholdView: View {
                             SourcesSection()
                         }
                     }
+                    .frame(maxWidth: Self.twoColumnMaxWidth)
                 } else {
                     VStack(spacing: 28) {
                         HouseholdCard()
