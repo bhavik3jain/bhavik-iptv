@@ -61,7 +61,10 @@ struct MacRootView: View {
     }
 }
 
-/// The sidebar's rows (mockup 07).
+/// The sidebar (mockup 07): drawn by hand rather than as a `List`, so the
+/// rows look like the mockup — a small square that turns amber and a raised
+/// background on the selected section, monogram tiles for channels — instead
+/// of the system's accent-filled selection. ⌘1–⌘6 move between sections.
 private struct MacSidebar: View {
     let navigation: AppNavigation
 
@@ -72,60 +75,53 @@ private struct MacSidebar: View {
     @State private var searchText = ""
 
     var body: some View {
-        List(selection: selection) {
-            Section {
-                ForEach(AppTab.macSections, id: \.self) { tab in
-                    Label(tab.title, systemImage: tab.systemImage)
-                        .font(.hearthBody)
-                        .tag(tab)
-                        .accessibilityHint(Text("Shows \(tab.title)"))
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            ProfileSwitcherMenu(style: .sidebar)
+            SearchField(String(localized: "Search everything"), text: $searchText, size: .compact) {
+                submitSearch()
             }
-
-            let favorites = favoriteChannels
-            if !favorites.isEmpty {
-                Section {
-                    ForEach(favorites) { channel in
-                        FavoriteChannelRow(channel: channel, isLive: catalog.nowAndNext(for: channel).now != nil) {
-                            play(PlaybackCoordinator.liveIntent(for: channel, queue: favorites.map(\.key.rawValue)))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(AppTab.macSections, id: \.self) { tab in
+                            SidebarSectionRow(tab: tab, isSelected: navigation.selection == tab) {
+                                navigation.select(tab)
+                            }
                         }
                     }
-                } header: {
-                    SectionLabel(String(localized: "Favorite channels"))
+                    favoritesSection
                 }
             }
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .background(HearthColor.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 12) {
-                ProfileSwitcherMenu(style: .sidebar)
-                SearchField(String(localized: "Search everything"), text: $searchText) {
-                    submitSearch()
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
-            .background(HearthColor.sidebar)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
+            .scrollIndicators(.never)
+            VStack(alignment: .leading, spacing: 8) {
                 StreamUsageSummaryView()
                 ICloudStatusNote()
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(HearthColor.sidebar)
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Under the title bar too: the sidebar is one colour top to bottom.
+        .background { HearthColor.sidebar.ignoresSafeArea() }
     }
 
-    private var selection: Binding<AppTab?> {
-        Binding(
-            get: { navigation.selection },
-            set: { if let tab = $0 { navigation.select(tab) } }
-        )
+    @ViewBuilder
+    private var favoritesSection: some View {
+        let favorites = favoriteChannels
+        if !favorites.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                SectionLabel(String(localized: "Favorite channels"), style: .sidebar)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 4)
+                ForEach(favorites) { channel in
+                    FavoriteChannelRow(channel: channel, isLive: catalog.nowAndNext(for: channel).now != nil) {
+                        play(PlaybackCoordinator.liveIntent(for: channel, queue: favorites.map(\.key.rawValue)))
+                    }
+                }
+            }
+            .padding(.top, 8)
+        }
     }
 
     /// The current profile's favorite channels the catalog can show, in the
@@ -147,6 +143,40 @@ private struct MacSidebar: View {
     }
 }
 
+/// A section in the sidebar: 34 pt, a square marker, raised when selected.
+private struct SidebarSectionRow: View {
+    let tab: AppTab
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(isSelected ? HearthColor.accent : HearthColor.dashedStroke)
+                    .frame(width: 8, height: 8)
+                Text(tab.title)
+                    .font(.hearthText(14, weight: isSelected ? .semibold : .regular, relativeTo: .body))
+                    .foregroundStyle(isSelected ? HearthColor.textPrimary : HearthColor.textOnArtwork)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(minHeight: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? HearthColor.surfaceButton : (isHovered ? HearthColor.surface : .clear))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(Text(tab.title))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
 /// A favorite channel in the sidebar: its logo or monogram, its name, and an
 /// amber dot while something is on (the guide has a programme now).
 private struct FavoriteChannelRow: View {
@@ -154,12 +184,14 @@ private struct FavoriteChannelRow: View {
     let isLive: Bool
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                ChannelLogo(name: channel.name, url: channel.logoURL, size: 26)
+                ChannelLogo(name: channel.name, url: channel.logoURL, size: 22)
                 Text(channel.name)
-                    .font(.hearthBody)
+                    .font(.hearthText(13, relativeTo: .callout))
                     .foregroundStyle(HearthColor.textPrimary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
@@ -170,9 +202,17 @@ private struct FavoriteChannelRow: View {
                         .accessibilityHidden(true)
                 }
             }
+            .padding(.horizontal, 10)
+            .frame(minHeight: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isHovered ? HearthColor.surface : .clear)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(Text("Play \(channel.name)"))
         .accessibilityLabel(Text(channel.name))
         .accessibilityValue(isLive ? Text("On now") : Text(""))
         .accessibilityHint(Text("Plays this channel"))

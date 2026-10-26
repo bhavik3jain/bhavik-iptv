@@ -43,6 +43,15 @@ struct PhoneRootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { services.playback.lastSceneID = sceneID }
         }
+        // A tab this window doesn't have (Downloads is Mac-only; Household
+        // and Settings leave with a Kids or Guest profile) falls back to Home.
+        .onChange(of: navigation.selection, initial: true) { _, tab in
+            if !availableTabs.contains(tab) { navigation.selection = .home }
+        }
+    }
+
+    private var availableTabs: Set<AppTab> {
+        Set(AppTab.primary + [.search] + [AppTab.household, .settings].filter { RouteAccess.allows($0, session: session) })
     }
 
     private var tabs: some View {
