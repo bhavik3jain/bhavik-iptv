@@ -252,7 +252,6 @@ private struct SourcesSection: View {
     @Environment(CatalogService.self) private var catalog
     @Environment(ProfileSession.self) private var session
     @Environment(\.openRoute) private var openRoute
-    @Environment(\.dismiss) private var dismiss
 
     @State private var refreshingAll = false
 
@@ -264,8 +263,9 @@ private struct SourcesSection: View {
                     .foregroundStyle(HearthColor.textSecondary)
                     .padding(.vertical, 4)
                 if session.canManageHousehold {
+                    // Through the app rather than a link: the Mac opens
+                    // Household in the main window, not in Settings'.
                     Button {
-                        dismiss()
                         openRoute(.household)
                     } label: {
                         SettingsLabel(String(localized: "Open Household", bundle: .module), systemImage: "house")

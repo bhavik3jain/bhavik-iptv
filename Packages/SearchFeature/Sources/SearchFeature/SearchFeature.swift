@@ -122,6 +122,9 @@ private struct SearchScreen: View {
             focus: $fieldFocused,
             onSubmit: { remember(query) }
         )
+        // Channel and film names aren't dictionary words: autocorrect would
+        // turn "Sky Cinema HD" into something no catalog holds.
+        .autocorrectionDisabled()
         .frame(maxWidth: layout == .sidebar ? 640 : .infinity)
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, 10)

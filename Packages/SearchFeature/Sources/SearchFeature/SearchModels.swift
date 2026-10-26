@@ -213,7 +213,7 @@ enum SearchTimeText {
         if programme.end <= now {
             return String(localized: "Aired \(day(programme.start, now: now, calendar: calendar)) \(HearthFormat.clock(programme.start))", bundle: .module, comment: "A programme that has aired: Aired Today 18:00")
         }
-        return "\(day(programme.start, now: now, calendar: calendar)) \(HearthFormat.clock(programme.start))"
+        return String(localized: "\(day(programme.start, now: now, calendar: calendar)) \(HearthFormat.clock(programme.start))", bundle: .module, comment: "When a programme starts: Today 22:30")
     }
 
     /// "Today", "Tomorrow", "Yesterday", or the short weekday ("Sat").
