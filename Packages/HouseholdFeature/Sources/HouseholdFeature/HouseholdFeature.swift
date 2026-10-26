@@ -116,9 +116,8 @@ public struct HouseholdView: View {
     /// every household device.
     private func recordProviderExpiry() {
         for source in store.sources {
-            guard let expiry = catalog.account(sourceID: source.id)?.expiresAt else { continue }
-            if let stored = source.expiresAt, abs(stored.timeIntervalSince(expiry)) < 60 { continue }
-            store.setSourceExpiry(expiry, for: source.id)
+            guard let change = SourceExpiry.update(record: source, account: catalog.account(sourceID: source.id)) else { continue }
+            store.setSourceExpiry(change, for: source.id)
         }
     }
 }

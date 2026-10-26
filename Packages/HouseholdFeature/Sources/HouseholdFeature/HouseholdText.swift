@@ -84,7 +84,7 @@ struct SourceRowText: Hashable {
         if account?.status == .disabled {
             return (String(localized: "Disabled"), true, false)
         }
-        let expiry = account?.expiresAt ?? record.expiresAt
+        let expiry = SourceExpiry.effective(record: record, account: account)
         if account?.status == .expired || (expiry.map { $0 < now } ?? false) {
             return (String(localized: "Expired"), true, false)
         }
@@ -118,7 +118,7 @@ struct SourceStatusText: Hashable {
 
     init(record: SourceRecord, state: SourceRefreshState?, now: Date = .now) {
         let account = state?.account
-        let expiry = account?.expiresAt ?? record.expiresAt
+        let expiry = SourceExpiry.effective(record: record, account: account)
         isRefreshing = false
         isWarning = false
         failure = nil
@@ -294,6 +294,32 @@ enum SyncStatusText {
         case .upToDate(let date): (String(localized: "Up to date · \(HouseholdFormat.ago(date, now: now))"), false)
         case .failed(let message): (message, true)
         case .noAccount: (String(localized: "Not signed in to iCloud"), true)
+        }
+    }
+}
+
+/// Which expiry a source shows (SRC-5): the provider's latest word on this
+/// device, else what a household device last recorded.
+enum SourceExpiry {
+    /// An active account with no end date has none, whatever was recorded
+    /// before (the provider made it unlimited). An account read that said
+    /// nothing useful (status unknown) keeps the recorded date.
+    static func effective(record: SourceRecord, account: AccountInfo?) -> Date? {
+        guard let account else { return record.expiresAt }
+        if let date = account.expiresAt { return date }
+        return account.status == .active ? nil : record.expiresAt
+    }
+
+    /// What to write to the household after an account read, or nil to
+    /// leave the record alone: only a real change, since every write wakes
+    /// every household device.
+    static func update(record: SourceRecord, account: AccountInfo?) -> Date?? {
+        guard let account else { return nil }
+        let latest = effective(record: record, account: account)
+        switch (record.expiresAt, latest) {
+        case (nil, nil): return nil
+        case (let stored?, let new?) where abs(stored.timeIntervalSince(new)) < 60: return nil
+        default: return .some(latest)
         }
     }
 }
