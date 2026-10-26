@@ -250,7 +250,7 @@ private struct ShowDetailContent: View {
                     staleBanner(message)
                 }
                 if let season = season(in: grouping) {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 24, alignment: .top)], alignment: .leading, spacing: 14) {
+                    LazyVGrid(columns: episodeColumns, alignment: .leading, spacing: 14) {
                         ForEach(season.episodes) { episode in
                             episodeRow(episode, progress: progress[episode.key.rawValue], grouping: grouping)
                         }
@@ -265,6 +265,16 @@ private struct ShowDetailContent: View {
     /// run (soaps, 20-season anime) as a menu, where the open season can't
     /// scroll out of sight. A refresh behind cached episodes shows as a small
     /// spinner beside it.
+    /// One column on a phone (an adaptive minimum wider than a small
+    /// iPhone would overflow it); two or more where the sidebar layout has
+    /// the room, so a Mac window isn't one long thin list.
+    private var episodeColumns: [GridItem] {
+        switch layout {
+        case .compact: [GridItem(.flexible(), alignment: .top)]
+        case .sidebar: [GridItem(.adaptive(minimum: 340), spacing: 24, alignment: .top)]
+        }
+    }
+
     @ViewBuilder
     private func seasonPicker(grouping: SeasonGrouping) -> some View {
         let selection = Binding(

@@ -144,14 +144,21 @@ struct CatalogGridScreen: View {
     var body: some View {
         let gutter = libraryGutter(layout)
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            // The chips pin under the bar once the title scrolls away, so a
+            // different category is one tap from deep in a long grid.
+            LazyVStack(alignment: .leading, spacing: 10, pinnedViews: [.sectionHeaders]) {
                 LibraryTitleRow(title: shelf.title) { sortMenu }
                     .padding(.horizontal, gutter)
                     .padding(.top, 4)
-                if chips.chips.count > 1 {
-                    chipRow(gutter: gutter)
+                Section {
+                    content(gutter: gutter)
+                } header: {
+                    if chips.chips.count > 1 {
+                        chipRow(gutter: gutter)
+                            .padding(.vertical, 6)
+                            .background(HearthColor.background)
+                    }
                 }
-                content(gutter: gutter)
             }
             .padding(.bottom, 32)
             .frame(maxWidth: libraryMaxContentWidth)
@@ -193,16 +200,24 @@ struct CatalogGridScreen: View {
     }
 
     private func chipRow(gutter: CGFloat) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(chips.chips) { chip in
-                    PillChip(chip.title, isSelected: chip.categoryID == categoryID) {
-                        storedCategoryID = chip.categoryID
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(chips.chips) { chip in
+                        PillChip(chip.title, isSelected: chip.categoryID == categoryID) {
+                            storedCategoryID = chip.categoryID
+                        }
+                        .id(chip.id)
                     }
                 }
             }
+            .contentMargins(.horizontal, gutter, for: .scrollContent)
+            // A category remembered from last time may sit far along the
+            // row: bring it into view rather than leave "All" looking chosen.
+            .onAppear {
+                if let categoryID { proxy.scrollTo(categoryID, anchor: .center) }
+            }
         }
-        .contentMargins(.horizontal, gutter, for: .scrollContent)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Categories"))
     }
