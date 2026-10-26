@@ -23,7 +23,8 @@ struct ChannelSearchSheet: View {
         NavigationStack {
             VStack(spacing: 12) {
                 SearchField(String(localized: "Channel name or number"), text: $query, focus: $isFocused) {
-                    if let first = results.first { play(first) }
+                    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty, let first = results.first { play(first) }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -42,12 +43,19 @@ struct ChannelSearchSheet: View {
                 }
             }
         }
-        .frame(minWidth: 420, idealWidth: 520, minHeight: 480, idealHeight: 640)
+        .liveSheetFrame(idealWidth: 520, idealHeight: 640)
         .task(id: SearchKeyID(query: query, revision: catalog.revision)) {
+            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            // An empty field lists nothing, so Return can't play a channel
+            // nobody asked for.
+            guard !trimmed.isEmpty else {
+                results = []
+                return
+            }
             // A short pause so each keystroke doesn't run a fetch.
             if !results.isEmpty { try? await Task.sleep(for: .milliseconds(150)) }
             guard !Task.isCancelled else { return }
-            results = catalog.findChannels(query)
+            results = catalog.findChannels(trimmed)
         }
         .onAppear { isFocused = true }
     }
@@ -130,6 +138,9 @@ struct FavoritesOrderSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        // The store's queries aren't observable themselves: reading its
+        // revision redraws the list after a move, a removal or a sync.
+        let _ = store.revision
         let profileID = session.currentProfile?.id
         let favorites = profileID.map { store.favorites(profileID: $0, kind: .channel) } ?? []
         let channels = Dictionary(
@@ -201,7 +212,7 @@ struct FavoritesOrderSheet: View {
                 }
             }
         }
-        .frame(minWidth: 400, idealWidth: 480, minHeight: 440, idealHeight: 600)
+        .liveSheetFrame(idealWidth: 480, idealHeight: 600)
     }
 
     private func move(_ profileID: UUID?, from: Int, to: Int) {

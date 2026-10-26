@@ -87,6 +87,9 @@ struct MultiViewContent: View {
             }
         }
         .onDisappear {
+            // A tile taken full screen covers this screen (iOS reports that
+            // as disappearing); its tiles keep playing for the way back.
+            guard multiView.expanded == nil else { return }
             multiView.closeAll(store: store)
         }
         .onChange(of: session.currentProfile?.id) { _, _ in
@@ -98,35 +101,68 @@ struct MultiViewContent: View {
 
     // MARK: Bar
 
+    /// One row where it fits (the mockup's title bar); on a narrow screen
+    /// the title and Guide | Multi-view keep the first row and the layout
+    /// buttons and "Sound from …" move to a second.
     private func controlBar(isWide: Bool) -> some View {
-        HStack(spacing: isWide ? 16 : 8) {
-            if showsModePicker {
-                Text("Live TV")
-                    .font(.hearthHeadline)
-                    .foregroundStyle(HearthColor.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                    .layoutPriority(1)
-                SegmentedPills(String(localized: "Live TV view"), options: LiveMode.allCases, selection: modeBinding, size: .compact) { $0.title }
-                    .fixedSize()
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: isWide ? 16 : 8) {
+                if showsModePicker { titleAndModes }
+                arrangementButtons
+                Spacer(minLength: 4)
+                soundLabel
+                AirPlayRouteButton()
             }
-            arrangementButtons
-            Spacer(minLength: 4)
-            if let name = multiView.model.audibleItemName {
-                HStack(spacing: 6) {
-                    Image(systemName: "speaker.wave.2.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .accessibilityHidden(true)
-                    Text("Sound from \(name)")
-                        .lineLimit(1)
+            .frame(minHeight: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    if showsModePicker {
+                        titleAndModes
+                    } else {
+                        arrangementButtons
+                    }
+                    Spacer(minLength: 4)
+                    AirPlayRouteButton()
                 }
-                .font(.hearthText(13, relativeTo: .footnote))
-                .foregroundStyle(HearthColor.textSecondary)
-                .accessibilityElement(children: .combine)
+                .frame(minHeight: 52)
+                HStack(spacing: 8) {
+                    if showsModePicker { arrangementButtons }
+                    soundLabel
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: showsModePicker ? 44 : 0)
             }
-            AirPlayRouteButton()
+            .padding(.bottom, 4)
         }
         .padding(.horizontal, isWide ? 20 : 12)
-        .frame(minHeight: 52)
+    }
+
+    @ViewBuilder
+    private var titleAndModes: some View {
+        Text("Live TV")
+            .font(.hearthHeadline)
+            .foregroundStyle(HearthColor.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+            .fixedSize()
+        SegmentedPills(String(localized: "Live TV view"), options: LiveMode.allCases, selection: modeBinding, size: .compact) { $0.title }
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var soundLabel: some View {
+        if let name = multiView.model.audibleItemName {
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text("Sound from \(name)")
+                    .lineLimit(1)
+            }
+            .font(.hearthText(13, relativeTo: .footnote))
+            .foregroundStyle(HearthColor.textSecondary)
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private var modeBinding: Binding<LiveMode> {

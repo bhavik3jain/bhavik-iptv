@@ -100,8 +100,13 @@ struct GuideGridView: View {
         .scrollPosition($position)
         .scrollIndicators(.hidden, axes: .horizontal)
         .contentMargins(.bottom, bottomInset, for: .scrollContent)
+        .overlay(alignment: nowSide == .before ? .topLeading : .topTrailing) {
+            if nowSide != .visible, timeline.contains(now) {
+                backToNowButton
+            }
+        }
         .onScrollGeometryChange(for: GuideScrollSnapshot.self) { geometry in
-            GuideScrollSnapshot(geometry: geometry, timeline: timeline, metrics: metrics)
+            GuideScrollSnapshot(geometry: geometry, timeline: timeline, metrics: metrics, now: now)
         } action: { _, new in
             snapshot = new
             if !hasOpenedAtNow, new.isLaidOut {
@@ -120,6 +125,33 @@ struct GuideGridView: View {
             position.scrollTo(y: 0)
         }
         .onDisappear { shortGuides.cancel() }
+    }
+
+    /// Where now is while the guide is scrolled away from it.
+    private var nowSide: GuideSide {
+        snapshot?.nowSide ?? .visible
+    }
+
+    /// "‹ Now" or "Now ›" under the header, pointing back at the now line
+    /// once it has scrolled off screen.
+    private var backToNowButton: some View {
+        let isBefore = nowSide == .before
+        return Button {
+            jump(to: now)
+        } label: {
+            HStack(spacing: 4) {
+                if isBefore { Image(systemName: "chevron.left") }
+                Text("Now")
+                if !isBefore { Image(systemName: "chevron.right") }
+            }
+        }
+        .buttonStyle(.hearthPrimary(shape: .capsule, size: .small))
+        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        .padding(.top, metrics.headerHeight + 8)
+        .padding(isBefore ? .leading : .trailing, isBefore ? metrics.channelColumnWidth + 8 : 12)
+        .transition(.opacity)
+        .accessibilityLabel(Text("Back to now"))
+        .accessibilityHint(Text("Scrolls the guide to what's on now"))
     }
 
     private func selectedID(on channel: CatalogChannel) -> String?? {
@@ -158,11 +190,14 @@ struct GuideScrollSnapshot: Equatable {
     var leadingDate: Date
     var viewportWidth: CGFloat
     var isLaidOut: Bool
+    /// Whether now is on screen, or which side it went off.
+    var nowSide: GuideSide
 
-    init(geometry: ScrollGeometry, timeline: GuideTimeline, metrics: GuideMetrics) {
+    init(geometry: ScrollGeometry, timeline: GuideTimeline, metrics: GuideMetrics, now: Date) {
         let timelineViewport = geometry.containerSize.width - metrics.channelColumnWidth
         let offsetX = geometry.contentOffset.x
         window = .at(offsetX: offsetX, timelineViewport: timelineViewport, in: timeline)
+        nowSide = timeline.side(of: now, offsetX: offsetX, viewportWidth: max(timelineViewport, 0))
         let leading = timeline.date(atX: offsetX)
         leadingDate = Date(timeIntervalSince1970: (leading.timeIntervalSince1970 / 900).rounded(.down) * 900)
         viewportWidth = geometry.containerSize.width.rounded()

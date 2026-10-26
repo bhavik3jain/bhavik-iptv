@@ -56,16 +56,46 @@ struct GuideTimeline: Hashable, Sendable {
         return origin.addingTimeInterval(minutes * 60)
     }
 
-    /// The x a scroll should go to so `date` sits a little in from the left
-    /// edge (half an hour by default): the guide opens on now with the
-    /// programme already running visible, not cut at the edge.
-    func scrollX(toShow date: Date, lead: TimeInterval = 30 * 60, viewportWidth: CGFloat) -> CGFloat {
-        let target = x(for: date.addingTimeInterval(-lead))
+    /// The x a scroll should go to so `date` is on screen with the edge on
+    /// a half hour before it (`leadingEdge(toShow:)`): the guide opens on now
+    /// the way the mockup does, "20:00" at the edge and the now line at
+    /// 20:42, with the programme already running in view.
+    func scrollX(toShow date: Date, viewportWidth: CGFloat, calendar: Calendar = .current) -> CGFloat {
+        let target = x(for: Self.leadingEdge(toShow: date, calendar: calendar))
         let maxX = max(0, totalWidth - viewportWidth)
         return min(max(0, target), maxX)
     }
 
+    /// The half hour on the device's clock at or before a quarter of an
+    /// hour ahead of `date`, so between 15 and 45 minutes of what came
+    /// before `date` stay in view. Counted from local midnight, as the
+    /// header's ticks are, so it lands on a tick in zones with :30 and :45
+    /// offsets too.
+    static func leadingEdge(toShow date: Date, calendar: Calendar = .current) -> Date {
+        let step: TimeInterval = 30 * 60
+        let target = date.addingTimeInterval(-15 * 60)
+        let midnight = calendar.startOfDay(for: target)
+        let index = (target.timeIntervalSince(midnight) / step).rounded(.down)
+        return midnight.addingTimeInterval(index * step)
+    }
+
+    /// Where `date` is relative to a visible span of the timeline starting
+    /// at `offsetX` and `viewportWidth` wide: before it, in it, or after.
+    func side(of date: Date, offsetX: CGFloat, viewportWidth: CGFloat) -> GuideSide {
+        let dateX = x(for: date)
+        if dateX < offsetX { return .before }
+        if dateX > offsetX + viewportWidth { return .after }
+        return .visible
+    }
+
     func contains(_ date: Date) -> Bool { origin <= date && date < end }
+}
+
+/// Where a moment sits relative to what's on screen.
+enum GuideSide: Hashable, Sendable {
+    case before
+    case visible
+    case after
 }
 
 /// The slice of the timeline the rows draw: what's on screen plus a margin

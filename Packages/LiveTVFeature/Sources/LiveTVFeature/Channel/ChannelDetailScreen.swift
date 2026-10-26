@@ -84,7 +84,7 @@ struct ChannelDetailScreen: View {
 
     private func header(_ channel: CatalogChannel, now: Date) -> some View {
         let current = programmes.first(where: { $0.isOn(at: now) }) ?? catalog.nowAndNext(for: channel, at: now).now
-        let isFavorite = profileID.map { store.isFavorite(profileID: $0, itemKey: channel.key.rawValue) } ?? false
+        let isFavorite = isFavorite(channel)
         return VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .center, spacing: 16) {
                 ChannelLogo(name: channel.name, url: channel.logoURL, size: layout == .compact ? 64 : 76)
@@ -150,6 +150,14 @@ struct ChannelDetailScreen: View {
             RoundedRectangle(cornerRadius: HearthMetrics.cardRadius, style: .continuous)
                 .fill(HearthColor.surface)
         )
+    }
+
+    private func isFavorite(_ channel: CatalogChannel) -> Bool {
+        // Reading the store's revision redraws the heart after a toggle here
+        // or on another device; the query itself isn't observable.
+        _ = store.revision
+        guard let profileID else { return false }
+        return store.isFavorite(profileID: profileID, itemKey: channel.key.rawValue)
     }
 
     private func buttons(_ channel: CatalogChannel, current: CatalogProgramme?, now: Date) -> some View {

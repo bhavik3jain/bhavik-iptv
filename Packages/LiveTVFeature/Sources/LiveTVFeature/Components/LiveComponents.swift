@@ -135,3 +135,14 @@ enum SourceLabel {
         catalog.sources.count > 1 ? channel.sourceName : nil
     }
 }
+
+extension View {
+    /// A sheet's size. A Mac sheet opens at its content's ideal size (and a
+    /// scrolling list has next to none), so the ideal sets it there; the
+    /// minimums stay below the narrowest iPhone and a landscape phone's sheet
+    /// height, so on iOS the sheet keeps exactly the space it is given rather
+    /// than spilling past the screen's edges.
+    func liveSheetFrame(idealWidth: CGFloat, idealHeight: CGFloat) -> some View {
+        frame(minWidth: 300, idealWidth: idealWidth, maxWidth: .infinity, minHeight: 280, idealHeight: idealHeight, maxHeight: .infinity)
+    }
+}

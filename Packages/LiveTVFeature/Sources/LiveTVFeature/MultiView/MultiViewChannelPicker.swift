@@ -68,7 +68,7 @@ struct MultiViewChannelPicker: View {
                 }
             }
         }
-        .frame(minWidth: 440, idealWidth: 540, minHeight: 520, idealHeight: 680)
+        .liveSheetFrame(idealWidth: 540, idealHeight: 680)
         .task(id: LoadKey(query: query, chipID: chipID, revision: catalog.revision, storeRevision: store.revision)) {
             if !query.isEmpty {
                 // A short pause so each keystroke doesn't run a fetch.
