@@ -32,6 +32,7 @@ struct ProfileSwitcher: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
+        .frame(maxWidth: style == .sidebar ? .infinity : nil, alignment: .leading)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityHint(Text("Switches profile, or opens Household and Settings", bundle: .module))
         .pinFlow($pinRequest) { pin, ids in
@@ -140,6 +141,13 @@ struct ProfileSwitcher: View {
                 leaveToGate()
             } label: {
                 Label(String(localized: "Who’s watching?", bundle: .module), systemImage: "person.2")
+            }
+            if session.canManageHousehold, let current {
+                Button {
+                    openRoute(.profileEditor(profileID: current.id))
+                } label: {
+                    Label(String(localized: "Edit profile", bundle: .module), systemImage: "pencil")
+                }
             }
             if session.canManageHousehold {
                 Button {

@@ -307,7 +307,16 @@ struct PINStepsSheet: View {
     @State private var index = 0
 
     var body: some View {
-        let step = steps[min(index, max(steps.count - 1, 0))]
+        if steps.isEmpty {
+            // Callers run the action directly when no PIN is needed; this
+            // only guards against a sheet with nothing to ask.
+            Color.clear.onAppear(perform: onPassed)
+        } else {
+            pad(for: steps[min(index, steps.count - 1)])
+        }
+    }
+
+    private func pad(for step: PINStep) -> some View {
         PINPad(
             title: step.title,
             message: step.message,
