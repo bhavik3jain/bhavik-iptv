@@ -299,45 +299,61 @@ struct AddRowLabel: View {
 
 // MARK: - Sync
 
-/// "SYNC": the one household-wide switch that does something (PAR-1), and
-/// where things live. Favorites and progress always sync per profile, so
-/// they get a sentence rather than switches that change nothing.
+/// "SYNC": the one household-wide switch that does something (PAR-1), the
+/// categories marked adult by hand, and where things live. Favorites and
+/// progress always sync per profile, so they get a sentence rather than
+/// switches that change nothing.
 struct SyncSection: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
 
+    @State private var isMarkingCategories = false
+
     var body: some View {
         let sync = SyncStatusText.text(store.syncStatus)
-        VStack(alignment: .leading, spacing: 10) {
-            GroupedCard(title: String(localized: "Sync"), footer: footnote) {
-                if session.canManageHousehold {
-                    CardToggleRow(
-                        String(localized: "Hide adult categories on every profile"),
-                        subtitle: String(localized: "Categories named adult, XXX or 18+, and any marked by hand"),
-                        isOn: Binding(
-                            get: { store.household.hidesAdultEverywhere },
-                            set: { store.setHidesAdultEverywhere($0) }
-                        )
+        let marked = store.household.adultCategoryKeys.count
+        GroupedCard(title: String(localized: "Sync"), footer: footnote) {
+            if session.canManageHousehold {
+                CardToggleRow(
+                    String(localized: "Hide adult categories on every profile"),
+                    subtitle: String(localized: "Categories named adult, XXX or 18+, and any marked by hand"),
+                    isOn: Binding(
+                        get: { store.household.hidesAdultEverywhere },
+                        set: { store.setHidesAdultEverywhere($0) }
                     )
-                } else {
+                )
+                Button {
+                    isMarkingCategories = true
+                } label: {
                     CardRow(
-                        String(localized: "Adult categories"),
-                        trailingText: store.household.hidesAdultEverywhere ? String(localized: "Hidden everywhere") : String(localized: "Shown")
+                        String(localized: "Mark adult categories"),
+                        trailingText: marked == 0 ? String(localized: "None by hand") : String(localized: "\(marked) marked"),
+                        showsChevron: true
                     )
                 }
-                HStack(spacing: 12) {
-                    Text("iCloud")
-                        .font(.hearthBody)
-                        .foregroundStyle(HearthColor.textPrimary)
-                    Spacer(minLength: 8)
-                    Text(sync.text)
-                        .font(.hearthFootnote)
-                        .foregroundStyle(sync.isWarning ? HearthColor.danger : HearthColor.textSecondary)
-                        .multilineTextAlignment(.trailing)
-                }
-                .frame(minHeight: 48)
-                .accessibilityElement(children: .combine)
+                .buttonStyle(.hearthTile)
+                .accessibilityHint(Text("Lists every category so you can mark the ones a name doesn't give away"))
+            } else {
+                CardRow(
+                    String(localized: "Adult categories"),
+                    trailingText: store.household.hidesAdultEverywhere ? String(localized: "Hidden everywhere") : String(localized: "Hidden on Kids profiles")
+                )
             }
+            HStack(spacing: 12) {
+                Text("iCloud")
+                    .font(.hearthBody)
+                    .foregroundStyle(HearthColor.textPrimary)
+                Spacer(minLength: 8)
+                Text(sync.text)
+                    .font(.hearthFootnote)
+                    .foregroundStyle(sync.isWarning ? HearthColor.danger : HearthColor.textSecondary)
+                    .multilineTextAlignment(.trailing)
+            }
+            .frame(minHeight: 48)
+            .accessibilityElement(children: .combine)
+        }
+        .sheet(isPresented: $isMarkingCategories) {
+            AdultCategoriesSheet()
         }
     }
 
