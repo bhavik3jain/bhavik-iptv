@@ -52,11 +52,11 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ☑ merged (VLCKit 4.0.0-a25) |
 | 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ☑ merged (34 tests, icon) |
 | 6 | CI and release | `.github/`, `scripts/`, `README.md` | Build, release | ☑ merged |
-| 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ◐ |
-| 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ◐ |
+| 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☑ merged |
+| 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☑ merged |
 | 9 | Live TV feature | `Packages/LiveTVFeature` | LIV-1…7, PLY-9, MAC-5 | ◐ |
-| 10 | Library feature | `Packages/LibraryFeature` | VOD-1…3, SER-1…3, FAV-3 | ◐ |
-| 11 | Household feature | `Packages/HouseholdFeature` | HH-2…6, SRC-1…5, SRC-8/9 | ◐ |
+| 10 | Library feature | `Packages/LibraryFeature` | VOD-1…3, SER-1…3, FAV-3 | ☑ merged |
+| 11 | Household feature | `Packages/HouseholdFeature` | HH-2…6, SRC-1…5, SRC-8/9 | ☑ merged |
 | 12 | Search and Settings | `Packages/SearchFeature`, `Packages/SettingsFeature` | SRCH-1…3, MAC-4 | ◐ |
 | 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ◐ |
 | 14 | Integration | whole tree | both platforms build, tests pass, runs on iPhone / Duo / Mac | ☐ |
@@ -90,3 +90,5 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Owner: build the app first, tests later. Phase B (`hearth-phase-b`) launched without test-writing: Profiles, Home, Live TV, Library, Household, Search + Settings, App shell.
 - Phase B's first run (`wf_dda52e4d-b08`) hit the usage limit after ~4.5 min, before any agent wrote code (their empty worktrees were auto-removed). Merged two infra follow-ups (run-sim.sh opens Device Hub; yyDDDHHMM build numbers in the workflow and README). Phase B relaunched at 19:45 as `wf_a1f2311c-a6e`, with agents told to commit a WIP after each milestone so a cut-off keeps their work.
 - Phase B second run (`wf_a1f2311c-a6e`) hit the usage limit after ~19 min. Six features left WIP commits (worktrees `wf_a1f2311c-a6e-1`…`-6`: Profiles, Home, Live TV, Library, Household, Search+Settings); the app shell never started (seventh in a six-agent queue). Resumed 2026-10-26 01:20 as `wf_6a88bfbc-e62`: features continue in their worktrees, the app shell starts first in its own worktree `phase-b-appshell`.
+- Phase B third run: Profiles, Home, Library and Household finished and are merged; both apps build clean with them. Live TV (3 WIP commits, ~3,800 lines), Search + Settings (5, ~2,500) and the app shell (1, ~1,900) were cut off again and resumed at 06:15 (`wf_6a88bfbc-e62`, same run id, finished agents cached).
+- Follow-ups from the finished features (for later): HouseholdKit bulk `progress(profileID:)` read and a public "this device's playback" check; participant pending/accepted status; CatalogKit backdrop artwork and movie director / series cast fields; M3U file playlists stored relative to Application Support; My List reordering UI; the app shell must use HouseholdFeature's public `SourceMapping` (it has a private copy).
