@@ -141,11 +141,13 @@ enum MACAddress {
 }
 
 /// How many streams a source allows and how many are taken (HH-5, HH-6;
-/// technical spec, Stream limits).
-enum StreamLimit {
+/// technical spec, Stream limits). Public so the app's playback coordinator
+/// passes `HouseholdStore.streamUsage(sourceID:limit:)` the same limit the
+/// Household bars show.
+public enum StreamLimit {
     /// A new source's setting: one stream per MAC for a portal, unlimited
     /// for a playlist. Xtream reports its own.
-    static func defaultMaxStreams(for kind: SourceKind) -> Int {
+    public static func defaultMaxStreams(for kind: SourceKind) -> Int {
         switch kind {
         case .stalker: 1
         case .xtream: 1
@@ -156,7 +158,7 @@ enum StreamLimit {
     /// The limit, or nil when there is none or it isn't known yet: Xtream's
     /// `max_connections` from the account call, else the owner's setting
     /// (0 = unlimited).
-    static func limit(for record: SourceRecord, account: AccountInfo?) -> Int? {
+    public static func limit(for record: SourceRecord, account: AccountInfo?) -> Int? {
         if SourceMapping.kind(of: record) == .xtream {
             guard let max = account?.maxConnections, max > 0 else { return nil }
             return max
@@ -168,7 +170,7 @@ enum StreamLimit {
     /// (Xtream `active_cons`), but never below the household's own rows: the
     /// count is only as fresh as the last account read, the rows are a
     /// minute old at most.
-    static func inUse(for record: SourceRecord, account: AccountInfo?, playbacks: Int) -> Int {
+    public static func inUse(for record: SourceRecord, account: AccountInfo?, playbacks: Int) -> Int {
         if SourceMapping.kind(of: record) == .xtream, let active = account?.activeConnections {
             return max(active, playbacks)
         }

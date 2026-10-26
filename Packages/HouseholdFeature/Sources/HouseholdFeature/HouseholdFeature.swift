@@ -95,11 +95,13 @@ public struct HouseholdView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .refreshable {
             // Pull to refresh: every source again, now (SRC-6), and iCloud.
-            async let cloud: Void = store.refreshFromCloud()
-            for source in store.sources {
-                await catalog.refresh(sourceID: source.id, force: true)
-            }
-            await cloud
+            // The spinner waits for iCloud only: a big portal's catalog
+            // takes minutes, and its row shows the progress. The catalog
+            // work runs on its own task, because the refresh task is
+            // cancelled when this screen goes away and a cancelled refresh
+            // stops the import.
+            SourceRefresher.refresh(store.sources.map(\.id), in: catalog)
+            await store.refreshFromCloud()
         }
     }
 

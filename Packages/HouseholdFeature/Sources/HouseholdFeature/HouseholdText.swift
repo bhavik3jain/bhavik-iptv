@@ -101,6 +101,73 @@ struct SourceRowText: Hashable {
     }
 }
 
+/// A saved source's status at the top of its editor (SRC-5, SRC-6): one
+/// line each, unlike the Household row's two-line squeeze.
+struct SourceStatusText: Hashable {
+    /// "Active until 12 Mar 2027", "Expired on 3 Jan 2026", "Downloading
+    /// channels · 40%", "Couldn't update".
+    var headline: String
+    var isWarning: Bool
+    /// "412 channels · 3,120 movies · 210 shows" on this device.
+    var detail: String?
+    /// "Catalog updated 2 h ago · guide 20 min ago".
+    var updated: String?
+    /// The last refresh's failure, in the provider's words.
+    var failure: String?
+    var isRefreshing: Bool
+
+    init(record: SourceRecord, state: SourceRefreshState?, now: Date = .now) {
+        let account = state?.account
+        let expiry = account?.expiresAt ?? record.expiresAt
+        isRefreshing = false
+        isWarning = false
+        failure = nil
+
+        switch state?.phase {
+        case .refreshing(let progress, let message):
+            isRefreshing = true
+            let base = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? String(localized: "Updating…") : message
+            headline = progress.map { "\(base) · \(Int(($0 * 100).rounded()))%" } ?? base
+        case .failed(let message):
+            failure = message
+            headline = String(localized: "Couldn't update")
+            isWarning = true
+        case .idle, nil:
+            headline = String(localized: "Not downloaded on this device yet")
+        }
+
+        if !isRefreshing {
+            if account?.status == .disabled {
+                headline = String(localized: "The provider has disabled this login")
+                isWarning = true
+            } else if account?.status == .expired || (expiry.map { $0 < now } ?? false) {
+                headline = expiry.map { String(localized: "Expired on \(HouseholdFormat.day($0))") } ?? String(localized: "Expired")
+                isWarning = true
+            } else if failure == nil {
+                if let expiry {
+                    headline = String(localized: "Active until \(HouseholdFormat.day(expiry))")
+                } else if account?.status == .active || state?.catalogRefreshedAt != nil {
+                    headline = String(localized: "Active")
+                }
+            }
+        }
+
+        if let state, state.catalogRefreshedAt != nil {
+            detail = HouseholdFormat.counts(channels: state.channelCount, movies: state.movieCount, series: state.seriesCount)
+        } else {
+            detail = nil
+        }
+        var updatedParts: [String] = []
+        if let catalogDate = state?.catalogRefreshedAt {
+            updatedParts.append(String(localized: "Catalog updated \(HouseholdFormat.ago(catalogDate, now: now))"))
+        }
+        if let guideDate = state?.guideRefreshedAt {
+            updatedParts.append(String(localized: "guide \(HouseholdFormat.ago(guideDate, now: now))", comment: "After 'Catalog updated 2 h ago · ': when the guide was last downloaded"))
+        }
+        updated = updatedParts.isEmpty ? nil : updatedParts.joined(separator: " · ")
+    }
+}
+
 /// The line under a profile's name on Household: "PIN · All sources",
 /// "Kids categories only · PIN to leave", "Keeps no history or favorites".
 enum ProfileSummaryText {
@@ -144,6 +211,12 @@ enum MemberText {
         case .manage: String(localized: "Adds and edits sources and profiles")
         case .watch: String(localized: "Picks a profile and watches; never sees logins")
         }
+    }
+
+    /// "Bhavik (you)": not when HouseholdKit had no profile name to give the
+    /// only member and called them "You" already.
+    static func showsYouSuffix(_ member: MemberRecord) -> Bool {
+        member.isCurrentUser && member.displayName != "You"
     }
 
     /// "Shared through iCloud · 3 people", "Only on your devices".

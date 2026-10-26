@@ -66,9 +66,16 @@ private struct CloudSharingAnchor: UIViewRepresentable {
     func updateUIView(_ view: UIView, context: Context) {
         context.coordinator.onDismiss = onDismiss
         guard let invitation else { return }
-        // Cleared at once, so a later redraw never presents the same share twice.
-        DispatchQueue.main.async { self.invitation = nil }
-        context.coordinator.present(invitation, from: view)
+        // Presented, and the binding cleared, after this update pass: UIKit
+        // presentation and state writes don't belong inside a SwiftUI
+        // update. The coordinator remembers the id, so a redraw before the
+        // binding clears never presents the same share twice.
+        let coordinator = context.coordinator
+        let binding = $invitation
+        DispatchQueue.main.async {
+            coordinator.present(invitation, from: view)
+            binding.wrappedValue = nil
+        }
     }
 
     @MainActor
@@ -158,8 +165,13 @@ private struct CloudSharingAnchor: NSViewRepresentable {
     func updateNSView(_ view: NSView, context: Context) {
         context.coordinator.onDismiss = onDismiss
         guard let invitation else { return }
-        DispatchQueue.main.async { self.invitation = nil }
-        context.coordinator.present(invitation, from: view)
+        // As on iOS: after this update pass, once.
+        let coordinator = context.coordinator
+        let binding = $invitation
+        DispatchQueue.main.async {
+            coordinator.present(invitation, from: view)
+            binding.wrappedValue = nil
+        }
     }
 
     @MainActor

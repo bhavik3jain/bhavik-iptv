@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import HouseholdKit
 import SourceKit
 import SwiftUI
 
@@ -188,5 +189,78 @@ enum TestResultText {
             }
         }
         return lines
+    }
+}
+
+/// The top of the editor for a saved source (SRC-5, SRC-6): whether it is
+/// active and until when, what this device last downloaded and when, the
+/// last failure in the provider's words, and Refresh Now (or Stop while it
+/// runs).
+struct SourceStatusSection: View {
+    let record: SourceRecord
+    @Environment(CatalogService.self) private var catalog
+
+    var body: some View {
+        let text = SourceStatusText(record: record, state: catalog.refreshStates[record.id])
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    if text.isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(HearthColor.textSecondary)
+                    } else {
+                        Image(systemName: text.isWarning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(text.isWarning ? HearthColor.danger : HearthColor.success)
+                            .accessibilityHidden(true)
+                    }
+                    Text(text.headline)
+                        .font(.hearthHeadline)
+                        .foregroundStyle(HearthColor.textPrimary)
+                }
+                if let detail = text.detail {
+                    Text(detail)
+                        .font(.hearthBody)
+                        .foregroundStyle(HearthColor.textPrimary)
+                }
+                if let updated = text.updated {
+                    Text(updated)
+                        .font(.hearthFootnote)
+                        .foregroundStyle(HearthColor.textSecondary)
+                }
+                if let failure = text.failure {
+                    // The provider's own words (SRC-4), already free of logins.
+                    Text(failure)
+                        .font(.hearthFootnote)
+                        .foregroundStyle(HearthColor.danger)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 6)
+            .accessibilityElement(children: .combine)
+            Group {
+                if text.isRefreshing {
+                    Button(String(localized: "Stop Updating"), systemImage: "stop.circle") {
+                        catalog.cancelRefresh(sourceID: record.id)
+                    }
+                    .accessibilityHint(Text("Keeps what this device downloaded before"))
+                } else {
+                    Button(String(localized: "Refresh Now"), systemImage: "arrow.clockwise") {
+                        SourceRefresher.refresh([record.id], in: catalog)
+                    }
+                    .accessibilityHint(Text("Downloads this source's channels, movies and guide again on this device"))
+                }
+            }
+            .foregroundStyle(HearthColor.accent)
+            .frame(minHeight: HearthMetrics.minimumHitTarget)
+        } header: {
+            SectionLabel(String(localized: "Status"), style: .card)
+        } footer: {
+            Text("Refresh Now uses the login as saved. Channel lists, posters and the guide download on each device.")
+                .font(.hearthFootnote)
+                .foregroundStyle(HearthColor.textSecondary)
+        }
+        .listRowBackground(HearthColor.surface)
     }
 }

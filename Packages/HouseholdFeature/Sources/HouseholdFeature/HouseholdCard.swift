@@ -7,6 +7,7 @@ import SwiftUI
 /// Leave for everyone else (HH-4).
 struct HouseholdCard: View {
     @Environment(HouseholdStore.self) private var store
+    @Environment(ProfileSession.self) private var session
 
     @State private var isRenaming = false
     @State private var draftName = ""
@@ -20,14 +21,20 @@ struct HouseholdCard: View {
 
     private var household: HouseholdInfo { store.household }
     private var isOwner: Bool { household.currentRole == .owner }
+    /// The owner's controls (rename, invite, roles, remove) need the owner's
+    /// device on a profile that may manage: not a Guest handed the iPad.
+    private var canAdminister: Bool { isOwner && session.canManageHousehold }
+    /// Leaving takes the household off every one of this person's devices,
+    /// so a Guest profile doesn't get the button.
+    private var canLeave: Bool { !isOwner && !session.isGuest }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
             members
-            if isOwner {
+            if canAdminister {
                 inviteButton
-            } else {
+            } else if canLeave {
                 leaveButton
             }
         }
@@ -105,7 +112,7 @@ struct HouseholdCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            if isOwner {
+            if canAdminister {
                 Button {
                     draftName = household.name
                     isRenaming = true
@@ -126,6 +133,21 @@ struct HouseholdCard: View {
 
     private var members: some View {
         VStack(spacing: 0) {
+            if store.members.isEmpty {
+                // A member's list waits for the share lookup (HouseholdKit
+                // never guesses who the owner is).
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(HearthColor.textSecondary)
+                    Text("Looking up who's in the household…")
+                        .font(.hearthFootnote)
+                        .foregroundStyle(HearthColor.textSecondary)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 48)
+                .accessibilityElement(children: .combine)
+            }
             ForEach(Array(store.members.enumerated()), id: \.element.id) { index, member in
                 if index > 0 {
                     Rectangle()
@@ -143,7 +165,7 @@ struct HouseholdCard: View {
             AvatarCircle(name: member.displayName, palette: MemberText.palette(for: member))
                 .accessibilityHidden(true)
             Group {
-                if member.isCurrentUser {
+                if MemberText.showsYouSuffix(member) {
                     Text("\(member.displayName) \(Text("(you)").foregroundStyle(HearthColor.textSecondary))")
                 } else {
                     Text(member.displayName)
@@ -152,7 +174,7 @@ struct HouseholdCard: View {
             .font(.hearthBody)
             .foregroundStyle(HearthColor.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            if isOwner, member.role != .owner, !member.isCurrentUser {
+            if canAdminister, member.role != .owner, !member.isCurrentUser {
                 roleMenu(for: member)
             } else {
                 Text(MemberText.role(member.role))
@@ -202,6 +224,7 @@ struct HouseholdCard: View {
         .fixedSize()
         .accessibilityLabel(Text("Role for \(member.displayName)"))
         .accessibilityValue(Text(MemberText.role(member.role)))
+        .accessibilityHint(Text(MemberText.roleExplanation(member.role)))
     }
 
     // MARK: Invite and leave

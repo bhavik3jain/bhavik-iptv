@@ -223,13 +223,27 @@ struct SourcesSection: View {
     }
 
     private func refresh(_ sourceID: UUID) {
-        Task { await catalog.refresh(sourceID: sourceID, force: true) }
+        SourceRefresher.refresh([sourceID], in: catalog)
     }
 
     private func refreshAll() {
-        let ids = store.sources.map(\.id)
-        Task {
-            for id in ids { await catalog.refresh(sourceID: id, force: true) }
+        SourceRefresher.refresh(store.sources.map(\.id), in: catalog)
+    }
+}
+
+/// "Refresh now" for one source or all of them (SRC-6): a forced catalog
+/// download, one source after another, on a task of its own so leaving the
+/// screen doesn't cancel it (`CatalogService.refresh` stops an import whose
+/// caller is cancelled). A source already updating is joined, not started
+/// twice.
+@MainActor
+enum SourceRefresher {
+    static func refresh(_ sourceIDs: [UUID], in catalog: CatalogService) {
+        guard !sourceIDs.isEmpty else { return }
+        Task { @MainActor in
+            for id in sourceIDs {
+                await catalog.refresh(sourceID: id, force: true)
+            }
         }
     }
 }

@@ -9,13 +9,24 @@ import UniformTypeIdentifiers
 /// fields, Xtream login, or M3U playlist by link or file; Test before saving
 /// (SRC-1…SRC-4); remove or restore (SRC-9).
 ///
-/// Built to be pushed (`HearthRoute.sourceEditor`): the back button leaves
-/// without saving and Save is in the toolbar. In a sheet, use
-/// `SourceEditorSheet`, which adds its own navigation, Cancel and a size for
-/// the Mac. Only the owner and managers get the form (SRC-8); a watcher sees
-/// why not, and never the login.
+/// Built to be pushed (`HearthRoute.sourceEditor`): Save is in the toolbar,
+/// and once something has been typed the back button gives way to Cancel,
+/// which asks before throwing the typing away. In a sheet, use
+/// `SourceEditorSheet`, which adds its own navigation and a size for the
+/// Mac. Only the owner and managers get the form (SRC-8); a watcher sees why
+/// not, and never the login.
 public struct SourceEditorView: View {
+    /// How the editor was shown, which decides how it is left.
+    enum Presentation {
+        /// Pushed on a navigation stack: the back button, until there are
+        /// changes to lose.
+        case pushed
+        /// The root of a sheet: always a Cancel button.
+        case sheet
+    }
+
     let sourceID: UUID?
+    let presentation: Presentation
 
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
@@ -36,10 +47,16 @@ public struct SourceEditorView: View {
     @State private var isCopyingFile = false
     @State private var fileError: String?
     @State private var isConfirmingRemove = false
+    @State private var isConfirmingDiscard = false
     @State private var saveError: String?
 
     public init(sourceID: UUID?) {
+        self.init(sourceID: sourceID, presentation: .pushed)
+    }
+
+    init(sourceID: UUID?, presentation: Presentation) {
         self.sourceID = sourceID
+        self.presentation = presentation
     }
 
     /// Where the Test button stands.
@@ -53,6 +70,16 @@ public struct SourceEditorView: View {
 
     private var isNew: Bool { sourceID == nil }
     var isDirty: Bool { draft != initialDraft }
+    /// The form is up: allowed, loaded, and the source (if any) still there
+    /// and of a kind this build knows.
+    private var showsForm: Bool {
+        session.canManageHousehold && isLoaded && (isNew || (original != nil && !isUnknownKind))
+    }
+    /// A source added by a newer build of the app: editing it here would save
+    /// it as a kind it isn't.
+    private var isUnknownKind: Bool {
+        original.map { SourceMapping.kind(of: $0) == nil } ?? false
+    }
 
     public var body: some View {
         Group {
@@ -72,6 +99,13 @@ public struct SourceEditorView: View {
                     message: String(localized: "Someone in the household deleted it.")
                 )
                 .frame(maxHeight: .infinity)
+            } else if isUnknownKind {
+                EmptyStateView(
+                    systemName: "arrow.down.app",
+                    title: String(localized: "Update Hearth to edit this source"),
+                    message: String(localized: "It was added with a newer version of the app.")
+                )
+                .frame(maxHeight: .infinity)
             } else {
                 form
             }
@@ -79,13 +113,34 @@ public struct SourceEditorView: View {
         .navigationTitle(title)
         .inlineNavigationTitle()
         .hearthScreenBackground()
+        // Pushed with unsaved typing, Cancel (which asks) stands in for the
+        // back button, so a stray tap or swipe can't lose a login.
+        .navigationBarBackButtonHidden(presentation == .pushed && showsForm && isDirty)
         .toolbar {
-            if session.canManageHousehold, isNew || original != nil {
+            if presentation == .sheet || (showsForm && isDirty) {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "Cancel")) { cancel() }
+                }
+            }
+            if showsForm {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Save")) { save() }
                         .disabled(!draft.isComplete || isCopyingFile)
                 }
             }
+        }
+        .confirmationDialog(
+            String(localized: "Discard your changes?"),
+            isPresented: $isConfirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Discard Changes"), role: .destructive) {
+                initialDraft = draft
+                dismiss()
+            }
+            Button(String(localized: "Keep Editing"), role: .cancel) {}
+        } message: {
+            Text(isNew ? String(localized: "This source hasn't been saved.") : String(localized: "Your edits to this source haven't been saved."))
         }
         .task { load() }
         .onDisappear { testTask?.cancel() }
@@ -100,22 +155,8 @@ public struct SourceEditorView: View {
 
     private var form: some View {
         Form {
-            if let failure = lastRefreshFailure {
-                Section {
-                    Label {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("The last update failed")
-                                .font(.hearthText(15, weight: .medium, relativeTo: .body))
-                            Text(failure)
-                                .font(.hearthFootnote)
-                                .foregroundStyle(HearthColor.textSecondary)
-                                .textSelection(.enabled)
-                        }
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(HearthColor.danger)
-                    }
-                }
-                .listRowBackground(HearthColor.surface)
+            if let original, !original.isRemoved {
+                SourceStatusSection(record: original)
             }
             kindSection
             detailsSection
@@ -418,11 +459,6 @@ public struct SourceEditorView: View {
         .listRowBackground(HearthColor.surface)
     }
 
-    private var lastRefreshFailure: String? {
-        guard let id = original?.id, case .failed(let message) = catalog.refreshStates[id]?.phase else { return nil }
-        return message
-    }
-
     // MARK: Actions
 
     private func load() {
@@ -513,6 +549,14 @@ public struct SourceEditorView: View {
         dismiss()
     }
 
+    private func cancel() {
+        if isDirty {
+            isConfirmingDiscard = true
+        } else {
+            dismiss()
+        }
+    }
+
     private func restore() {
         guard let original else { return }
         store.restoreSource(id: original.id)
@@ -521,12 +565,10 @@ public struct SourceEditorView: View {
     }
 }
 
-/// `SourceEditorView` for a sheet: its own navigation, Cancel (asking before
-/// throwing away typing is left to the swipe being disabled), and a size that
-/// suits a Mac sheet.
+/// `SourceEditorView` for a sheet: its own navigation, Cancel (which asks
+/// before throwing typing away), and a size that suits a Mac sheet.
 public struct SourceEditorSheet: View {
     let sourceID: UUID?
-    @Environment(\.dismiss) private var dismiss
 
     public init(sourceID: UUID?) {
         self.sourceID = sourceID
@@ -534,13 +576,9 @@ public struct SourceEditorSheet: View {
 
     public var body: some View {
         NavigationStack {
-            SourceEditorView(sourceID: sourceID)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "Cancel")) { dismiss() }
-                    }
-                }
+            SourceEditorView(sourceID: sourceID, presentation: .sheet)
         }
+        // Cancel asks before losing typing; a swipe down couldn't.
         .interactiveDismissDisabled()
         .frame(minWidth: 460, idealWidth: 540, minHeight: 560, idealHeight: 680)
     }
