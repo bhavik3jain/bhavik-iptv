@@ -183,16 +183,19 @@ public struct SourceEditorView: View {
                     case .m3u: String(localized: "M3U")
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+                // The pills draw their own track: they sit on the screen,
+                // not on a row.
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             } else {
                 LabeledContent(String(localized: "Type"), value: SourceRowText.kindTitle(draft.kind))
+                    .listRowBackground(HearthColor.surface)
             }
         } footer: {
             Text(Self.kindExplanation(draft.kind))
                 .font(.hearthFootnote)
                 .foregroundStyle(HearthColor.textSecondary)
         }
-        .listRowBackground(HearthColor.surface)
     }
 
     private static func kindExplanation(_ kind: SourceKind) -> String {
@@ -248,7 +251,10 @@ public struct SourceEditorView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer(minLength: 8)
+                        // Borderless: a default-style button in a form row
+                        // makes the whole row its target on iOS.
                         Button(String(localized: "Use a Link")) { draft.playlistURL = "" }
+                            .buttonStyle(.borderless)
                             .font(.hearthFootnote)
                     }
                     .frame(minHeight: HearthMetrics.minimumHitTarget)
