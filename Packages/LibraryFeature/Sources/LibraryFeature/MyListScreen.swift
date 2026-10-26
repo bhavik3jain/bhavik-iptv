@@ -56,7 +56,7 @@ struct MyListScreen: View {
         let gutter = libraryGutter(layout)
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                LibraryTitleRow(title: String(localized: "My List")) { EmptyView() }
+                LibraryTitleRow(title: String(localized: "My List", bundle: .module)) { EmptyView() }
                     .padding(.top, 4)
                 content
             }
@@ -65,19 +65,19 @@ struct MyListScreen: View {
             .frame(maxWidth: libraryMaxContentWidth)
             .frame(maxWidth: .infinity)
         }
-        .scrollRevealedTitle(String(localized: "My List"))
+        .scrollRevealedTitle(String(localized: "My List", bundle: .module))
         .hearthScreenBackground()
         .confirmationDialog(
-            String(localized: "Remove from My List?"),
+            String(localized: "Remove from My List?", bundle: .module),
             isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
             titleVisibility: .visible,
             presenting: pendingRemoval
         ) { favorite in
-            Button(String(localized: "Remove"), role: .destructive) {
+            Button(String(localized: "Remove", bundle: .module), role: .destructive) {
                 remove(favorite)
             }
         } message: { _ in
-            Text("Its provider no longer offers it.")
+            Text("Its provider no longer offers it.", bundle: .module)
         }
     }
 
@@ -87,15 +87,15 @@ struct MyListScreen: View {
             if profile.isGuest {
                 EmptyStateView(
                     systemName: "heart",
-                    title: String(localized: "My List isn't kept for guests"),
-                    message: String(localized: "Pick your own profile to keep movies and shows in My List.")
+                    title: String(localized: "My List isn't kept for guests", bundle: .module),
+                    message: String(localized: "Pick your own profile to keep movies and shows in My List.", bundle: .module)
                 )
                 .padding(.top, 40)
             } else {
                 list(profileID: profile.id)
             }
         } else {
-            EmptyStateView(systemName: "person.crop.circle", title: String(localized: "Choose a profile to see its list"))
+            EmptyStateView(systemName: "person.crop.circle", title: String(localized: "Choose a profile to see its list", bundle: .module))
                 .padding(.top, 40)
         }
     }
@@ -110,13 +110,13 @@ struct MyListScreen: View {
 
         if visibleMovies.isEmpty && visibleShows.isEmpty {
             if pendingCount > 0 {
-                LibraryLoadingView(message: String(localized: "Loading My List from your sources…"))
+                LibraryLoadingView(message: String(localized: "Loading My List from your sources…", bundle: .module))
                     .padding(.top, 60)
             } else {
                 EmptyStateView(
                     systemName: "heart",
-                    title: String(localized: "Nothing in My List yet"),
-                    message: String(localized: "Tap the heart on a movie or show to keep it here. My List follows your profile to every device in the household.")
+                    title: String(localized: "Nothing in My List yet", bundle: .module),
+                    message: String(localized: "Tap the heart on a movie or show to keep it here. My List follows your profile to every device in the household.", bundle: .module)
                 )
                 .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity)
@@ -124,10 +124,10 @@ struct MyListScreen: View {
             }
         } else {
             if !visibleMovies.isEmpty {
-                section(String(localized: "Movies"), entries: visibleMovies)
+                section(String(localized: "Movies", bundle: .module), entries: visibleMovies)
             }
             if !visibleShows.isEmpty {
-                section(String(localized: "Shows"), entries: visibleShows)
+                section(String(localized: "Shows", bundle: .module), entries: visibleShows)
             }
             if pendingCount > 0 {
                 pendingNote(count: pendingCount)
@@ -157,20 +157,20 @@ struct MyListScreen: View {
                 pendingRemoval = entry.favorite
             } label: {
                 PosterCell(
-                    title: String(localized: "Unavailable"),
+                    title: String(localized: "Unavailable", bundle: .module),
                     url: nil,
-                    caption: String(localized: "No longer offered"),
+                    caption: String(localized: "No longer offered", bundle: .module),
                     decoration: PosterDecoration(badge: nil, progress: nil),
                     isUnavailable: true
                 )
             }
             .buttonStyle(.hearthTile)
-            .accessibilityHint(Text("Removes it from My List"))
+            .accessibilityHint(Text("Removes it from My List", bundle: .module))
             .contextMenu {
                 Button(role: .destructive) {
                     remove(entry.favorite)
                 } label: {
-                    Label("Remove from My List", systemImage: "heart.slash")
+                    Label(String(localized: "Remove from My List", bundle: .module), systemImage: "heart.slash")
                 }
             }
         case .pending:
@@ -184,7 +184,7 @@ struct MyListScreen: View {
             ProgressView()
                 .controlSize(.small)
                 .tint(HearthColor.accent)
-            Text("\(count) more from sources still loading on this device")
+            Text("\(count) more from sources still loading on this device", bundle: .module)
                 .font(.hearthFootnote)
                 .foregroundStyle(HearthColor.textSecondary)
         }

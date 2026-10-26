@@ -76,7 +76,7 @@ private struct ShowDetailContent: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: series.year.map { "\(series.name) (\($0))" } ?? series.name) {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                    Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
                 }
             }
         }
@@ -140,8 +140,8 @@ private struct ShowDetailContent: View {
             } else {
                 DetailPlayButton(
                     title: episodes.isEmpty && loadState != .loaded && !isFailed
-                        ? String(localized: "Loading episodes…") : String(localized: "Play"),
-                    spokenTitle: String(localized: "Play"),
+                        ? String(localized: "Loading episodes…", bundle: .module) : String(localized: "Play", bundle: .module),
+                    spokenTitle: String(localized: "Play", bundle: .module),
                     isEnabled: false
                 ) {}
             }
@@ -176,7 +176,7 @@ private struct ShowDetailContent: View {
         if lines.contains(where: { !$0.isCurrentProfile }) {
             let profiles = Dictionary(store.profiles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(String(localized: "In this household"), style: .card)
+                SectionLabel(String(localized: "In this household", bundle: .module), style: .card)
                 ForEach(lines) { line in
                     householdRow(line, person: profiles[line.id])
                         .frame(minHeight: 30)
@@ -285,7 +285,7 @@ private struct ShowDetailContent: View {
         HStack(spacing: 12) {
             if grouping.seasons.count > Self.maxSegmentedSeasons {
                 Menu {
-                    Picker(String(localized: "Season"), selection: selection) {
+                    Picker(String(localized: "Season", bundle: .module), selection: selection) {
                         ForEach(grouping.seasons) { season in
                             Text(season.title).tag(season.number)
                         }
@@ -309,11 +309,11 @@ private struct ShowDetailContent: View {
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .accessibilityLabel(Text("Season"))
+                .accessibilityLabel(Text("Season", bundle: .module))
                 .accessibilityValue(Text(grouping.season(selection.wrappedValue)?.title ?? ""))
                 Spacer(minLength: 0)
             } else if grouping.seasons.count > 1 {
-                SegmentedPills(String(localized: "Seasons"), options: grouping.seasonNumbers, selection: selection) { number in
+                SegmentedPills(String(localized: "Seasons", bundle: .module), options: grouping.seasonNumbers, selection: selection) { number in
                     grouping.season(number)?.title ?? ""
                 }
                 // Three seasons stretched across a Mac window read as a
@@ -326,7 +326,7 @@ private struct ShowDetailContent: View {
                 ProgressView()
                     .controlSize(.small)
                     .tint(HearthColor.textSecondary)
-                    .accessibilityLabel(Text("Checking for new episodes"))
+                    .accessibilityLabel(Text("Checking for new episodes", bundle: .module))
             }
         }
     }
@@ -337,20 +337,20 @@ private struct ShowDetailContent: View {
     private var emptyEpisodes: some View {
         switch loadState {
         case .idle, .loading:
-            LibraryLoadingView(message: String(localized: "Loading episodes…"))
+            LibraryLoadingView(message: String(localized: "Loading episodes…", bundle: .module))
         case .failed(let message):
             EmptyStateView(
                 systemName: "exclamationmark.triangle",
-                title: String(localized: "Couldn't load the episodes"),
+                title: String(localized: "Couldn't load the episodes", bundle: .module),
                 message: message,
-                actionTitle: String(localized: "Try again"),
+                actionTitle: String(localized: "Try again", bundle: .module),
                 action: { attempt += 1 }
             )
         case .loaded:
             EmptyStateView(
                 systemName: "tv",
-                title: String(localized: "No episodes yet"),
-                message: String(localized: "The provider hasn't listed any episodes for this show.")
+                title: String(localized: "No episodes yet", bundle: .module),
+                message: String(localized: "The provider hasn't listed any episodes for this show.", bundle: .module)
             )
         }
     }
@@ -363,7 +363,7 @@ private struct ShowDetailContent: View {
                 .foregroundStyle(HearthColor.textSecondary)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Showing saved episodes")
+                Text("Showing saved episodes", bundle: .module)
                     .font(.hearthText(14, weight: .medium, relativeTo: .callout))
                     .foregroundStyle(HearthColor.textPrimary)
                 Text(message)
@@ -372,7 +372,7 @@ private struct ShowDetailContent: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            Button("Try again") { attempt += 1 }
+            Button(String(localized: "Try again", bundle: .module)) { attempt += 1 }
                 .buttonStyle(.hearthSecondary(shape: .rounded, size: .small))
         }
         .padding(12)
@@ -400,13 +400,13 @@ private struct ShowDetailContent: View {
             )
         }
         .buttonStyle(.hearthTile)
-        .accessibilityHint(Text(started ? "Resumes the episode" : "Plays the episode"))
+        .accessibilityHint(Text(started ? "Resumes the episode" : "Plays the episode", bundle: .module))
         .contextMenu {
             if started || watched {
                 Button {
                     playEpisode(episode, start: 0, grouping: grouping)
                 } label: {
-                    Label("Play from the beginning", systemImage: "arrow.counterclockwise")
+                    Label(String(localized: "Play from the beginning", bundle: .module), systemImage: "arrow.counterclockwise")
                 }
             }
             if let profile {
@@ -414,19 +414,19 @@ private struct ShowDetailContent: View {
                     store.setWatched(!watched, profileID: profile.id, itemKey: episode.key.rawValue)
                 } label: {
                     watched
-                        ? Label("Mark as unwatched", systemImage: "arrow.uturn.backward.circle")
-                        : Label("Mark as watched", systemImage: "checkmark.circle")
+                        ? Label(String(localized: "Mark as unwatched", bundle: .module), systemImage: "arrow.uturn.backward.circle")
+                        : Label(String(localized: "Mark as watched", bundle: .module), systemImage: "checkmark.circle")
                 }
             }
         }
         .accessibilityActions {
             if let profile {
-                Button(watched ? String(localized: "Mark as unwatched") : String(localized: "Mark as watched")) {
+                Button(watched ? String(localized: "Mark as unwatched", bundle: .module) : String(localized: "Mark as watched", bundle: .module)) {
                     store.setWatched(!watched, profileID: profile.id, itemKey: episode.key.rawValue)
                 }
             }
             if started || watched {
-                Button(String(localized: "Play from the beginning")) {
+                Button(String(localized: "Play from the beginning", bundle: .module)) {
                     playEpisode(episode, start: 0, grouping: grouping)
                 }
             }

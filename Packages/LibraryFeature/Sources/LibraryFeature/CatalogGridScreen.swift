@@ -11,8 +11,8 @@ enum LibraryShelf: String, Sendable {
 
     var title: String {
         switch self {
-        case .movies: String(localized: "Movies", comment: "Screen title")
-        case .shows: String(localized: "Shows", comment: "Screen title")
+        case .movies: String(localized: "Movies", bundle: .module, comment: "Screen title")
+        case .shows: String(localized: "Shows", bundle: .module, comment: "Screen title")
         }
     }
 
@@ -180,7 +180,7 @@ struct CatalogGridScreen: View {
                     Text(option.title).tag(option)
                 }
             } label: {
-                Text("Sort by")
+                Text("Sort by", bundle: .module)
             }
             .pickerStyle(.inline)
         } label: {
@@ -195,7 +195,7 @@ struct CatalogGridScreen: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel(Text("Sort"))
+        .accessibilityLabel(Text("Sort", bundle: .module))
         .accessibilityValue(Text(sort.title))
     }
 
@@ -219,7 +219,7 @@ struct CatalogGridScreen: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Categories"))
+        .accessibilityLabel(Text("Categories", bundle: .module))
     }
 
     // MARK: Content
@@ -234,50 +234,50 @@ struct CatalogGridScreen: View {
         case .noSources:
             EmptyStateView(
                 systemName: "tray",
-                title: String(localized: "No sources yet"),
+                title: String(localized: "No sources yet", bundle: .module),
                 message: shelf == .movies
-                    ? String(localized: "Add a Stalker portal, Xtream login or M3U playlist and its movies appear here.")
-                    : String(localized: "Add a Stalker portal, Xtream login or M3U playlist and its shows appear here."),
-                actionTitle: session.canManageHousehold ? String(localized: "Add a source") : nil,
+                    ? String(localized: "Add a Stalker portal, Xtream login or M3U playlist and its movies appear here.", bundle: .module)
+                    : String(localized: "Add a Stalker portal, Xtream login or M3U playlist and its shows appear here.", bundle: .module),
+                actionTitle: session.canManageHousehold ? String(localized: "Add a source", bundle: .module) : nil,
                 action: session.canManageHousehold ? { openRoute(.sourceEditor(sourceID: nil)) } : nil
             )
             .padding(.top, 40)
         case .importing(let message, let progress):
-            LibraryLoadingView(message: message.isEmpty ? String(localized: "Loading your sources…") : message, progress: progress)
+            LibraryLoadingView(message: message.isEmpty ? String(localized: "Loading your sources…", bundle: .module) : message, progress: progress)
                 .padding(.top, 60)
         case .failed(let message, let sourceID):
             EmptyStateView(
                 systemName: "exclamationmark.triangle",
-                title: shelf == .movies ? String(localized: "Couldn't load movies") : String(localized: "Couldn't load shows"),
+                title: shelf == .movies ? String(localized: "Couldn't load movies", bundle: .module) : String(localized: "Couldn't load shows", bundle: .module),
                 message: message,
-                actionTitle: String(localized: "Try again"),
+                actionTitle: String(localized: "Try again", bundle: .module),
                 action: { Task { await catalog.refresh(sourceID: sourceID, force: true) } }
             )
             .padding(.top, 40)
         case .noneOffered:
             EmptyStateView(
                 systemName: shelf == .movies ? "film" : "tv",
-                title: shelf == .movies ? String(localized: "No movies here") : String(localized: "No shows here"),
+                title: shelf == .movies ? String(localized: "No movies here", bundle: .module) : String(localized: "No shows here", bundle: .module),
                 message: shelf == .movies
-                    ? String(localized: "Your sources don't offer movies, or haven't sent any yet.")
-                    : String(localized: "Your sources don't offer shows, or haven't sent any yet.")
+                    ? String(localized: "Your sources don't offer movies, or haven't sent any yet.", bundle: .module)
+                    : String(localized: "Your sources don't offer shows, or haven't sent any yet.", bundle: .module)
             )
             .padding(.top, 40)
         case .hiddenByProfile:
             EmptyStateView(
                 systemName: "eye.slash",
-                title: String(localized: "Nothing to show on this profile"),
+                title: String(localized: "Nothing to show on this profile", bundle: .module),
                 message: shelf == .movies
-                    ? String(localized: "This profile's rules hide every movie category. Someone who manages the household can change them.")
-                    : String(localized: "This profile's rules hide every show category. Someone who manages the household can change them.")
+                    ? String(localized: "This profile's rules hide every movie category. Someone who manages the household can change them.", bundle: .module)
+                    : String(localized: "This profile's rules hide every show category. Someone who manages the household can change them.", bundle: .module)
             )
             .padding(.top, 40)
         case .categoryEmpty:
             EmptyStateView(
                 systemName: "square.grid.2x2",
-                title: String(localized: "Nothing in this category"),
-                message: String(localized: "The provider sent this category empty."),
-                actionTitle: String(localized: "Show all"),
+                title: String(localized: "Nothing in this category", bundle: .module),
+                message: String(localized: "The provider sent this category empty.", bundle: .module),
+                actionTitle: String(localized: "Show all", bundle: .module),
                 action: { storedCategoryID = nil }
             )
             .padding(.top, 40)
@@ -300,7 +300,7 @@ struct CatalogGridScreen: View {
                 ProgressView()
                     .tint(HearthColor.accent)
                     .offset(y: 28)
-                    .accessibilityLabel(Text("Loading more"))
+                    .accessibilityLabel(Text("Loading more", bundle: .module))
             }
         }
     }
@@ -313,7 +313,7 @@ struct CatalogGridScreen: View {
 
     private var shelfState: ShelfState {
         guard hasLoaded else {
-            return .importing(message: String(localized: "Loading…"), progress: nil)
+            return .importing(message: String(localized: "Loading…", bundle: .module), progress: nil)
         }
         let offered = sourceStates.reduce(0) { $0 + (shelf == .movies ? $1.movieCount : $1.seriesCount) }
         return ShelfState.resolve(hasItems: !entries.isEmpty, categorySelected: categoryID != nil,

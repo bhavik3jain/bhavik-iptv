@@ -108,12 +108,12 @@ struct MyListHeartButton: View {
             let isFavorite = store.isFavorite(profileID: profile.id, itemKey: itemKey.rawValue)
             SquareIconButton(
                 systemName: isFavorite ? "heart.fill" : "heart",
-                label: isFavorite ? String(localized: "In My List") : String(localized: "Add to My List"),
+                label: isFavorite ? String(localized: "In My List", bundle: .module) : String(localized: "Add to My List", bundle: .module),
                 isActive: isFavorite
             ) {
                 store.toggleFavorite(profileID: profile.id, itemKey: itemKey.rawValue, kind: kind)
             }
-            .accessibilityHint(Text(isFavorite ? "Removes it from My List" : "Keeps it in My List on every device"))
+            .accessibilityHint(Text(isFavorite ? "Removes it from My List" : "Keeps it in My List on every device", bundle: .module))
             .sensoryFeedback(.selection, trigger: isFavorite)
         }
     }
@@ -186,7 +186,7 @@ struct PosterCell: View {
         if let caption { parts.append(caption) }
         if let badge = decoration.badge { parts.append(badge) }
         if let progress = decoration.progress {
-            parts.append(String(localized: "\(progress.formatted(.percent.precision(.fractionLength(0)))) watched"))
+            parts.append(String(localized: "\(progress.formatted(.percent.precision(.fractionLength(0)))) watched", bundle: .module))
         }
         return parts.joined(separator: ", ")
     }
@@ -249,8 +249,8 @@ struct LibraryPosterLink: View {
                 store.toggleFavorite(profileID: profile.id, itemKey: entry.id.rawValue, kind: entry.favoriteKind)
             } label: {
                 isFavorite
-                    ? Label("Remove from My List", systemImage: "heart.slash")
-                    : Label("Add to My List", systemImage: "heart")
+                    ? Label(String(localized: "Remove from My List", bundle: .module), systemImage: "heart.slash")
+                    : Label(String(localized: "Add to My List", bundle: .module), systemImage: "heart")
             }
             if let movieState {
                 let watched = movieState.action == .playAgain
@@ -258,8 +258,8 @@ struct LibraryPosterLink: View {
                     store.setWatched(!watched, profileID: profile.id, itemKey: entry.id.rawValue)
                 } label: {
                     watched
-                        ? Label("Mark as unwatched", systemImage: "arrow.uturn.backward.circle")
-                        : Label("Mark as watched", systemImage: "checkmark.circle")
+                        ? Label(String(localized: "Mark as unwatched", bundle: .module), systemImage: "arrow.uturn.backward.circle")
+                        : Label(String(localized: "Mark as watched", bundle: .module), systemImage: "checkmark.circle")
                 }
             }
         }
