@@ -81,6 +81,9 @@ struct ProfileEditorScreen: View {
             .tint(HearthColor.accent)
             .interactiveDismissDisabled(inSheet && isDirty)
             .onAppear(perform: loadDraft)
+            // Opened before the profile reached this device (a link followed
+            // while iCloud is still importing): fill in once it arrives.
+            .onChange(of: store.revision) { loadDraft() }
             .sheet(isPresented: $showsPINSetup) {
                 PINSetupSheet(
                     profileName: draft?.trimmedName ?? "",

@@ -59,7 +59,9 @@ struct PINPad<Header: View>: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-        .focusable()
+        // `.edit`: the pad takes typed input, as a text field would, so a
+        // hardware keyboard reaches it without a focus ring on every key.
+        .focusable(interactions: .edit)
         .focused($hasKeyboardFocus)
         .defaultFocus($hasKeyboardFocus, true)
         .focusEffectDisabled()
