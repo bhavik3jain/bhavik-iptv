@@ -607,7 +607,25 @@ enum RefreshAfterSave {
                 try? await Task.sleep(for: .milliseconds(250))
             }
             guard mapped else { return }
+            // An edited login: a refresh already running signed in with the
+            // old one, and `refresh` would only join it. Stop it and let it
+            // wind down (briefly) so the new login gets its own import.
+            if previous != nil, isRefreshing(expected.id, in: catalog) {
+                catalog.cancelRefresh(sourceID: expected.id)
+                let stopBy = ContinuousClock.now + .seconds(5)
+                while isRefreshing(expected.id, in: catalog), ContinuousClock.now < stopBy {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                // The catalog forgets the stopped task just after its phase
+                // goes idle.
+                try? await Task.sleep(for: .milliseconds(100))
+            }
             await catalog.refresh(sourceID: expected.id, force: true)
         }
+    }
+
+    private static func isRefreshing(_ sourceID: UUID, in catalog: CatalogService) -> Bool {
+        if case .refreshing = catalog.refreshStates[sourceID]?.phase { return true }
+        return false
     }
 }
