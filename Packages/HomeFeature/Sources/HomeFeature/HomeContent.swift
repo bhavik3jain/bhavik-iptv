@@ -66,11 +66,12 @@ struct HomeLoader {
             return catalog.movie(key).map { ContinueItem.movie($0, progress: row) }
         case .episode:
             guard let seriesKey = row.seriesKey.map(ItemKey.init(rawValue:)) ?? key.seriesKey,
-                  let series = catalog.seriesItem(seriesKey),
-                  let code = UpNextPlanner.seasonAndNumber(of: row) else { return nil }
+                  let series = catalog.seriesItem(seriesKey) else { return nil }
             let episodes = catalog.cachedEpisodes(seriesKey: seriesKey)
             if episodes.isEmpty { needing.add(series) }
             let episode = episodes.first { $0.key == key } ?? catalog.episode(key)
+            // The row's code, its key's, or failing both the cached episode's.
+            guard let code = UpNextPlanner.seasonAndNumber(of: row) ?? episode.map({ ($0.season, $0.number) }) else { return nil }
             return .episode(
                 series: series,
                 episode: episode,
