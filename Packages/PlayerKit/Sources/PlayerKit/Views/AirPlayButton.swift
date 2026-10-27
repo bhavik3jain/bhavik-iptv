@@ -12,16 +12,23 @@ import SwiftUI
 /// playback); on the Mac it routes one player, so the engine's AVPlayer is
 /// handed to it, and with VLCKit (which can't AirPlay video, only mirror) it
 /// picks the audio output.
+///
+/// The Apple TV is the AirPlay receiver, not a sender: there the button
+/// isn't drawn (its speakers are picked in the system's Control Center).
 struct AirPlayButton: View {
     var player: AVPlayer?
 
     var body: some View {
+        #if os(tvOS)
+        EmptyView()
+        #else
         AirPlayRoutePicker(player: player)
             .frame(width: 24, height: 24)
             .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
             .background(Circle().fill(PlayerPalette.glass))
             .contentShape(Circle())
             .accessibilityLabel(Text("AirPlay"))
+        #endif
     }
 }
 
@@ -33,12 +40,16 @@ public struct AirPlayRouteButton: View {
     public init() {}
 
     public var body: some View {
+        #if os(tvOS)
+        EmptyView()
+        #else
         AirPlayRoutePicker(player: nil)
             .frame(width: 24, height: 24)
             .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
             .background(Circle().fill(HearthColor.surfaceRaised))
             .contentShape(Circle())
             .accessibilityLabel(Text("AirPlay"))
+        #endif
     }
 }
 

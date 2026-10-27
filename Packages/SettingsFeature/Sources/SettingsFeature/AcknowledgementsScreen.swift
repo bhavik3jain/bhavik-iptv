@@ -46,7 +46,7 @@ struct AcknowledgementsScreen: View {
             }
             .font(.hearthMono(12, relativeTo: .caption))
             .foregroundStyle(HearthColor.textTertiary)
-            .textSelection(.enabled)
+            .hearthTextSelectable()
             VStack(alignment: .leading, spacing: 0) {
                 CardLink(String(localized: "VLCKit source code", bundle: .module), systemImage: "chevron.left.forwardslash.chevron.right", url: Acknowledgements.vlcKitSourceURL)
                 CardLink(String(localized: "libVLC source code", bundle: .module), systemImage: "chevron.left.forwardslash.chevron.right", url: Acknowledgements.vlcSourceURL)
@@ -90,11 +90,11 @@ struct AcknowledgementsScreen: View {
             }
             BodyText(String(localized: "Bundled unmodified under the SIL Open Font License, Version 1.1.", bundle: .module))
             if let text = Acknowledgements.fontLicenseText() {
-                DisclosureGroup(isExpanded: $showsFontLicense) {
+                HearthDisclosureGroup(isExpanded: $showsFontLicense) {
                     Text(verbatim: text)
                         .font(.hearthMono(11, relativeTo: .caption2))
                         .foregroundStyle(HearthColor.textSecondary)
-                        .textSelection(.enabled)
+                        .hearthTextSelectable()
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 8)

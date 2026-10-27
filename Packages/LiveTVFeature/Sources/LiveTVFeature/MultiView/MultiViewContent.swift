@@ -242,12 +242,12 @@ struct MultiViewContent: View {
             }
             .contextMenu { tileMenu(tile.id) }
             .accessibilityActions { tileMenu(tile.id) }
-            .dropDestination(for: String.self) { keys, _ in drop(keys, onTile: tile.id) }
+            .hearthStringDropDestination { keys in drop(keys, onTile: tile.id) }
         } else {
             PlayerTileView(emptyReason: emptyTileReason) {
                 picker = PickerRequest(tileID: tile.id, isSwap: false)
             }
-            .dropDestination(for: String.self) { keys, _ in drop(keys, onTile: tile.id) }
+            .hearthStringDropDestination { keys in drop(keys, onTile: tile.id) }
         }
     }
 

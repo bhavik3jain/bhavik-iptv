@@ -12,13 +12,18 @@ import SwiftUI
 /// its PIN, PRF-3) calls `ProfileSession.select`.
 public struct WhoIsWatchingView: View {
     let onManageHousehold: () -> Void
+    @Environment(\.hearthLayout) private var layout
 
     public init(onManageHousehold: @escaping () -> Void = {}) {
         self.onManageHousehold = onManageHousehold
     }
 
     public var body: some View {
-        WhoIsWatchingScreen(onManageHousehold: onManageHousehold)
+        if layout == .tv {
+            WhoIsWatchingTVScreen(onManageHousehold: onManageHousehold)
+        } else {
+            WhoIsWatchingScreen(onManageHousehold: onManageHousehold)
+        }
     }
 }
 

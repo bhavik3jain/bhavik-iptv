@@ -451,7 +451,9 @@ public enum HearthButtonSize: Sendable {
     }
 }
 
-/// The body both button styles share: shape, size, pressed and disabled.
+/// The body both button styles share: shape, size, pressed, disabled and
+/// focused. Focus (the Apple TV's remote, a keyboard elsewhere) lifts the
+/// button and turns a secondary one white, as tvOS draws focused controls.
 private struct HearthButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let shape: HearthButtonShape
@@ -459,7 +461,11 @@ private struct HearthButtonBody: View {
     let fill: Color
     let foreground: Color
     let weight: Font.Weight
+    var focusedFill: Color?
+    var focusedForeground: Color?
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.isFocused) private var isFocused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let outline = shape == .capsule
@@ -471,9 +477,12 @@ private struct HearthButtonBody: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, size.horizontalPadding)
             .frame(minHeight: size.minHeight)
-            .foregroundStyle(foreground)
-            .background(outline.fill(fill))
+            .foregroundStyle(isFocused ? (focusedForeground ?? foreground) : foreground)
+            .background(outline.fill(isFocused ? (focusedFill ?? fill) : fill))
             .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
+            .scaleEffect(isFocused && !reduceMotion ? 1.06 : 1)
+            .shadow(color: .black.opacity(isFocused ? 0.4 : 0), radius: 14, y: 8)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isFocused)
             .padding(.vertical, max(0, (HearthMetrics.minimumHitTarget - size.minHeight) / 2))
             .contentShape(Rectangle())
     }
@@ -518,7 +527,8 @@ public struct HearthSecondaryButtonStyle: ButtonStyle {
 
     public func makeBody(configuration: Configuration) -> some View {
         HearthButtonBody(configuration: configuration, shape: shape, size: size,
-                         fill: HearthColor.surfaceRaised, foreground: HearthColor.textPrimary, weight: .medium)
+                         fill: HearthColor.surfaceRaised, foreground: HearthColor.textPrimary, weight: .medium,
+                         focusedFill: HearthColor.textPrimary, focusedForeground: HearthColor.background)
     }
 }
 

@@ -8,6 +8,9 @@ import SwiftUI
 /// iOS: a window group, each window with its own tabs; the player opens full
 /// screen in the window that asked.
 ///
+/// tvOS: one window, the same as iOS underneath, with a root of its own for
+/// the focus engine (`TVRootView`).
+///
 /// macOS: one main window (a `Window`, so the menu commands have one
 /// navigation to drive), the player in windows of its own that can go full
 /// screen, and Settings (⌘,). The player got real windows rather than a large
@@ -15,7 +18,7 @@ import SwiftUI
 /// beside the guide, and blocks the main window while it plays.
 @main
 struct HearthApp: App {
-    #if os(iOS)
+    #if os(iOS) || os(tvOS)
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #else
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate

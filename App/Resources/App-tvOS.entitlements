@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The same container as the iPhone and the Mac: the Apple TV joins the
+	     household through the iCloud account it is signed in to, and gets its
+	     sources, profiles and favorites from there. -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.bhavikjain.hearth</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<!-- CloudKit's silent pushes, as on iOS: a source added on the iPhone
+	     reaches the TV in seconds. The App Store export rewrites it to
+	     "production". -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

@@ -197,7 +197,7 @@ struct FavoritesOrderSheet: View {
                         .foregroundStyle(HearthColor.textSecondary)
                 }
             }
-            .scrollContentBackground(.hidden)
+            .hearthScrollContentBackgroundHidden()
             .hearthScreenBackground()
             .overlay {
                 if favorites.isEmpty {

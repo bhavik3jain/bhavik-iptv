@@ -6,7 +6,7 @@ import PackageDescription
 // CloudKit; never talks to a provider.
 let package = Package(
     name: "HouseholdKit",
-    platforms: [.iOS(.v18), .macOS(.v15)],
+    platforms: [.iOS(.v18), .macOS(.v15), .tvOS(.v18)],
     products: [.library(name: "HouseholdKit", targets: ["HouseholdKit"])],
     dependencies: [.package(path: "../Core")],
     targets: [

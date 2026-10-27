@@ -198,6 +198,8 @@ enum DebugLaunch {
     private static var launchLayout: HearthLayout {
         #if os(macOS)
         .sidebar
+        #elseif os(tvOS)
+        .tv
         #else
         .compact
         #endif

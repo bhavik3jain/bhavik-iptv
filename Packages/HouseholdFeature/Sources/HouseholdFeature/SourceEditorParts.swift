@@ -119,11 +119,11 @@ struct SourceTestResultCard: View {
                 Text(message)
                     .font(.hearthCallout)
                     .foregroundStyle(result.succeeded ? HearthColor.textSecondary : HearthColor.textPrimary)
-                    .textSelection(.enabled)
+                    .hearthTextSelectable()
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !result.steps.isEmpty {
-                DisclosureGroup(isExpanded: $showsSteps) {
+                HearthDisclosureGroup(isExpanded: $showsSteps) {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(result.steps.enumerated()), id: \.offset) { _, step in
                             Text(step)
@@ -132,7 +132,7 @@ struct SourceTestResultCard: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .textSelection(.enabled)
+                    .hearthTextSelectable()
                     .padding(.top, 4)
                 } label: {
                     Text(result.succeeded ? String(localized: "Steps") : String(localized: "What happened"))
@@ -233,7 +233,7 @@ struct SourceStatusSection: View {
                     Text(failure)
                         .font(.hearthFootnote)
                         .foregroundStyle(HearthColor.danger)
-                        .textSelection(.enabled)
+                        .hearthTextSelectable()
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

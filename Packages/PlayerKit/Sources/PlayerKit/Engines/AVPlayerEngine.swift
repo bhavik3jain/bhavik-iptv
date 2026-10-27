@@ -380,7 +380,7 @@ final class PlayerLayerView: PlatformView {
         didSet { applyGravity() }
     }
 
-    #if os(iOS)
+    #if os(iOS) || os(tvOS)
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black

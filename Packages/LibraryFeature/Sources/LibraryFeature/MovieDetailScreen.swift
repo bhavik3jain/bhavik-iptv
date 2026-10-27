@@ -44,7 +44,7 @@ struct MovieDetailScreen: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                ShareLink(item: shareText(movie)) {
+                HearthShareLink(item: shareText(movie)) {
                     Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
                 }
             }

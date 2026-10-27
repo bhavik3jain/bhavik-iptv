@@ -36,7 +36,7 @@ enum ShareInbox {
     }
 }
 
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 import UIKit
 
 final class AppDelegate: NSObject, UIApplicationDelegate {

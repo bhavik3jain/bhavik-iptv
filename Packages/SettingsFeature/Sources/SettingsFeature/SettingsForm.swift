@@ -33,7 +33,7 @@ struct SettingsForm: View {
             AboutSection()
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
+        .hearthScrollContentBackgroundHidden()
         .font(.hearthBody)
         .hearthScreenBackground()
     }
@@ -47,7 +47,7 @@ extension View {
     fileprivate func settingsRows() -> some View {
         self
             .listRowBackground(HearthColor.surface)
-            .listRowSeparatorTint(HearthColor.hairline)
+            .hearthListRowSeparatorTint(HearthColor.hairline)
     }
 }
 
@@ -513,7 +513,7 @@ private struct AboutSection: View {
                 Text(verbatim: AppVersionText.current())
                     .font(.hearthMono(13, relativeTo: .footnote))
                     .foregroundStyle(HearthColor.textSecondary)
-                    .textSelection(.enabled)
+                    .hearthTextSelectable()
             } label: {
                 SettingsLabel(String(localized: "Version", bundle: .module), systemImage: "info.circle")
             }

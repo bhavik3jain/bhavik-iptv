@@ -75,7 +75,7 @@ private struct ShowDetailContent: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                ShareLink(item: series.year.map { "\(series.name) (\($0))" } ?? series.name) {
+                HearthShareLink(item: series.year.map { "\(series.name) (\($0))" } ?? series.name) {
                     Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
                 }
             }
@@ -271,7 +271,7 @@ private struct ShowDetailContent: View {
     private var episodeColumns: [GridItem] {
         switch layout {
         case .compact: [GridItem(.flexible(), alignment: .top)]
-        case .sidebar: [GridItem(.adaptive(minimum: 340), spacing: 24, alignment: .top)]
+        case .sidebar, .tv: [GridItem(.adaptive(minimum: 340), spacing: 24, alignment: .top)]
         }
     }
 

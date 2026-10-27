@@ -50,6 +50,8 @@ private struct ReadyRoot: View {
     var body: some View {
         #if os(macOS)
         MacRootView(model: model, services: services)
+        #elseif os(tvOS)
+        TVRootView(model: model, services: services)
         #else
         PhoneRootView(model: model, services: services)
         #endif
@@ -210,7 +212,7 @@ private struct MultiViewSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(String(localized: "Done"), action: onDone)
-                            .keyboardShortcut(.cancelAction)
+                            .hearthCancelShortcut()
                             .accessibilityHint(Text("Closes multi-view and stops its channels"))
                     }
                 }
@@ -289,7 +291,7 @@ struct SchemaInitializerView: View {
                 .font(.hearthBody)
                 .foregroundStyle(HearthColor.textSecondary)
                 .multilineTextAlignment(.center)
-                .textSelection(.enabled)
+                .hearthTextSelectable()
         }
         .padding(HearthMetrics.screenPadding)
         .frame(maxWidth: 560)

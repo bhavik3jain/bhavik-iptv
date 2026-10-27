@@ -132,7 +132,7 @@ struct LiveTVScreen: View {
                     } label: {
                         Label("Search channels", systemImage: "magnifyingglass")
                     }
-                    .keyboardShortcut("f", modifiers: .command)
+                    .hearthKeyboardShortcut("f", modifiers: .command)
                 }
             }
         }
