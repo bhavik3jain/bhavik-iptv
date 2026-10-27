@@ -11,9 +11,15 @@ import SwiftUI
 struct SettingsForm: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
+    @Environment(\.hearthLayout) private var layout
 
     var body: some View {
         Form {
+            // Settings is a tab on the TV, the one place to switch profile
+            // and reach Household from.
+            if layout == .tv {
+                TVProfileSection()
+            }
             // The freshest copy of the current profile, so a language picked
             // a moment ago (or on another device) shows at once.
             if let current = session.currentProfile {
@@ -33,9 +39,49 @@ struct SettingsForm: View {
             AboutSection()
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
+        .hearthScrollContentBackgroundHidden()
         .font(.hearthBody)
+        .hearthTVScaledText(layout == .tv)
         .hearthScreenBackground()
+    }
+}
+
+/// The TV's first section: who is watching, Switch profile, Household.
+private struct TVProfileSection: View {
+    @Environment(ProfileSession.self) private var session
+
+    var body: some View {
+        Section {
+            if let profile = session.currentProfile {
+                Button {
+                    session.signOut()
+                } label: {
+                    HStack(spacing: 18) {
+                        AvatarTile(name: profile.name, palette: profile.avatarColor, symbol: profile.avatarSymbol, size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(profile.name)
+                                .font(.hearthText(15, weight: .semibold, relativeTo: .body))
+                            Text("Switch profile", bundle: .module)
+                                .font(.hearthFootnote)
+                                .foregroundStyle(HearthColor.textSecondary)
+                        }
+                    }
+                }
+                .settingsRows()
+            }
+            if !session.isKids, !session.isGuest {
+                NavigationLink(value: HearthRoute.household) {
+                    Label {
+                        Text("Household", bundle: .module)
+                    } icon: {
+                        Image(systemName: "person.2").foregroundStyle(HearthColor.accent)
+                    }
+                }
+                .settingsRows()
+            }
+        } header: {
+            SectionLabel(String(localized: "Profile", bundle: .module))
+        }
     }
 }
 
@@ -47,7 +93,7 @@ extension View {
     fileprivate func settingsRows() -> some View {
         self
             .listRowBackground(HearthColor.surface)
-            .listRowSeparatorTint(HearthColor.hairline)
+            .hearthListRowSeparatorTint(HearthColor.hairline)
     }
 }
 
@@ -513,7 +559,7 @@ private struct AboutSection: View {
                 Text(verbatim: AppVersionText.current())
                     .font(.hearthMono(13, relativeTo: .footnote))
                     .foregroundStyle(HearthColor.textSecondary)
-                    .textSelection(.enabled)
+                    .hearthTextSelectable()
             } label: {
                 SettingsLabel(String(localized: "Version", bundle: .module), systemImage: "info.circle")
             }

@@ -41,7 +41,11 @@ public struct HouseholdView: View {
     public var body: some View {
         Group {
             if session.canOpenSettings {
-                content
+                if layout == .tv {
+                    tvContent
+                } else {
+                    content
+                }
             } else {
                 // PRF-4: the app doesn't route a Kids profile here; this is
                 // the backstop for a stale link.
@@ -63,6 +67,37 @@ public struct HouseholdView: View {
         .task(id: catalog.revision) {
             recordProviderExpiry()
         }
+    }
+
+    /// The TV: the same sections, read from across the room, under a note
+    /// that sources, people and profiles are changed from an iPhone, iPad or
+    /// Mac — forms of logins and names are no job for a remote, and whatever
+    /// changes there arrives here through iCloud.
+    private var tvContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 40) {
+                TVPageHeader(String(localized: "Household"), subtitle: store.household.name)
+                TVNoticeCard(
+                    systemName: "ipad.and.iphone",
+                    title: String(localized: "Manage the household from your iPhone, iPad or Mac"),
+                    message: String(localized: "Add a portal, Xtream login or playlist, invite people and edit profiles in Hearth on another device signed in to the same iCloud household. Changes appear on this Apple TV on their own.")
+                )
+                HStack(alignment: .top, spacing: 48) {
+                    VStack(spacing: 28) {
+                        HouseholdCard()
+                        StreamsRightNowSection()
+                        SyncSection()
+                    }
+                    VStack(spacing: 28) {
+                        ProfilesSection()
+                        SourcesSection()
+                    }
+                }
+                .hearthTVScaledText(true)
+            }
+            .padding(.bottom, 60)
+        }
+        .toolbar(.hidden, for: .automatic)
     }
 
     private var content: some View {

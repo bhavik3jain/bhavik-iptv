@@ -164,10 +164,10 @@ enum SearchResultLimits {
     static func collapsedCount(for section: SearchSection, layout: HearthLayout) -> Int {
         switch (section, layout) {
         case (.channels, .compact), (.onTV, .compact): 5
-        case (.channels, .sidebar), (.onTV, .sidebar): 8
+        case (.channels, .sidebar), (.onTV, .sidebar), (.channels, .tv), (.onTV, .tv): 8
         // The phone scrolls posters sideways, so it shows them all.
         case (.movies, .compact), (.shows, .compact): .max
-        case (.movies, .sidebar), (.shows, .sidebar): 12
+        case (.movies, .sidebar), (.shows, .sidebar), (.movies, .tv), (.shows, .tv): 12
         }
     }
 

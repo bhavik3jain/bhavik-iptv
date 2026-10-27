@@ -24,6 +24,7 @@ public struct SettingsView: View {
     public init() {}
 
     @Environment(ProfileSession.self) private var session
+    @Environment(\.hearthLayout) private var layout
 
     public var body: some View {
         Group {
@@ -35,6 +36,8 @@ public struct SettingsView: View {
         }
         .navigationTitle(Text("Settings", bundle: .module))
         .inlineNavigationTitle()
+        // A tab on the TV: the tab bar already names it.
+        .toolbar(layout == .tv ? .hidden : .automatic, for: .automatic)
         .tint(HearthColor.accent)
         // The Mac's Settings window is its own scene, outside the main
         // window's root where the app sets the layout; derive it here too so
@@ -56,10 +59,13 @@ public struct SettingsView: View {
 /// A plain screen with a navigation title: push it from Settings (or show it
 /// anywhere inside a `NavigationStack`).
 public struct AcknowledgementsView: View {
+    @Environment(\.hearthLayout) private var layout
+
     public init() {}
 
     public var body: some View {
         AcknowledgementsScreen()
+            .hearthTVScaledText(layout == .tv)
     }
 }
 

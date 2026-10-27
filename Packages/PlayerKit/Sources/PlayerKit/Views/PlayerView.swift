@@ -32,6 +32,15 @@ public struct PlayerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public var body: some View {
+        #if os(tvOS)
+        // The Siri Remote's player: focus, not taps and keys (PlayerView+TV).
+        TVPlayerScreen(model: model)
+        #else
+        touchAndKeyboardBody
+        #endif
+    }
+
+    private var touchAndKeyboardBody: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
@@ -461,6 +470,7 @@ struct PlayerScrubBar: View {
             }
             .frame(width: width, height: proxy.size.height)
             .contentShape(Rectangle())
+            #if !os(tvOS)
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
@@ -476,6 +486,7 @@ struct PlayerScrubBar: View {
                         }
                     }
             )
+            #endif
         }
         .frame(height: 32)
         .disabled(!model.canSeek)

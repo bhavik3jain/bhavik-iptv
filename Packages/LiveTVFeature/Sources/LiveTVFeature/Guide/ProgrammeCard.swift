@@ -97,16 +97,7 @@ struct ProgrammeCard: View {
                 .strokeBorder(HearthColor.stroke, lineWidth: 1)
         )
         .offset(y: max(0, dragOffset))
-        .gesture(
-            DragGesture(minimumDistance: 12)
-                .onChanged { dragOffset = $0.translation.height }
-                .onEnded { value in
-                    if value.translation.height > 70 || value.predictedEndTranslation.height > 160 {
-                        onClose()
-                    }
-                    withAnimation(reduceMotion ? nil : .snappy) { dragOffset = 0 }
-                }
-        )
+        .hearthSwipeDownToDismiss(offset: $dragOffset, animation: reduceMotion ? nil : .snappy, onClose: onClose)
         .accessibilityElement(children: .contain)
         .accessibilityAction(.escape, onClose)
         .onKeyPress(.escape) {

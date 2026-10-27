@@ -85,7 +85,7 @@ struct StreamLimitSheet: View {
                 Text("Watch anyway").frame(maxWidth: .infinity)
             }
             .buttonStyle(.hearthPrimary(shape: .rounded, size: .large))
-            .keyboardShortcut(.defaultAction)
+            .hearthDefaultActionShortcut()
 
             if let alternative = prompt.alternative {
                 Button {
@@ -103,7 +103,7 @@ struct StreamLimitSheet: View {
                 Text("Cancel").frame(maxWidth: .infinity)
             }
             .buttonStyle(.hearthSecondary(shape: .rounded, size: .large))
-            .keyboardShortcut(.cancelAction)
+            .hearthCancelShortcut()
         }
         .padding(.top, 4)
     }

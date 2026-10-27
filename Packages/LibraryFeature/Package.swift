@@ -9,7 +9,7 @@ import PackageDescription
 let package = Package(
     name: "LibraryFeature",
     defaultLocalization: "en",
-    platforms: [.iOS(.v18), .macOS(.v15)],
+    platforms: [.iOS(.v18), .macOS(.v15), .tvOS(.v18)],
     products: [.library(name: "LibraryFeature", targets: ["LibraryFeature"])],
     dependencies: [
         .package(path: "../Core"),

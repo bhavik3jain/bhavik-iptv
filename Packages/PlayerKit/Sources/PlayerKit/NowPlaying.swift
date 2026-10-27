@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import MediaPlayer
 
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 import UIKit
 #elseif os(macOS)
 import AppKit
@@ -138,7 +138,7 @@ final class NowPlayingCenter {
     }
 
     private nonisolated static func makeArtwork(_ data: Data) -> MPMediaItemArtwork? {
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         guard let image = UIImage(data: data) else { return nil }
         #else
         guard let image = NSImage(data: data) else { return nil }
@@ -153,10 +153,15 @@ final class NowPlayingCenter {
 enum PlaybackAudioSession {
     @MainActor
     static func activate() {
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         let session = AVAudioSession.sharedInstance()
         do {
+            #if os(tvOS)
+            // The TV routes long-form video itself; there is no policy to ask for.
+            try session.setCategory(.playback, mode: .moviePlayback)
+            #else
             try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+            #endif
             try session.setActive(true)
         } catch {
             // Playback still works in the foreground; only background audio

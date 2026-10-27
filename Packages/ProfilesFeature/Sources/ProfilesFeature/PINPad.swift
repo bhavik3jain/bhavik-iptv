@@ -37,11 +37,14 @@ struct PINPad<Header: View>: View {
     @State private var state = PINEntryState()
     @FocusState private var hasKeyboardFocus: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hearthLayout) private var layout
     /// Keys grow with Dynamic Type, up to a size that still fits four rows on
     /// iPhone Duo's inner display.
     @ScaledMetric(relativeTo: .title) private var scaledKeySize: CGFloat = 74
 
-    private var keySize: CGFloat { min(max(scaledKeySize, 64), 92) }
+    /// The TV's keys are pressed with the remote's focus, from across the room.
+    private var isTV: Bool { layout == .tv }
+    private var keySize: CGFloat { isTV ? 116 : min(max(scaledKeySize, 64), 92) }
 
     var body: some View {
         GeometryReader { proxy in
@@ -54,14 +57,16 @@ struct PINPad<Header: View>: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 28)
-                .frame(maxWidth: 420)
+                .frame(maxWidth: isTV ? 640 : 420)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
         // `.edit`: the pad takes typed input, as a text field would, so a
         // hardware keyboard reaches it without a focus ring on every key.
-        .focusable(interactions: .edit)
+        // A hardware keyboard types digits here; on the TV the keys themselves
+        // take focus, so the pad must not.
+        .focusable(!isTV, interactions: .edit)
         .focused($hasKeyboardFocus)
         .defaultFocus($hasKeyboardFocus, true)
         .focusEffectDisabled()
@@ -95,7 +100,7 @@ struct PINPad<Header: View>: View {
     private var titleBlock: some View {
         VStack(spacing: 8) {
             Text(title)
-                .font(.hearthDisplay(22, weight: .semibold, relativeTo: .title2))
+                .font(isTV ? .hearthTVTitle : .hearthDisplay(22, weight: .semibold, relativeTo: .title2))
                 .tracking(-0.3)
                 .foregroundStyle(HearthColor.textPrimary)
                 .multilineTextAlignment(.center)
@@ -121,7 +126,7 @@ struct PINPad<Header: View>: View {
         // Always takes room for two lines' worth, so the dots don't jump when
         // a message comes and goes.
         Text(line?.text ?? " ")
-            .font(.hearthFootnote)
+            .font(isTV ? .hearthTVCallout : .hearthFootnote)
             .foregroundStyle(line?.isError == true ? HearthColor.danger : HearthColor.textSecondary)
             .multilineTextAlignment(.center)
             .lineLimit(3)
@@ -139,7 +144,7 @@ struct PINPad<Header: View>: View {
                 Circle()
                     .fill(filled ? dotColor : Color.clear)
                     .overlay(Circle().strokeBorder(filled ? Color.clear : dotStroke, lineWidth: 1.5))
-                    .frame(width: 14, height: 14)
+                    .frame(width: isTV ? 24 : 14, height: isTV ? 24 : 14)
             }
         }
         .frame(minHeight: 24)
@@ -207,7 +212,7 @@ struct PINPad<Header: View>: View {
             if let onCancel {
                 Button(action: onCancel) {
                     Text("Cancel", bundle: .module)
-                        .font(.hearthText(16, weight: .medium, relativeTo: .body))
+                        .font(.hearthText(isTV ? 26 : 16, weight: .medium, relativeTo: .body))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .foregroundStyle(HearthColor.textPrimary)
@@ -215,7 +220,7 @@ struct PINPad<Header: View>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.hearthTile)
-                .keyboardShortcut(.cancelAction)
+                .hearthCancelShortcut()
             } else {
                 Color.clear.frame(width: keySize, height: keySize)
             }
@@ -285,16 +290,26 @@ private struct PINKeyBody: View {
     let configuration: ButtonStyleConfiguration
     let size: CGFloat
     @Environment(\.isEnabled) private var isEnabled
+    /// The remote's focus on the TV (a keyboard's elsewhere): amber, lifted.
+    @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         configuration.label
-            .foregroundStyle(HearthColor.textPrimary)
+            .foregroundStyle(isFocused ? HearthColor.onAccent : HearthColor.textPrimary)
             .frame(width: size, height: size)
             .background(
-                Circle().fill(configuration.isPressed ? HearthColor.dashedStroke : HearthColor.surfaceRaised)
+                Circle().fill(fill)
             )
             .opacity(isEnabled ? 1 : 0.4)
+            .scaleEffect(isFocused ? 1.1 : 1)
+            .shadow(color: .black.opacity(isFocused ? 0.4 : 0), radius: 12, y: 6)
+            .animation(.easeOut(duration: 0.15), value: isFocused)
             .contentShape(Circle())
+    }
+
+    private var fill: Color {
+        if isFocused { return HearthColor.accent }
+        return configuration.isPressed ? HearthColor.dashedStroke : HearthColor.surfaceRaised
     }
 }
 

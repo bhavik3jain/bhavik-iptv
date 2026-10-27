@@ -35,7 +35,7 @@ struct DetailScaffold<Actions: View, Aside: View, Content: View>: View {
         ScrollView {
             switch layout {
             case .compact: compactBody
-            case .sidebar: sidebarBody
+            case .sidebar, .tv: sidebarBody
             }
         }
         .scrollRevealedTitle(title, threshold: layout == .compact ? 190 : 80)
@@ -228,7 +228,7 @@ struct ExpandableText: View {
                 .lineSpacing(3)
                 .lineLimit(isExpanded || isShort ? nil : collapsedLines)
                 .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
+                .hearthTextSelectable()
             if !isShort {
                 Button(isExpanded ? String(localized: "Less", bundle: .module) : String(localized: "More", bundle: .module)) {
                     withAnimation(.easeOut(duration: 0.2)) { isExpanded.toggle() }

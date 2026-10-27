@@ -16,8 +16,12 @@ struct ProfileSwitcher: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
     @Environment(\.openRoute) private var openRoute
+    @Environment(\.hearthLayout) private var layout
 
     @State private var pinRequest: PINFlowRequest?
+
+    /// Home's header on the TV is read from across the room.
+    private var isTV: Bool { layout == .tv }
 
     var body: some View {
         let _ = store.revision
@@ -52,17 +56,26 @@ struct ProfileSwitcher: View {
     /// Mockup 02: a 36-pt avatar, the name in Sora SemiBold 20 and a small
     /// chevron, at least 44 pt tall to touch.
     private var headerLabel: some View {
-        HStack(spacing: 10) {
-            avatar(size: 36)
+        HStack(spacing: isTV ? 16 : 10) {
+            avatar(size: isTV ? 56 : 36)
+                // tvOS fills a focused menu button with the tint, which an
+                // amber avatar would vanish into; a dark rim keeps it.
+                .overlay {
+                    if isTV {
+                        RoundedRectangle(cornerRadius: 56 * 0.27, style: .continuous)
+                            .strokeBorder(HearthColor.background.opacity(0.55), lineWidth: 3)
+                    }
+                }
             Text(current?.name ?? String(localized: "Profiles", bundle: .module))
-                .font(.hearthDisplay(20, weight: .semibold, relativeTo: .title3))
+                .font(.hearthDisplay(isTV ? 30 : 20, weight: .semibold, relativeTo: .title3))
                 .foregroundStyle(HearthColor.textPrimary)
                 .lineLimit(1)
             Image(systemName: "chevron.down")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: isTV ? 20 : 13, weight: .semibold))
                 .foregroundStyle(HearthColor.textSecondary)
         }
-        .frame(minHeight: HearthMetrics.minimumHitTarget)
+        .padding(.horizontal, isTV ? 12 : 0)
+        .frame(minHeight: isTV ? 76 : HearthMetrics.minimumHitTarget)
         .contentShape(Rectangle())
     }
 

@@ -5,7 +5,7 @@ import PackageDescription
 // SourceClient protocol. Depends on nothing, never touches iCloud.
 let package = Package(
     name: "SourceKit",
-    platforms: [.iOS(.v18), .macOS(.v15)],
+    platforms: [.iOS(.v18), .macOS(.v15), .tvOS(.v18)],
     products: [.library(name: "SourceKit", targets: ["SourceKit"])],
     targets: [
         .target(name: "SourceKit"),

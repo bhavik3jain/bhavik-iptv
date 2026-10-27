@@ -13,7 +13,8 @@ import BackgroundTasks
 /// with its identifier listed in `BGTaskSchedulerPermittedIdentifiers`
 /// (project.yml) or registration throws; and every scheduler callback must be
 /// `@Sendable`, because the scheduler calls them on queues of its own and
-/// Swift 6 traps a main-actor closure run anywhere else.
+/// Swift 6 traps a main-actor closure run anywhere else. The Apple TV, like
+/// the Mac, refreshes at launch and on becoming active only.
 @MainActor
 enum GuideRefreshScheduler {
     /// Also in `BGTaskSchedulerPermittedIdentifiers`.

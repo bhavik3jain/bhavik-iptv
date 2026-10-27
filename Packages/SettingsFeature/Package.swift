@@ -10,7 +10,7 @@ import PackageDescription
 let package = Package(
     name: "SettingsFeature",
     defaultLocalization: "en",
-    platforms: [.iOS(.v18), .macOS(.v15)],
+    platforms: [.iOS(.v18), .macOS(.v15), .tvOS(.v18)],
     products: [.library(name: "SettingsFeature", targets: ["SettingsFeature"])],
     dependencies: [
         .package(path: "../Core"),

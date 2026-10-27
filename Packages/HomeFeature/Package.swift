@@ -7,7 +7,7 @@ import PackageDescription
 let package = Package(
     name: "HomeFeature",
     defaultLocalization: "en",
-    platforms: [.iOS(.v18), .macOS(.v15)],
+    platforms: [.iOS(.v18), .macOS(.v15), .tvOS(.v18)],
     products: [.library(name: "HomeFeature", targets: ["HomeFeature"])],
     dependencies: [
         .package(path: "../Core"),

@@ -6,7 +6,7 @@ import PackageDescription
 // touches iCloud, safe to delete.
 let package = Package(
     name: "CatalogKit",
-    platforms: [.iOS(.v18), .macOS(.v15)],
+    platforms: [.iOS(.v18), .macOS(.v15), .tvOS(.v18)],
     products: [.library(name: "CatalogKit", targets: ["CatalogKit"])],
     dependencies: [
         .package(path: "../Core"),

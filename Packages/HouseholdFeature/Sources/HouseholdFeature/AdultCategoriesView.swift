@@ -62,7 +62,7 @@ struct AdultCategoriesView: View {
             }
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
+        .hearthScrollContentBackgroundHidden()
         .font(.hearthBody)
         .tint(HearthColor.accent)
         .searchable(text: $query, prompt: Text("Search categories"))

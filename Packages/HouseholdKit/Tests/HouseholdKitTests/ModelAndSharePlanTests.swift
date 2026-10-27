@@ -7,7 +7,16 @@ import Testing
 /// CloudKit's model rules fail at container load, never at compile time —
 /// so they are pinned here (Multitrack's crash-at-launch lesson).
 @Suite struct HouseholdModelTests {
-    let model = HouseholdModel.shared
+    /// A model no store has loaded. These tests pin the model's definition,
+    /// and reading the shared instance while a parallel test's store first
+    /// loaded it once saw `allowsCloudEncryption` come back false (one
+    /// failure in a full run on the iOS simulator). `shared` is touched first
+    /// so Core Data still sets itself up through its one-time build (see
+    /// HouseholdStore.init).
+    let model: NSManagedObjectModel = {
+        _ = HouseholdModel.shared
+        return HouseholdModel.make()
+    }()
 
     @Test func hasTheSevenEntities() {
         #expect(Set(model.entities.compactMap(\.name)) == ["Household", "Source", "Profile", "Favorite", "Progress", "Playback", "MemberRole"])

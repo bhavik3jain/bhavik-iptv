@@ -15,6 +15,7 @@ struct MovieDetailScreen: View {
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
+    @Environment(\.hearthLayout) private var layout
     @Environment(\.play) private var play
 
     var body: some View {
@@ -35,6 +36,77 @@ struct MovieDetailScreen: View {
         let _ = store.revision
         let progress = profileID.flatMap { store.progress(profileID: $0, itemKey: movie.key.rawValue) }
         let state = MoviePlayState(progress: progress)
+        if layout == .tv {
+            tvDetail(movie, state: state)
+        } else {
+            touchDetail(movie, state: state, progress: progress)
+        }
+    }
+
+    // MARK: TV
+
+    /// The TV's page: Play (or Resume) first in focus, From the beginning
+    /// while part way, My List, Watched; the plot and credits under them.
+    private func tvDetail(_ movie: CatalogMovie, state: MoviePlayState) -> some View {
+        TVDetailLayout(title: movie.name, metaParts: MetaLine.movie(movie), artworkURL: movie.posterURL) {
+            HStack(spacing: 24) {
+                Button {
+                    start(movie, at: state.startPosition)
+                } label: {
+                    Label(state.title, systemImage: "play.fill")
+                }
+                .buttonStyle(.hearthTV(isProminent: true))
+                .accessibilityLabel(Text(state.spokenTitle))
+                if state.isResumable {
+                    Button {
+                        start(movie, at: 0)
+                    } label: {
+                        Label(String(localized: "From the beginning", bundle: .module), systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.hearthTV)
+                }
+                TVMyListButton(itemKey: movie.key, kind: .movie)
+                if let profileID {
+                    let isWatched = state.action == .playAgain
+                    Button {
+                        store.setWatched(!isWatched, profileID: profileID, itemKey: movie.key.rawValue)
+                    } label: {
+                        Label(isWatched ? String(localized: "Mark as unwatched", bundle: .module) : String(localized: "Mark as watched", bundle: .module),
+                              systemImage: isWatched ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                    }
+                    .buttonStyle(.hearthTV)
+                }
+            }
+        } info: {
+            if let fraction = state.fraction {
+                HStack(spacing: 20) {
+                    HearthProgressBar(value: fraction, height: 8)
+                        .frame(width: 360)
+                    if let remaining = state.remaining {
+                        Text(LibraryFormat.remaining(remaining))
+                            .font(.hearthTVCaption)
+                            .foregroundStyle(HearthColor.textSecondary)
+                    }
+                }
+            }
+            if let plot = movie.plot?.trimmingCharacters(in: .whitespacesAndNewlines), !plot.isEmpty {
+                TVPlotText(text: plot)
+            }
+            let cast = MetaLine.castNames(movie.cast)
+            if !cast.isEmpty {
+                Text(String(localized: "Cast", bundle: .module) + "  " + cast.joined(separator: ", "))
+                    .font(.hearthTVCaption)
+                    .foregroundStyle(HearthColor.textTertiary)
+                    .lineLimit(2)
+            }
+        } content: {
+            EmptyView()
+        }
+    }
+
+    // MARK: Phone and sidebar
+
+    private func touchDetail(_ movie: CatalogMovie, state: MoviePlayState, progress: ProgressRecord?) -> some View {
         DetailScaffold(title: movie.name, metaParts: MetaLine.movie(movie), artworkURL: movie.posterURL) {
             actions(movie, state: state, progress: progress)
         } aside: {
@@ -44,7 +116,7 @@ struct MovieDetailScreen: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                ShareLink(item: shareText(movie)) {
+                HearthShareLink(item: shareText(movie)) {
                     Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
                 }
             }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 import UIKit
 typealias PlatformView = UIView
 #elseif os(macOS)
@@ -20,7 +20,7 @@ struct EngineVideoSurface {
     let content: PlatformView
 }
 
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 extension EngineVideoSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let container = UIView()

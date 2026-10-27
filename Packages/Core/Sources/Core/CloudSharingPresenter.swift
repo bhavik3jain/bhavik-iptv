@@ -264,3 +264,24 @@ extension CloudSharingAnchor.Coordinator: @preconcurrency NSCloudSharingServiceD
     }
 }
 #endif
+
+// MARK: - tvOS
+
+#if os(tvOS)
+/// tvOS has no iCloud sharing UI: people are invited from an iPhone, iPad
+/// or Mac in the household. The invitation is let go at once, so whoever
+/// set it sees the sheet "close" and stops waiting.
+private struct CloudSharingAnchor: View {
+    @Binding var invitation: CloudShareInvitation?
+    let onDismiss: @MainActor () -> Void
+
+    var body: some View {
+        Color.clear
+            .onChange(of: invitation?.id) { _, id in
+                guard id != nil else { return }
+                invitation = nil
+                onDismiss()
+            }
+    }
+}
+#endif

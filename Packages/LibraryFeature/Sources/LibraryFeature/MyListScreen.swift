@@ -51,22 +51,27 @@ struct MyListScreen: View {
     @State private var pendingRemoval: FavoriteRecord?
     private var metrics = PosterGridMetrics()
 
+    private var isTV: Bool { layout == .tv }
+
     var body: some View {
         let _ = (catalog.revision, store.revision)
-        let gutter = libraryGutter(layout)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                LibraryTitleRow(title: String(localized: "My List", bundle: .module)) { EmptyView() }
-                    .padding(.top, 4)
-                content
+        Group {
+            if isTV {
+                // The TV: a shelf of movies and one of shows; the tab bar
+                // already says "My List".
+                ScrollView {
+                    VStack(alignment: .leading, spacing: HearthTVMetrics.shelfSpacing) {
+                        content
+                    }
+                    .padding(.bottom, 60)
+                }
+                .scrollClipDisabled()
+                .hearthScreenBackground()
+                .toolbar(.hidden, for: .automatic)
+            } else {
+                touchBody
             }
-            .padding(.horizontal, gutter)
-            .padding(.bottom, 32)
-            .frame(maxWidth: libraryMaxContentWidth)
-            .frame(maxWidth: .infinity)
         }
-        .scrollRevealedTitle(String(localized: "My List", bundle: .module))
-        .hearthScreenBackground()
         .confirmationDialog(
             String(localized: "Remove from My List?", bundle: .module),
             isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
@@ -81,22 +86,51 @@ struct MyListScreen: View {
         }
     }
 
+    private var touchBody: some View {
+        let gutter = libraryGutter(layout)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                LibraryTitleRow(title: String(localized: "My List", bundle: .module)) { EmptyView() }
+                    .padding(.top, 4)
+                content
+            }
+            .padding(.horizontal, gutter)
+            .padding(.bottom, 32)
+            .frame(maxWidth: libraryMaxContentWidth)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollRevealedTitle(String(localized: "My List", bundle: .module))
+        .hearthScreenBackground()
+    }
+
+    /// An empty state in the layout's size.
+    @ViewBuilder
+    private func emptyState(systemName: String, title: String, message: String? = nil) -> some View {
+        if isTV {
+            TVNoticeCard(systemName: systemName, title: title, message: message ?? "")
+                .frame(maxWidth: 1200, alignment: .leading)
+        } else {
+            EmptyStateView(systemName: systemName, title: title, message: message)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         if let profile = session.currentProfile {
             if profile.isGuest {
-                EmptyStateView(
+                emptyState(
                     systemName: "heart",
                     title: String(localized: "My List isn't kept for guests", bundle: .module),
                     message: String(localized: "Pick your own profile to keep movies and shows in My List.", bundle: .module)
                 )
-                .padding(.top, 40)
             } else {
                 list(profileID: profile.id)
             }
         } else {
-            EmptyStateView(systemName: "person.crop.circle", title: String(localized: "Choose a profile to see its list", bundle: .module))
-                .padding(.top, 40)
+            emptyState(systemName: "person.crop.circle", title: String(localized: "Choose a profile to see its list", bundle: .module))
         }
     }
 
@@ -113,14 +147,13 @@ struct MyListScreen: View {
                 LibraryLoadingView(message: String(localized: "Loading My List from your sources…", bundle: .module))
                     .padding(.top, 60)
             } else {
-                EmptyStateView(
+                emptyState(
                     systemName: "heart",
                     title: String(localized: "Nothing in My List yet", bundle: .module),
-                    message: String(localized: "Tap the heart on a movie or show to keep it here. My List follows your profile to every device in the household.", bundle: .module)
+                    message: isTV
+                        ? String(localized: "Choose My List on a movie or show to keep it here. My List follows your profile to every device in the household.", bundle: .module)
+                        : String(localized: "Tap the heart on a movie or show to keep it here. My List follows your profile to every device in the household.", bundle: .module)
                 )
-                .frame(maxWidth: 520)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 40)
             }
         } else {
             if !visibleMovies.isEmpty {
@@ -135,7 +168,20 @@ struct MyListScreen: View {
         }
     }
 
+    @ViewBuilder
     private func section(_ title: String, entries: [MyListEntry]) -> some View {
+        if isTV {
+            TVShelf(title) {
+                ForEach(entries) { entry in
+                    tile(entry)
+                }
+            }
+        } else {
+            touchSection(title, entries: entries)
+        }
+    }
+
+    private func touchSection(_ title: String, entries: [MyListEntry]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title)
             LazyVGrid(columns: metrics.columns(for: layout), alignment: .leading, spacing: 20) {
@@ -151,7 +197,19 @@ struct MyListScreen: View {
     private func tile(_ entry: MyListEntry) -> some View {
         switch entry.status {
         case .available(let item):
-            LibraryPosterLink(entry: item)
+            if isTV {
+                TVLibraryPosterLink(entry: item)
+            } else {
+                LibraryPosterLink(entry: item)
+            }
+        case .unavailable where isTV:
+            TVCard(width: HearthTVMetrics.posterWidth, title: String(localized: "Unavailable", bundle: .module), caption: String(localized: "No longer offered", bundle: .module)) {
+                pendingRemoval = entry.favorite
+            } artwork: {
+                TVPosterArtwork(title: String(localized: "Unavailable", bundle: .module), url: nil)
+                    .opacity(0.5)
+            }
+            .accessibilityHint(Text("Removes it from My List", bundle: .module))
         case .unavailable:
             Button {
                 pendingRemoval = entry.favorite

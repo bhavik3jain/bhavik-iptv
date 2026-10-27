@@ -192,10 +192,19 @@ struct RouteDestination: View {
             SearchView(initialQuery: query)
         case .household:
             HouseholdView()
+        #if os(tvOS)
+        // Long forms of names, PINs and logins are typed on a phone: the TV
+        // says where, rather than asking for them letter by letter.
+        case .profileEditor:
+            TVEditElsewhereView(subject: .profile)
+        case .sourceEditor:
+            TVEditElsewhereView(subject: .source)
+        #else
         case .profileEditor(let profileID):
             ProfileEditorView(profileID: profileID)
         case .sourceEditor(let sourceID):
             SourceEditorView(sourceID: sourceID)
+        #endif
         case .settings:
             SettingsView()
         }

@@ -115,7 +115,7 @@ public struct SourceEditorView: View {
         .hearthScreenBackground()
         // Pushed with unsaved typing, Cancel (which asks) stands in for the
         // back button, so a stray tap or swipe can't lose a login.
-        .navigationBarBackButtonHidden(presentation == .pushed && showsForm && isDirty)
+        .hearthNavigationBarBackButtonHidden(presentation == .pushed && showsForm && isDirty)
         .toolbar {
             if presentation == .sheet || (showsForm && isDirty) {
                 ToolbarItem(placement: .cancellationAction) {
@@ -170,7 +170,7 @@ public struct SourceEditorView: View {
             }
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
+        .hearthScrollContentBackgroundHidden()
         .font(.hearthBody)
         .tint(HearthColor.accent)
         .onChange(of: draft.macAddress) { _, typed in
@@ -183,7 +183,7 @@ public struct SourceEditorView: View {
                 test = .idle
             }
         }
-        .fileImporter(isPresented: $isImportingFile, allowedContentTypes: Self.playlistTypes) { result in
+        .hearthFileImporter(isPresented: $isImportingFile, allowedContentTypes: Self.playlistTypes) { result in
             switch result {
             case .success(let url): importPlaylist(url)
             case .failure(let error): fileError = error.localizedDescription
@@ -303,30 +303,33 @@ public struct SourceEditorView: View {
             } else {
                 SourceField(String(localized: "Playlist URL"), text: $draft.playlistURL, prompt: "https://provider.example.com/playlist.m3u", style: .url, problem: draft.problem(with: .playlistURL))
             }
-            Button {
-                isImportingFile = true
-            } label: {
-                HStack(spacing: 6) {
-                    if isCopyingFile {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "folder").accessibilityHidden(true)
+            // No file picker on the TV: a playlist there is a link.
+            if HearthPlatform.canPickFiles {
+                Button {
+                    isImportingFile = true
+                } label: {
+                    HStack(spacing: 6) {
+                        if isCopyingFile {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "folder").accessibilityHidden(true)
+                        }
+                        Text("Choose a playlist file…")
                     }
-                    Text("Choose a playlist file…")
+                    .font(.hearthText(14, weight: .medium, relativeTo: .callout))
+                    .foregroundStyle(HearthColor.accent)
+                    .frame(minHeight: HearthMetrics.minimumHitTarget)
+                    .contentShape(Rectangle())
                 }
-                .font(.hearthText(14, weight: .medium, relativeTo: .callout))
-                .foregroundStyle(HearthColor.accent)
-                .frame(minHeight: HearthMetrics.minimumHitTarget)
-                .contentShape(Rectangle())
+                .buttonStyle(.hearthTile)
+                .disabled(isCopyingFile)
             }
-            .buttonStyle(.hearthTile)
-            .disabled(isCopyingFile)
         }
     }
 
     private var advancedSection: some View {
         Section {
-            DisclosureGroup(isExpanded: $showsAdvanced) {
+            HearthDisclosureGroup(isExpanded: $showsAdvanced) {
                 SourceField(String(localized: "Serial number"), text: $draft.serialNumber, prompt: String(localized: "Made from the MAC"), style: .code)
                 SourceField(String(localized: "Device ID"), text: $draft.deviceID, prompt: String(localized: "Made from the MAC"), style: .code)
                 SourceField(String(localized: "Device ID 2"), text: $draft.deviceID2, prompt: String(localized: "Same as device ID"), style: .code)
@@ -359,7 +362,7 @@ public struct SourceEditorView: View {
                 }
                 .frame(minHeight: HearthMetrics.minimumHitTarget)
             } else {
-                Stepper(value: $draft.maxStreams, in: 0...20) {
+                HearthStepper(value: $draft.maxStreams, in: 0...20) {
                     HStack {
                         Text("Streams allowed at once")
                         Spacer(minLength: 8)

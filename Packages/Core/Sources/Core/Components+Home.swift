@@ -252,7 +252,9 @@ public struct ChannelNowCard: View {
 
 /// The press feedback for a card or tile wrapped in a button (a channel
 /// card, a poster, a profile): it dims, and shrinks slightly unless Reduce
-/// Motion is on. Draws nothing else, so the card keeps its own look.
+/// Motion is on. With focus (the Apple TV's remote, a keyboard elsewhere) it
+/// grows a little and casts a shadow. Draws nothing else, so the card keeps
+/// its own look.
 public struct HearthTileButtonStyle: ButtonStyle {
     public init() {}
 
@@ -265,13 +267,24 @@ private struct HearthTileButtonBody: View {
     let configuration: ButtonStyleConfiguration
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         configuration.label
             .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .scaleEffect(scale)
+            .shadow(color: .black.opacity(isFocused ? 0.45 : 0), radius: 16, y: 10)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isFocused)
             .contentShape(Rectangle())
+    }
+}
+
+private extension HearthTileButtonBody {
+    var scale: CGFloat {
+        guard !reduceMotion else { return 1 }
+        if configuration.isPressed { return 0.97 }
+        return isFocused ? 1.06 : 1
     }
 }
 

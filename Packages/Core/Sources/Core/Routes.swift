@@ -111,10 +111,18 @@ public struct OpenRouteAction: Sendable {
 /// How the app is laid out right now. Features ask this — never the platform,
 /// the idiom or the orientation — to decide between the phone layout and the
 /// sidebar layout. `.sidebar` is the Mac, an iPad, and iPhone Duo's inner
-/// display: anywhere the horizontal size class is regular.
+/// display: anywhere the horizontal size class is regular. `.tv` is the
+/// Apple TV: a 10-foot screen driven by focus and the Siri Remote, where the
+/// features draw their own variants (large cards, rows the focus engine can
+/// walk) rather than the phone or sidebar layout.
 public enum HearthLayout: Sendable {
     case compact
     case sidebar
+    case tv
+
+    /// The wide layouts: what a feature built for `.sidebar` also shows on a
+    /// TV screen it hasn't got a TV variant for.
+    public var isWide: Bool { self != .compact }
 }
 
 extension EnvironmentValues {
