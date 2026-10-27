@@ -45,7 +45,7 @@ struct MovieDetailScreen: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: shareText(movie)) {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                    Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
                 }
             }
         }
@@ -60,7 +60,7 @@ struct MovieDetailScreen: View {
                     start(movie, at: state.startPosition)
                 }
                 if state.isResumable {
-                    SquareIconButton(systemName: "arrow.counterclockwise", label: String(localized: "Play from the beginning")) {
+                    SquareIconButton(systemName: "arrow.counterclockwise", label: String(localized: "Play from the beginning", bundle: .module)) {
                         start(movie, at: 0)
                     }
                 }
@@ -92,7 +92,7 @@ struct MovieDetailScreen: View {
             guard let profileID else { return }
             store.setWatched(!isWatched, profileID: profileID, itemKey: movie.key.rawValue)
         } label: {
-            Label(isWatched ? String(localized: "Mark as unwatched") : String(localized: "Mark as watched"),
+            Label(isWatched ? String(localized: "Mark as unwatched", bundle: .module) : String(localized: "Mark as watched", bundle: .module),
                   systemImage: isWatched ? "arrow.uturn.backward.circle" : "checkmark.circle")
                 .font(.hearthText(14, weight: .medium, relativeTo: .callout))
                 .foregroundStyle(HearthColor.textSecondary)
@@ -121,10 +121,10 @@ struct MovieDetailScreen: View {
         if !genres.isEmpty || !cast.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
                 if genres.count > 1 {
-                    CreditRow(label: String(localized: "Genres"), value: genres.formatted(.list(type: .and)))
+                    CreditRow(label: String(localized: "Genres", bundle: .module), value: genres.formatted(.list(type: .and)))
                 }
                 if !cast.isEmpty {
-                    CreditRow(label: String(localized: "Cast"), value: cast.joined(separator: ", "))
+                    CreditRow(label: String(localized: "Cast", bundle: .module), value: cast.joined(separator: ", "))
                 }
             }
             .padding(.top, 4)
@@ -155,16 +155,16 @@ struct UnavailableItemView: View {
                 if catalog.contains(itemKey) {
                     EmptyStateView(
                         systemName: "eye.slash",
-                        title: String(localized: "Not available on this profile"),
-                        message: String(localized: "This profile's rules hide its category.")
+                        title: String(localized: "Not available on this profile", bundle: .module),
+                        message: String(localized: "This profile's rules hide its category.", bundle: .module)
                     )
                 } else if let profile = session.currentProfile, !profile.isGuest,
                           store.isFavorite(profileID: profile.id, itemKey: itemKey.rawValue) {
                     EmptyStateView(
                         systemName: "questionmark.square.dashed",
-                        title: String(localized: "No longer available"),
-                        message: String(localized: "Its provider stopped offering it, or its source was removed from the household."),
-                        actionTitle: String(localized: "Remove from My List"),
+                        title: String(localized: "No longer available", bundle: .module),
+                        message: String(localized: "Its provider stopped offering it, or its source was removed from the household.", bundle: .module),
+                        actionTitle: String(localized: "Remove from My List", bundle: .module),
                         action: {
                             store.toggleFavorite(profileID: profile.id, itemKey: itemKey.rawValue, kind: kind)
                             dismiss()
@@ -173,8 +173,8 @@ struct UnavailableItemView: View {
                 } else {
                     EmptyStateView(
                         systemName: "questionmark.square.dashed",
-                        title: String(localized: "No longer available"),
-                        message: String(localized: "Its provider stopped offering it, or its source was removed from the household.")
+                        title: String(localized: "No longer available", bundle: .module),
+                        message: String(localized: "Its provider stopped offering it, or its source was removed from the household.", bundle: .module)
                     )
                 }
             }
@@ -182,7 +182,7 @@ struct UnavailableItemView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 60)
         }
-        .navigationTitle(kind == .series ? String(localized: "Show") : String(localized: "Movie"))
+        .navigationTitle(kind == .series ? String(localized: "Show", bundle: .module) : String(localized: "Movie", bundle: .module))
         .inlineNavigationTitle()
         .hearthScreenBackground()
     }

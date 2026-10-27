@@ -230,14 +230,14 @@ struct ExpandableText: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             if !isShort {
-                Button(isExpanded ? String(localized: "Less") : String(localized: "More")) {
+                Button(isExpanded ? String(localized: "Less", bundle: .module) : String(localized: "More", bundle: .module)) {
                     withAnimation(.easeOut(duration: 0.2)) { isExpanded.toggle() }
                 }
                 .font(.hearthText(14, weight: .semibold, relativeTo: .callout))
                 .foregroundStyle(HearthColor.accent)
                 .buttonStyle(.plain)
                 .frame(minHeight: HearthMetrics.minimumHitTarget)
-                .accessibilityLabel(Text(isExpanded ? "Show less of the plot" : "Show the whole plot"))
+                .accessibilityLabel(Text(isExpanded ? "Show less of the plot" : "Show the whole plot", bundle: .module))
             }
         }
     }

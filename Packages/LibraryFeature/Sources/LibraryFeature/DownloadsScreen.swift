@@ -9,13 +9,13 @@ struct DownloadsScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                LibraryTitleRow(title: String(localized: "Downloads")) { EmptyView() }
+                LibraryTitleRow(title: String(localized: "Downloads", bundle: .module)) { EmptyView() }
                     .padding(.horizontal, libraryGutter(layout))
                     .padding(.top, 4)
                 EmptyStateView(
                     systemName: "arrow.down.circle",
-                    title: String(localized: "Downloads arrive in a later version"),
-                    message: String(localized: "You'll be able to save movies and episodes to watch offline, when the provider sends them as files rather than live streams. They'll stay on this device only.")
+                    title: String(localized: "Downloads arrive in a later version", bundle: .module),
+                    message: String(localized: "You'll be able to save movies and episodes to watch offline, when the provider sends them as files rather than live streams. They'll stay on this device only.", bundle: .module)
                 )
                 .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity)
@@ -24,7 +24,7 @@ struct DownloadsScreen: View {
             .frame(maxWidth: libraryMaxContentWidth)
             .frame(maxWidth: .infinity)
         }
-        .scrollRevealedTitle(String(localized: "Downloads"))
+        .scrollRevealedTitle(String(localized: "Downloads", bundle: .module))
         .hearthScreenBackground()
     }
 }

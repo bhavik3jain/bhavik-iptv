@@ -3,7 +3,9 @@ import PackageDescription
 
 // A feature package: Core plus the kits it needs, never another feature.
 // SourceKit is listed for `ContentKind` (category queries), which CatalogKit's
-// API uses but does not re-export.
+// API uses but does not re-export. Strings live in the package's own catalog
+// (`bundle: .module`), as in Core and the other features: Xcode extracts a
+// package's strings into its catalog, never into the app's.
 let package = Package(
     name: "LibraryFeature",
     defaultLocalization: "en",
@@ -16,6 +18,10 @@ let package = Package(
         .package(path: "../HouseholdKit"),
     ],
     targets: [
-        .target(name: "LibraryFeature", dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit"]),
+        .target(
+            name: "LibraryFeature",
+            dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit"],
+            resources: [.process("Resources")]
+        ),
     ]
 )

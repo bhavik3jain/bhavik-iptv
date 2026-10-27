@@ -13,11 +13,11 @@ import HouseholdKit
 /// for VoiceOver, which would otherwise spell "S2" letter by letter.
 enum EpisodeCode {
     static func short(season: Int, episode: Int) -> String {
-        String(localized: "S\(season) E\(episode)", comment: "Season and episode, e.g. S2 E5")
+        String(localized: "S\(season) E\(episode)", bundle: .module, comment: "Season and episode, e.g. S2 E5")
     }
 
     static func spoken(season: Int, episode: Int) -> String {
-        String(localized: "Season \(season), episode \(episode)", comment: "VoiceOver for S2 E5")
+        String(localized: "Season \(season), episode \(episode)", bundle: .module, comment: "VoiceOver for S2 E5")
     }
 }
 
@@ -37,8 +37,8 @@ struct SeasonGrouping: Equatable {
 
         var title: String {
             number == 0
-                ? String(localized: "Specials", comment: "The season providers number 0")
-                : String(localized: "Season \(number)", comment: "Season picker segment")
+                ? String(localized: "Specials", bundle: .module, comment: "The season providers number 0")
+                : String(localized: "Season \(number)", bundle: .module, comment: "Season picker segment")
         }
     }
 
@@ -115,18 +115,18 @@ struct ShowPlayTarget: Equatable {
     var title: String {
         let code = EpisodeCode.short(season: episode.season, episode: episode.number)
         switch action {
-        case .resume: return String(localized: "Resume \(code)", comment: "Show's main button, e.g. Resume S2 E5")
-        case .play: return String(localized: "Play \(code)", comment: "Show's main button, e.g. Play S1 E1")
-        case .playAgain: return String(localized: "Play again", comment: "Show's main button once every episode is watched")
+        case .resume: return String(localized: "Resume \(code)", bundle: .module, comment: "Show's main button, e.g. Resume S2 E5")
+        case .play: return String(localized: "Play \(code)", bundle: .module, comment: "Show's main button, e.g. Play S1 E1")
+        case .playAgain: return String(localized: "Play again", bundle: .module, comment: "Show's main button once every episode is watched")
         }
     }
 
     var spokenTitle: String {
         let code = EpisodeCode.spoken(season: episode.season, episode: episode.number)
         switch action {
-        case .resume: return String(localized: "Resume \(code)")
-        case .play: return String(localized: "Play \(code)")
-        case .playAgain: return String(localized: "Play again from \(code)")
+        case .resume: return String(localized: "Resume \(code)", bundle: .module)
+        case .play: return String(localized: "Play \(code)", bundle: .module)
+        case .playAgain: return String(localized: "Play again from \(code)", bundle: .module)
         }
     }
 
@@ -209,17 +209,17 @@ struct MoviePlayState: Equatable {
 
     var title: String {
         switch action {
-        case .play: String(localized: "Play", comment: "Movie's main button")
+        case .play: String(localized: "Play", bundle: .module, comment: "Movie's main button")
         case .resume(let position):
-            String(localized: "Resume \(LibraryFormat.timecode(position))", comment: "Movie's main button, e.g. Resume 41:12")
-        case .playAgain: String(localized: "Play again", comment: "Movie's main button once watched")
+            String(localized: "Resume \(LibraryFormat.timecode(position))", bundle: .module, comment: "Movie's main button, e.g. Resume 41:12")
+        case .playAgain: String(localized: "Play again", bundle: .module, comment: "Movie's main button once watched")
         }
     }
 
     var spokenTitle: String {
         switch action {
         case .resume(let position):
-            String(localized: "Resume from \(LibraryFormat.spokenDuration(position))", comment: "VoiceOver, e.g. Resume from 41 minutes, 12 seconds")
+            String(localized: "Resume from \(LibraryFormat.spokenDuration(position))", bundle: .module, comment: "VoiceOver, e.g. Resume from 41 minutes, 12 seconds")
         default: title
         }
     }
@@ -271,7 +271,7 @@ struct HouseholdShowLine: Equatable, Identifiable {
     static func mine(id: UUID, progress: ProgressRecord) -> HouseholdShowLine? {
         guard let season = progress.season, let episode = progress.episode else { return nil }
         let trailing = state(of: progress)
-        return HouseholdShowLine(id: id, name: String(localized: "You", comment: "In this household: the current profile"),
+        return HouseholdShowLine(id: id, name: String(localized: "You", bundle: .module, comment: "In this household: the current profile"),
                                  season: season, episode: episode, trailing: trailing, isCurrentProfile: true)
     }
 
@@ -283,9 +283,9 @@ struct HouseholdShowLine: Equatable, Identifiable {
         let trailing: String
         if let mine, let mySeason = mine.season, let myEpisode = mine.episode {
             switch relation(of: (season, episode), to: (mySeason, myEpisode)) {
-            case .ahead: trailing = String(localized: "ahead of you", comment: "In this household: another profile is further into the show")
-            case .behind: trailing = String(localized: "behind you", comment: "In this household: another profile is earlier in the show")
-            case .sameEpisode: trailing = String(localized: "same episode", comment: "In this household: another profile is on your episode")
+            case .ahead: trailing = String(localized: "ahead of you", bundle: .module, comment: "In this household: another profile is further into the show")
+            case .behind: trailing = String(localized: "behind you", bundle: .module, comment: "In this household: another profile is earlier in the show")
+            case .sameEpisode: trailing = String(localized: "same episode", bundle: .module, comment: "In this household: another profile is on your episode")
             }
         } else {
             trailing = state(of: progress)
@@ -298,15 +298,15 @@ struct HouseholdShowLine: Equatable, Identifiable {
     /// "started" when the provider never said how long it runs.
     static func state(of progress: ProgressRecord) -> String {
         if progress.watched {
-            return String(localized: "watched", comment: "In this household: the latest episode is finished")
+            return String(localized: "watched", bundle: .module, comment: "In this household: the latest episode is finished")
         }
         if progress.position < MoviePlayState.minimumResume {
-            return String(localized: "up next", comment: "In this household: the latest episode is not begun yet")
+            return String(localized: "up next", bundle: .module, comment: "In this household: the latest episode is not begun yet")
         }
         if progress.duration > 0, progress.remaining >= 60 {
             return LibraryFormat.remaining(progress.remaining)
         }
-        return String(localized: "started", comment: "In this household: an episode begun with no known length")
+        return String(localized: "started", bundle: .module, comment: "In this household: an episode begun with no known length")
     }
 
     /// "Anya, season 3, episode 1, ahead of you".
@@ -329,8 +329,8 @@ enum MetaLine {
         let seasons = seasonCount.flatMap { count -> String? in
             guard count > 0 else { return nil }
             return count == 1
-                ? String(localized: "1 season", comment: "Show meta line")
-                : String(localized: "\(count) seasons", comment: "Show meta line, e.g. 3 seasons")
+                ? String(localized: "1 season", bundle: .module, comment: "Show meta line")
+                : String(localized: "\(count) seasons", bundle: .module, comment: "Show meta line, e.g. 3 seasons")
         }
         return parts(year: series.year, genre: series.genre, middle: seasons, rating: series.rating, sourceName: series.sourceName)
     }
@@ -348,7 +348,7 @@ enum MetaLine {
         if let rating = ratingText(rating) { parts.append(rating) }
         let source = sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !source.isEmpty {
-            parts.append(String(localized: "from \(source)", comment: "Which source an item comes from, e.g. from Provider B (SRC-7)"))
+            parts.append(String(localized: "from \(source)", bundle: .module, comment: "Which source an item comes from, e.g. from Provider B (SRC-7)"))
         }
         return parts
     }
@@ -410,13 +410,13 @@ struct PosterDecoration: Equatable {
     static func movie(addedAt: Date?, progress: ProgressRecord?, now: Date) -> PosterDecoration {
         if let progress {
             if progress.watched {
-                return PosterDecoration(badge: String(localized: "Watched", comment: "Poster badge on a finished movie"), progress: nil)
+                return PosterDecoration(badge: String(localized: "Watched", bundle: .module, comment: "Poster badge on a finished movie"), progress: nil)
             }
             if progress.position >= MoviePlayState.minimumResume, progress.duration > 0 {
                 return PosterDecoration(badge: nil, progress: progress.fraction)
             }
         }
-        return PosterDecoration(badge: isNew(addedAt: addedAt, now: now) ? String(localized: "New", comment: "Poster badge on a recent addition") : nil,
+        return PosterDecoration(badge: isNew(addedAt: addedAt, now: now) ? String(localized: "New", bundle: .module, comment: "Poster badge on a recent addition") : nil,
                                 progress: nil)
     }
 
@@ -426,10 +426,10 @@ struct PosterDecoration: Equatable {
     static func series(addedAt: Date?, latest: ProgressRecord?, now: Date) -> PosterDecoration {
         let isNew = isNew(addedAt: addedAt, now: now)
         guard let latest, let season = latest.season, let episode = latest.episode else {
-            return PosterDecoration(badge: isNew ? String(localized: "New") : nil, progress: nil)
+            return PosterDecoration(badge: isNew ? String(localized: "New", bundle: .module) : nil, progress: nil)
         }
         let code = EpisodeCode.short(season: season, episode: episode)
-        let badge = isNew ? String(localized: "New · \(code)", comment: "Poster badge, e.g. New · S3 E3") : code
+        let badge = isNew ? String(localized: "New · \(code)", bundle: .module, comment: "Poster badge, e.g. New · S3 E3") : code
         let progress = (!latest.watched && latest.position > 0 && latest.duration > 0) ? latest.fraction : nil
         return PosterDecoration(badge: badge, progress: progress)
     }
@@ -458,7 +458,7 @@ struct CategoryChips: Equatable {
             }
             return (a.sortOrder, a.name) < (b.sortOrder, b.name)
         }
-        chips = [Chip(categoryID: nil, title: String(localized: "All", comment: "Category chip for everything"))]
+        chips = [Chip(categoryID: nil, title: String(localized: "All", bundle: .module, comment: "Category chip for everything"))]
             + ordered.map { category in
                 let name = category.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let shared = (nameCounts[SearchKey.normalize(category.name)] ?? 0) > 1
@@ -539,7 +539,7 @@ enum ShelfState: Equatable {
         // Sources added but never imported on this device yet (the import
         // is queued): still loading, not "none".
         if states.contains(where: { $0.catalogRefreshedAt == nil }) {
-            return .importing(message: String(localized: "Waiting to load your sources…"), progress: nil)
+            return .importing(message: String(localized: "Waiting to load your sources…", bundle: .module), progress: nil)
         }
         return .noneOffered
     }
@@ -548,8 +548,8 @@ enum ShelfState: Equatable {
 // MARK: - Formatting
 
 /// Times as the library writes them. Core's `HearthFormat` builds its strings
-/// by interpolation; these go through `String(localized:)` where words are
-/// involved so the app's catalog can translate them.
+/// by interpolation; these go through `String(localized:bundle: .module)`
+/// where words are involved so the package's catalog can translate them.
 enum LibraryFormat {
     /// "41:12", "1:02:03".
     static func timecode(_ seconds: TimeInterval) -> String {
@@ -563,16 +563,16 @@ enum LibraryFormat {
     /// "1 h 52 min", "48 min".
     static func duration(_ seconds: TimeInterval) -> String {
         let minutes = max(0, Int((seconds / 60).rounded()))
-        if minutes < 60 { return String(localized: "\(minutes) min", comment: "A length under an hour, e.g. 48 min") }
+        if minutes < 60 { return String(localized: "\(minutes) min", bundle: .module, comment: "A length under an hour, e.g. 48 min") }
         let hours = minutes / 60, rest = minutes % 60
         return rest == 0
-            ? String(localized: "\(hours) h", comment: "A whole number of hours, e.g. 2 h")
-            : String(localized: "\(hours) h \(rest) min", comment: "A length over an hour, e.g. 1 h 52 min")
+            ? String(localized: "\(hours) h", bundle: .module, comment: "A whole number of hours, e.g. 2 h")
+            : String(localized: "\(hours) h \(rest) min", bundle: .module, comment: "A length over an hour, e.g. 1 h 52 min")
     }
 
     /// "31 min left".
     static func remaining(_ seconds: TimeInterval) -> String {
-        String(localized: "\(duration(seconds)) left", comment: "Time left in a movie or episode, e.g. 31 min left")
+        String(localized: "\(duration(seconds)) left", bundle: .module, comment: "Time left in a movie or episode, e.g. 31 min left")
     }
 
     /// "41 minutes, 12 seconds", where "41:12" would be read as a clock time.
@@ -587,9 +587,9 @@ extension CatalogSort {
     /// The sort menu's wording (VOD-1).
     var title: String {
         switch self {
-        case .dateAdded: String(localized: "Date added", comment: "Sort option")
-        case .name: String(localized: "Name", comment: "Sort option")
-        case .year: String(localized: "Year", comment: "Sort option")
+        case .dateAdded: String(localized: "Date added", bundle: .module, comment: "Sort option")
+        case .name: String(localized: "Name", bundle: .module, comment: "Sort option")
+        case .year: String(localized: "Year", bundle: .module, comment: "Sort option")
         }
     }
 }
