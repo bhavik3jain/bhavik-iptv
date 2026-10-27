@@ -23,6 +23,12 @@ final class StubURLProtocol: URLProtocol {
         static func fixture(_ path: String, status: Int = 200) -> Reply {
             Reply(status: status, body: Fixture.data(path))
         }
+
+        /// A redirect `URLSession` follows, as a web server's `301` would:
+        /// `location` may be absolute or relative to the request.
+        static func redirect(to location: String, status: Int = 301) -> Reply {
+            Reply(status: status, headers: ["Location": location], body: Data())
+        }
     }
 
     /// Thrown by a handler to fail the request at the transport level.
@@ -78,6 +84,15 @@ final class StubURLProtocol: URLProtocol {
         do {
             let reply = try handler(recorded)
             let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: reply.headers)!
+            if (300..<400).contains(reply.status), let location = reply.headers["Location"],
+               let target = URL(string: location, relativeTo: request.url)?.absoluteURL {
+                // The session asks for `target` next, through this protocol
+                // again, and the final response's `url` is where it landed.
+                var next = request
+                next.url = target
+                client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: response)
+                return
+            }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: reply.body)
             client?.urlProtocolDidFinishLoading(self)

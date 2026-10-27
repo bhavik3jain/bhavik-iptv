@@ -333,6 +333,16 @@ struct CatalogImporter: Sendable {
         if let whole, whole.totalItems.map({ $0 <= Self.fullImportLimit }) ?? true {
             return try await importEverything()
         }
+        // The whole list came in one answer (Xtream sends everything at once,
+        // however long): it's already here, so keep it rather than asking
+        // again category by category.
+        if let whole, !whole.hasMore {
+            var seen = Set<String>()
+            let items = whole.items.filter { seen.insert(id($0)).inserted }
+            try await insert(entity, items, row: row)
+            await progress.update(slice.upperBound, "\(label): \(items.count.formatted())", force: true)
+            return ListOutcome(count: items.count, cursors: [:], categories: categories)
+        }
 
         let firsts = try await firstPages(categories, fetch: fetch, progress: progress, label: label, slice: slice)
         let remoteTotal = zip(categories, firsts).reduce(0) { sum, pair in

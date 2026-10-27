@@ -41,7 +41,11 @@ targets:
     # Generated, not left to Xcode: once AllPackageTests exists Xcode stops
     # making a default scheme and the TestFlight archive can't find one
     # (Multitrack hit exactly this).
-    scheme: {}
+    scheme:
+      # The app shell's own logic (App/Tests), hosted in the app.
+      testTargets:
+        - name: HearthTests
+          parallelizable: true
     sources: &appSources
       # XcodeGen has no "resources:" key; assets go under sources and Xcode
       # sorts them by type. A resources: key is silently ignored.
@@ -129,6 +133,33 @@ targets:
         # Without this a tapped household invitation never routes into the app.
         CKSharingSupported: true
         NSLocalNetworkUsageDescription: Hearth plays channels from portals and playlists on your local network when you add one.
+
+  # The app shell's logic (AppLogic, LaunchOptions, AppNavigation, the
+  # player's item factory), tested inside the app: `@testable import Hearth`.
+  # The host app sees XCTestConfigurationFilePath and opens in-memory stores
+  # (LaunchOptions.isHostingTests), so a test run never touches iCloud or the
+  # Debug app's real store. iOS only: the logic has no Mac-only branch.
+  HearthTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: App/Tests
+    dependencies:
+      # Not the packages: they are linked into the host app, and linking them
+      # here again would load two copies of each into one process.
+      - target: Hearth
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bhavikjain.hearth.tests
+        DEVELOPMENT_TEAM: Y4M3S6H4NK
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: "YES"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # iOS app bundles are flat: the executable sits at the bundle's root.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Hearth.app/Hearth
+        BUNDLE_LOADER: $(TEST_HOST)
 
   # Same code, same packages, same bundle id (Universal Purchase): one App
   # Store Connect app, one TestFlight, both platforms.
@@ -227,8 +258,9 @@ targets:
         NSLocalNetworkUsageDescription: Hearth plays channels from portals and playlists on your local network when you add one.
 
 schemes:
-  # Every package's tests in one scheme, so CI builds the shared packages once.
-  # A package left out here is never run by CI, silently.
+  # Every package's tests in one scheme, so CI builds the shared packages once,
+  # plus the app shell's own (HearthTests). A package left out here is never
+  # run by CI, silently.
   AllPackageTests:
     build:
       targets:
@@ -245,4 +277,21 @@ schemes:
         - package: HouseholdKit/HouseholdKitTests
           parallelizable: true
         - package: PlayerKit/PlayerKitTests
+          parallelizable: true
+        - package: HomeFeature/HomeFeatureTests
+          parallelizable: true
+        - package: LiveTVFeature/LiveTVFeatureTests
+          parallelizable: true
+        - package: LibraryFeature/LibraryFeatureTests
+          parallelizable: true
+        - package: ProfilesFeature/ProfilesFeatureTests
+          parallelizable: true
+        - package: HouseholdFeature/HouseholdFeatureTests
+          parallelizable: true
+        - package: SearchFeature/SearchFeatureTests
+          parallelizable: true
+        - package: SettingsFeature/SettingsFeatureTests
+          parallelizable: true
+        # The app shell's tests, hosted in the app (see the HearthTests target).
+        - name: HearthTests
           parallelizable: true

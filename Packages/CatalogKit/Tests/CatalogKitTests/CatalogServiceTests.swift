@@ -57,7 +57,9 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
         var fixture = Fixtures.catalog()
         fixture.pageSize = 3
         let (service, fake) = await importedService(fixture)
-        #expect(fake.calls.filter { $0.hasPrefix("movies(") } == ["movies(all,0)", "movies(all,1)", "movies(all,2)", "movies(all,3)"])
+        // Page 0 goes out twice: first to read the list's size (whether it's
+        // small enough to import whole, `fullImportLimit`), then to import it.
+        #expect(fake.calls.filter { $0.hasPrefix("movies(") } == ["movies(all,0)", "movies(all,0)", "movies(all,1)", "movies(all,2)", "movies(all,3)"])
         #expect(service.refreshStates[fake.configuration.id]?.movieCount == 10)
         #expect(service.movies(sort: .name).count == 9) // the adult one is filtered
     }
@@ -182,16 +184,22 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
         #expect(fake.callCount("channels") == 1)
     }
 
+    /// An Xtream-sized list: past `fullImportLimit`, so it's imported
+    /// category by category, and like Xtream each category's first page is
+    /// the whole category (nothing left to browse).
     @Test(.timeLimit(.minutes(2)))
     func fiftyThousandMoviesImportQuickly() async throws {
         var fixture = Fixtures.catalog()
-        fixture.movies = (0..<50_000).map { RemoteMovie(id: "bulk\($0)", name: "Movie number \($0)", categoryID: "10", year: 1950 + $0 % 70) }
-        fixture.pageSize = 2_500
+        fixture.movies = (0..<50_000).map { RemoteMovie(id: "bulk\($0)", name: "Movie number \($0)", categoryID: $0 % 2 == 0 ? "10" : "12", year: 1950 + $0 % 70) }
+        fixture.pageSize = 50_000
         let clock = ContinuousClock()
         let start = clock.now
         let (service, fake) = await importedService(fixture)
         let elapsed = clock.now - start
-        #expect(service.refreshStates[fake.configuration.id]?.movieCount == 50_000)
+        let sourceID = fake.configuration.id
+        #expect(service.refreshStates[sourceID]?.movieCount == 50_000)
+        #expect(service.count(CatalogModel.Entity.movie, NSPredicate(value: true)) == 50_000)
+        #expect(!service.canLoadMore(kind: .vod, categoryID: CategoryKey.make(source: sourceID, kind: "vod", remoteID: "10")))
         #expect(elapsed < .seconds(120))
         #expect(service.search("movie number 4999").movies.count == 15)
     }
@@ -627,8 +635,10 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
             $0.channels[0].name = "Renamed"
         }
 
+        // Counted from here: an import asks for page 0 more than once.
+        let asked = fake.callCount("movies(all,0)")
         let refresh = Task { await service.refresh(sourceID: sourceID, force: true) }
-        while fake.callCount("movies(all,0)") < 2 { await Task.yield() }
+        while fake.callCount("movies(all,0)") <= asked { await Task.yield() }
         guard case .refreshing = service.refreshStates[sourceID]?.phase else {
             Issue.record("expected the refresh to be under way")
             return
@@ -641,8 +651,9 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
         #expect(fake.callCount("movies(all,") < 10)
 
         // cancelRefresh stops one started elsewhere (a background import).
+        let askedAgain = fake.callCount("movies(all,0)")
         let second = Task { await service.refresh(sourceID: sourceID, force: true) }
-        while fake.callCount("movies(all,0)") < 3 { await Task.yield() }
+        while fake.callCount("movies(all,0)") <= askedAgain { await Task.yield() }
         service.cancelRefresh(sourceID: sourceID)
         await second.value
         #expect(service.refreshStates[sourceID]?.phase == .idle)

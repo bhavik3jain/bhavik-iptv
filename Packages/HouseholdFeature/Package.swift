@@ -15,5 +15,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "HouseholdFeature", dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit"]),
+        .testTarget(name: "HouseholdFeatureTests", dependencies: ["HouseholdFeature", "Core", "SourceKit", "CatalogKit", "HouseholdKit"]),
     ]
 )

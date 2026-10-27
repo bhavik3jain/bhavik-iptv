@@ -395,7 +395,9 @@ struct WatchingNowRow: Identifiable, Hashable {
         if let limit {
             return String(localized: "\(inUse) of \(limit) streams in use", bundle: .module)
         }
-        return String(localized: "\(inUse) streams in use", bundle: .module)
+        return inUse == 1
+            ? String(localized: "1 stream in use", bundle: .module)
+            : String(localized: "\(inUse) streams in use", bundle: .module)
     }
 }
 
