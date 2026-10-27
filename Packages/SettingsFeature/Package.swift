@@ -24,5 +24,6 @@ let package = Package(
             dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit"],
             resources: [.process("Resources")]
         ),
+        .testTarget(name: "SettingsFeatureTests", dependencies: ["SettingsFeature", "HouseholdKit"]),
     ]
 )

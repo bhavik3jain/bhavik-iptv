@@ -238,7 +238,9 @@ func movie(resolver: ScriptedResolver, startPosition: TimeInterval? = nil) -> Pl
 @MainActor
 func eventually(_ condition: () -> Bool) async -> Bool {
     let clock = ContinuousClock()
-    let deadline = clock.now + .seconds(2)
+    // Generous: a passing test returns as soon as the condition holds, and a
+    // loaded machine (every suite at once, a CI runner) took over 2 s.
+    let deadline = clock.now + .seconds(15)
     while !condition() {
         if clock.now > deadline { return false }
         try? await Task.sleep(for: .milliseconds(5))

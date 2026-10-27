@@ -325,14 +325,14 @@ enum SourceExpiry {
 }
 
 enum HouseholdFormat {
-    /// "Mar 2027".
-    static func monthYear(_ date: Date) -> String {
-        date.formatted(.dateTime.month(.abbreviated).year())
+    /// "Mar 2027". The locale, calendar and zone are this device's; tests pin them.
+    static func monthYear(_ date: Date, locale: Locale = .autoupdatingCurrent, calendar: Calendar = .autoupdatingCurrent, timeZone: TimeZone = .autoupdatingCurrent) -> String {
+        date.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: timeZone).month(.abbreviated).year())
     }
 
     /// "12 Mar 2027".
-    static func day(_ date: Date) -> String {
-        date.formatted(date: .abbreviated, time: .omitted)
+    static func day(_ date: Date, locale: Locale = .autoupdatingCurrent, calendar: Calendar = .autoupdatingCurrent, timeZone: TimeZone = .autoupdatingCurrent) -> String {
+        date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, locale: locale, calendar: calendar, timeZone: timeZone))
     }
 
     /// "just now", "12 min ago", "2 h ago", "3 d ago": as short as the

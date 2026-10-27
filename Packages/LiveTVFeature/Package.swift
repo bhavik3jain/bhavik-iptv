@@ -18,5 +18,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "LiveTVFeature", dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit", "PlayerKit"]),
+        .testTarget(name: "LiveTVFeatureTests", dependencies: ["LiveTVFeature", "Core", "SourceKit", "CatalogKit", "PlayerKit"]),
     ]
 )

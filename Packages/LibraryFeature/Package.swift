@@ -23,5 +23,6 @@ let package = Package(
             dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit"],
             resources: [.process("Resources")]
         ),
+        .testTarget(name: "LibraryFeatureTests", dependencies: ["LibraryFeature", "Core", "SourceKit", "CatalogKit", "HouseholdKit"]),
     ]
 )

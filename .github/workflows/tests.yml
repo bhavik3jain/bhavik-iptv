@@ -53,8 +53,8 @@ jobs:
           restore-keys: spm-xcode27.1-
 
       - name: Pick a simulator
-        # iPhone Duo when the image has the iOS 27.1 runtime, else an iPhone
-        # on the newest runtime. Chosen at run time because the runners'
+        # An iPhone on the newest runtime, never the iPhone Duo (its first
+        # boot can take minutes). Chosen at run time because the runners'
         # simulator line-up changes; pinning a model that isn't installed
         # fails the job before anything is built.
         run: |

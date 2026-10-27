@@ -22,6 +22,10 @@ final class FakeSourceClient: SourceClient {
         var listsNeedCategory = false
         /// How long each page takes, so a test can cancel mid-import.
         var pageDelay: Duration?
+        /// What a list claims as its `totalItems`, by `"<kind>/<category id>"`
+        /// (`"vod/all"` for every movie): a big portal's count without the
+        /// fixture holding that many titles. Unset lists report what they hold.
+        var reportedTotals: [String: Int] = [:]
         var failure: Failure?
     }
 
@@ -88,13 +92,13 @@ final class FakeSourceClient: SourceClient {
         let fixture = self.fixture
         if let pageDelay = fixture.pageDelay { try await Task.sleep(for: pageDelay) }
         if case .moviesPage(let failingPage, let error) = fixture.failure, failingPage == page { throw error }
-        return try paged(fixture.movies, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
+        return try paged(fixture.movies, kind: .vod, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
     }
 
     func series(categoryID: String?, page: Int) async throws -> Page<RemoteSeries> {
         record("series(\(categoryID ?? "all"),\(page))")
         let fixture = self.fixture
-        return try paged(fixture.series, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
+        return try paged(fixture.series, kind: .series, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
     }
 
     func seriesDetail(_ series: RemoteSeries) async throws -> SeriesDetail {
@@ -141,7 +145,7 @@ final class FakeSourceClient: SourceClient {
         record("keepAlive")
     }
 
-    private func paged<Item: Sendable & Hashable>(_ all: [Item], categoryID: String?, page: Int, fixture: Fixture, category: WritableKeyPath<Item, String?>) throws -> Page<Item> {
+    private func paged<Item: Sendable & Hashable>(_ all: [Item], kind: ContentKind, categoryID: String?, page: Int, fixture: Fixture, category: WritableKeyPath<Item, String?>) throws -> Page<Item> {
         var items = all
         if fixture.listsNeedCategory {
             guard let categoryID else { throw SourceError(.notSupported) }
@@ -156,7 +160,8 @@ final class FakeSourceClient: SourceClient {
         let start = page * fixture.pageSize
         let end = min(start + fixture.pageSize, items.count)
         let slice = start < end ? Array(items[start..<end]) : []
-        return Page(items: slice, page: page, totalItems: items.count, hasMore: end < items.count)
+        let total = fixture.reportedTotals["\(kind.rawValue)/\(categoryID ?? "all")"] ?? items.count
+        return Page(items: slice, page: page, totalItems: total, hasMore: end < items.count)
     }
 }
 

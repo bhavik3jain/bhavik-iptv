@@ -2,7 +2,7 @@
 # Prints the UDID of an available iOS simulator. Used by the Tests workflow,
 # scripts/run-sim.sh and scripts/cloudkit/init-schema.sh.
 #
-#   scripts/pick-simulator.sh                # iPhone Duo if installed, else an iPhone on the newest runtime
+#   scripts/pick-simulator.sh                # an iPhone on the newest runtime, never the iPhone Duo
 #   scripts/pick-simulator.sh "iPhone Duo"   # that device: a booted one first, else the newest runtime's
 #
 # Only the UDID goes to stdout, so `udid=$(scripts/pick-simulator.sh)` works;
@@ -60,11 +60,13 @@ all_rows=$(rows)
 if [[ -n $wanted ]]; then
     pick=$(awk -F'|' -v name="$wanted" '$4 == name' <<< "$all_rows" | best booted)
 else
-    # iPhone Duo first: it is the device most likely to show a layout bug
-    # (compact folded, regular when opened). Otherwise an iPhone on the newest
-    # runtime, booted or not; which model matters less than having one.
-    pick=$(awk -F'|' '$4 == "iPhone Duo"' <<< "$all_rows" | best)
-    [[ -n $pick ]] || pick=$(awk -F'|' '$4 ~ /^iPhone/' <<< "$all_rows" | best)
+    # An iPhone on the newest runtime, booted or not; which model matters
+    # less than having one. Never the iPhone Duo unless asked for by name:
+    # its simulator can take several minutes to boot the first time (Xcode
+    # 27.1 release notes), which Multitrack's CI hit, and the package tests
+    # don't depend on the screen. Check the Duo's layouts by running the app
+    # on it (scripts/run-sim.sh "iPhone Duo").
+    pick=$(awk -F'|' '$4 ~ /^iPhone/ && $4 != "iPhone Duo"' <<< "$all_rows" | best)
 fi
 
 if [[ -z $pick ]]; then

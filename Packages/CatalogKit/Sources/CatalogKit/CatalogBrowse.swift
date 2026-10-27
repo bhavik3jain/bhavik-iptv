@@ -23,7 +23,7 @@ extension CatalogService {
     }
 
     /// The provider's count for a category that loads as it is browsed
-    /// ("10,332 shows"), or nil when the whole list is stored.
+    /// ("10,332 shows"), or nil for a category imported whole.
     public func remoteCount(kind: ContentKind, categoryID: String) -> Int? {
         browseCursor(categoryID)?.remoteTotal
     }
