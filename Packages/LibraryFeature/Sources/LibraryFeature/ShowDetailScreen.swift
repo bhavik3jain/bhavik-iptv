@@ -63,6 +63,114 @@ private struct ShowDetailContent: View {
         let target = ShowPlayTarget.choose(episodes: grouping.orderedEpisodes, progress: progress)
         let seasonCount = grouping.numberedSeasonCount > 0 ? grouping.numberedSeasonCount : nil
 
+        Group {
+            if layout == .tv {
+                tvDetail(grouping: grouping, progress: progress, target: target, seasonCount: seasonCount)
+            } else {
+                touchDetail(grouping: grouping, progress: progress, target: target, seasonCount: seasonCount)
+            }
+        }
+        .task(id: LoadKey(seriesKey: series.key, attempt: attempt)) {
+            await loadEpisodes()
+        }
+    }
+
+    // MARK: TV
+
+    /// The TV's page: Resume (or Play) the episode the profile is on, My
+    /// List; who else in the household is watching and the plot; then the
+    /// seasons as buttons over a shelf of the chosen season's episodes.
+    private func tvDetail(grouping: SeasonGrouping, progress: [String: ProgressRecord], target: ShowPlayTarget?, seasonCount: Int?) -> some View {
+        TVDetailLayout(title: series.name, metaParts: MetaLine.series(series, seasonCount: seasonCount), artworkURL: series.posterURL) {
+            HStack(spacing: 24) {
+                if let target {
+                    Button {
+                        playEpisode(target.episode, start: target.startPosition, grouping: grouping)
+                    } label: {
+                        Label(target.title, systemImage: "play.fill")
+                    }
+                    .buttonStyle(.hearthTV(isProminent: true))
+                    .accessibilityLabel(Text(target.spokenTitle))
+                } else {
+                    Button {} label: {
+                        Label(episodes.isEmpty && loadState != .loaded && !isFailed
+                              ? String(localized: "Loading episodes…", bundle: .module) : String(localized: "Play", bundle: .module),
+                              systemImage: "play.fill")
+                    }
+                    .buttonStyle(.hearthTV(isProminent: true))
+                    .disabled(true)
+                }
+                TVMyListButton(itemKey: series.key, kind: .series)
+            }
+        } info: {
+            let others = householdLines(progress: progress).filter { !$0.isCurrentProfile }
+            if !others.isEmpty {
+                Text(others.map { "\($0.name) · \($0.episodeCode)" }.joined(separator: "   "))
+                    .font(.hearthTVCaption)
+                    .foregroundStyle(HearthColor.accent)
+                    .lineLimit(1)
+            }
+            if let plot = series.plot?.trimmingCharacters(in: .whitespacesAndNewlines), !plot.isEmpty {
+                TVPlotText(text: plot, lines: 4)
+            }
+        } content: {
+            tvEpisodes(grouping: grouping, progress: progress)
+        }
+    }
+
+    @ViewBuilder
+    private func tvEpisodes(grouping: SeasonGrouping, progress: [String: ProgressRecord]) -> some View {
+        if let season = season(in: grouping) {
+            VStack(alignment: .leading, spacing: 8) {
+                if grouping.seasons.count > 1 {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 20) {
+                            ForEach(grouping.seasons) { item in
+                                Button(item.title) { selectedSeason = item.number }
+                                    .buttonStyle(.hearthTV(isSelected: item.number == season.number))
+                                    .accessibilityAddTraits(item.number == season.number ? .isSelected : [])
+                            }
+                        }
+                        .padding(.vertical, 18)
+                    }
+                    .scrollIndicators(.hidden)
+                    .scrollClipDisabled()
+                    .hearthFocusSection()
+                }
+                TVShelf(season.title) {
+                    ForEach(season.episodes) { episode in
+                        TVEpisodeCard(
+                            episode: episode,
+                            seriesName: series.name,
+                            row: progress[episode.key.rawValue],
+                            onPlay: { start in playEpisode(episode, start: start, grouping: grouping) },
+                            onPlayFromStart: { playEpisode(episode, start: 0, grouping: grouping) },
+                            onSetWatched: profile.map { profile in
+                                { watched in store.setWatched(watched, profileID: profile.id, itemKey: episode.key.rawValue) }
+                            }
+                        )
+                    }
+                }
+            }
+        } else {
+            switch loadState {
+            case .idle, .loading:
+                ProgressView().tint(HearthColor.accent)
+            case .failed(let message):
+                VStack(alignment: .leading, spacing: 24) {
+                    TVNoticeCard(systemName: "exclamationmark.triangle", title: String(localized: "Couldn't load the episodes", bundle: .module), message: message)
+                    Button(String(localized: "Try again", bundle: .module)) { attempt += 1 }
+                        .buttonStyle(.hearthTV)
+                }
+            case .loaded:
+                TVNoticeCard(systemName: "tv", title: String(localized: "No episodes yet", bundle: .module), message: String(localized: "The provider hasn't listed any episodes for this show.", bundle: .module))
+            }
+        }
+    }
+
+    // MARK: Phone and sidebar
+
+    private func touchDetail(grouping: SeasonGrouping, progress: [String: ProgressRecord], target: ShowPlayTarget?, seasonCount: Int?) -> some View {
         DetailScaffold(title: series.name, metaParts: MetaLine.series(series, seasonCount: seasonCount), artworkURL: series.posterURL) {
             actions(target: target, grouping: grouping)
         } aside: {
@@ -79,9 +187,6 @@ private struct ShowDetailContent: View {
                     Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
                 }
             }
-        }
-        .task(id: LoadKey(seriesKey: series.key, attempt: attempt)) {
-            await loadEpisodes()
         }
     }
 

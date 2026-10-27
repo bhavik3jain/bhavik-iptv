@@ -142,8 +142,22 @@ struct CatalogGridScreen: View {
     }
 
     var body: some View {
+        Group {
+            if layout == .tv {
+                tvBody
+            } else {
+                touchBody
+            }
+        }
+        .onChange(of: queryKey, initial: true) { _, _ in reload() }
+        .onChange(of: storedCategoryID) { _, _ in paging.reset() }
+        .onChange(of: sortRaw) { _, _ in paging.reset() }
+    }
+
+    /// The phone and sidebar layouts.
+    private var touchBody: some View {
         let gutter = libraryGutter(layout)
-        ScrollView {
+        return ScrollView {
             // The chips pin under the bar once the title scrolls away, so a
             // different category is one tap from deep in a long grid.
             LazyVStack(alignment: .leading, spacing: 10, pinnedViews: [.sectionHeaders]) {
@@ -166,9 +180,140 @@ struct CatalogGridScreen: View {
         }
         .scrollRevealedTitle(shelf.title)
         .hearthScreenBackground()
-        .onChange(of: queryKey, initial: true) { _, _ in reload() }
-        .onChange(of: storedCategoryID) { _, _ in paging.reset() }
-        .onChange(of: sortRaw) { _, _ in paging.reset() }
+    }
+
+    // MARK: TV
+
+    /// The Apple TV's grid: the categories and the sort as a row of buttons,
+    /// then six posters across that lift with focus. The tab bar names the
+    /// screen, so there is no title.
+    private var tvBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 36) {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 20) {
+                        tvSortMenu
+                        if chips.chips.count > 1 {
+                            ForEach(chips.chips) { chip in
+                                Button(chip.title) {
+                                    storedCategoryID = chip.categoryID
+                                }
+                                .buttonStyle(.hearthTV(isSelected: chip.categoryID == categoryID))
+                                .accessibilityAddTraits(chip.categoryID == categoryID ? .isSelected : [])
+                            }
+                        }
+                    }
+                    .padding(.vertical, 18)
+                }
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+                .hearthFocusSection()
+
+                tvContent
+            }
+            .padding(.bottom, 60)
+        }
+        .scrollClipDisabled()
+        .hearthScreenBackground()
+        .toolbar(.hidden, for: .automatic)
+    }
+
+    private var tvSortMenu: some View {
+        Menu {
+            Picker(selection: sortBinding) {
+                ForEach(CatalogSort.allCases, id: \.self) { option in
+                    Text(option.title).tag(option)
+                }
+            } label: {
+                Text("Sort by", bundle: .module)
+            }
+        } label: {
+            Label(sort.title, systemImage: "arrow.up.arrow.down")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.hearthTV)
+        .accessibilityLabel(Text("Sort", bundle: .module))
+        .accessibilityValue(Text(sort.title))
+    }
+
+    @ViewBuilder
+    private var tvContent: some View {
+        switch shelfState {
+        case .content:
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: HearthTVMetrics.posterWidth, maximum: HearthTVMetrics.posterWidth + 20), spacing: HearthTVMetrics.cardSpacing, alignment: .top)],
+                alignment: .leading,
+                spacing: 56
+            ) {
+                ForEach(entries) { entry in
+                    TVLibraryPosterLink(entry: entry)
+                        .onAppear {
+                            if paging.shouldGrow(appearingIndex: entry.index, loaded: entries.count) {
+                                paging.grow()
+                            } else if needsProviderPage(appearingIndex: entry.index), let categoryID {
+                                Task { await catalog.loadMore(kind: shelf.contentKind, categoryID: categoryID) }
+                            }
+                        }
+                }
+            }
+        case .noSources:
+            TVNoticeCard(
+                systemName: "tray",
+                title: String(localized: "No sources yet", bundle: .module),
+                message: String(localized: "Add a Stalker portal, Xtream login or M3U playlist from Hearth on your iPhone, iPad or Mac, in the same iCloud household. Its movies and shows appear here.", bundle: .module)
+            )
+        case .importing(let message, let progress):
+            VStack(spacing: 24) {
+                if let progress {
+                    ProgressView(value: progress).frame(width: 600)
+                } else {
+                    ProgressView()
+                }
+                Text(message.isEmpty ? String(localized: "Loading your sources…", bundle: .module) : message)
+                    .font(.hearthTVCallout)
+                    .foregroundStyle(HearthColor.textSecondary)
+            }
+            .tint(HearthColor.accent)
+            .frame(maxWidth: .infinity, minHeight: 400)
+        case .failed(let message, let sourceID):
+            VStack(alignment: .leading, spacing: 28) {
+                TVNoticeCard(
+                    systemName: "exclamationmark.triangle",
+                    title: shelf == .movies ? String(localized: "Couldn't load movies", bundle: .module) : String(localized: "Couldn't load shows", bundle: .module),
+                    message: message
+                )
+                Button(String(localized: "Try again", bundle: .module)) {
+                    Task { await catalog.refresh(sourceID: sourceID, force: true) }
+                }
+                .buttonStyle(.hearthTV(isProminent: true))
+            }
+        case .noneOffered:
+            TVNoticeCard(
+                systemName: shelf == .movies ? "film" : "tv",
+                title: shelf == .movies ? String(localized: "No movies here", bundle: .module) : String(localized: "No shows here", bundle: .module),
+                message: shelf == .movies
+                    ? String(localized: "Your sources don't offer movies, or haven't sent any yet.", bundle: .module)
+                    : String(localized: "Your sources don't offer shows, or haven't sent any yet.", bundle: .module)
+            )
+        case .hiddenByProfile:
+            TVNoticeCard(
+                systemName: "eye.slash",
+                title: String(localized: "Nothing to show on this profile", bundle: .module),
+                message: String(localized: "This profile's rules hide every category here. Someone who manages the household can change them.", bundle: .module)
+            )
+        case .categoryEmpty:
+            VStack(alignment: .leading, spacing: 28) {
+                TVNoticeCard(
+                    systemName: "square.grid.2x2",
+                    title: String(localized: "Nothing in this category", bundle: .module),
+                    message: String(localized: "The provider sent this category empty.", bundle: .module)
+                )
+                Button(String(localized: "Show all", bundle: .module)) {
+                    storedCategoryID = nil
+                }
+                .buttonStyle(.hearthTV)
+            }
+        }
     }
 
     // MARK: Header

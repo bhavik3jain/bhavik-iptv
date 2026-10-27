@@ -82,6 +82,15 @@ struct LiveTVScreen: View {
     private var keepsFavorites: Bool { profileID != nil && !session.isGuest }
 
     var body: some View {
+        if layout == .tv {
+            tvGuideScreen
+        } else {
+            touchBody
+        }
+    }
+
+    /// The phone and sidebar layouts.
+    private var touchBody: some View {
         Group {
             if mode == .multiView {
                 MultiViewScreen(showsModePicker: false) { modeRaw = LiveMode.guide.rawValue }
@@ -97,6 +106,76 @@ struct LiveTVScreen: View {
                     SegmentedPills(String(localized: "Live TV view"), options: LiveMode.allCases, selection: modeBinding, size: .compact) { $0.title }
                 }
             }
+        }
+    }
+
+    // MARK: TV
+
+    /// The Apple TV's guide (`TVLiveGuide`): the same chips, channels and
+    /// actions as the phone, drawn for the focus engine.
+    private var tvGuideScreen: some View {
+        TimelineView(.everyMinute) { context in
+            let now = context.date
+            TVLiveGuide(
+                chips: content.chips,
+                chip: content.chip,
+                channels: content.channels,
+                favoriteKeys: content.favoriteKeys,
+                guideRange: content.guideRange,
+                isLoaded: content.isLoaded,
+                now: now,
+                revision: catalog.revision,
+                cache: cache,
+                shortGuides: shortGuides,
+                keepsFavorites: keepsFavorites,
+                emptyMessage: tvEmptyMessage,
+                onSelectChip: select,
+                onToggleFavorite: toggleFavorite,
+                onPlay: { action, channel, programme in perform(action, channel: channel, programme: programme, now: now) }
+            )
+        }
+        .hearthScreenBackground()
+        .toolbar(.hidden, for: .automatic)
+        .task(id: contentKey) {
+            reload()
+        }
+        .onChange(of: profileID) { _, _ in
+            pickedChipID = nil
+        }
+    }
+
+    /// The empty states, in the TV's words: a source is added from a phone.
+    private var tvEmptyMessage: TVGuideEmptyMessage? {
+        guard content.isLoaded, content.channels.isEmpty else { return nil }
+        if catalog.sources.isEmpty {
+            return TVGuideEmptyMessage(
+                systemName: "antenna.radiowaves.left.and.right",
+                title: String(localized: "No sources yet"),
+                message: String(localized: "Add your provider from Hearth on your iPhone, iPad or Mac, in the same iCloud household. Its channels show up here.")
+            )
+        }
+        if isRefreshing, content.chip != .favorites {
+            return TVGuideEmptyMessage(systemName: "hourglass", title: String(localized: "Loading channels…"), message: String(localized: "A large portal can take a few minutes the first time."))
+        }
+        switch content.chip {
+        case .favorites:
+            return TVGuideEmptyMessage(
+                systemName: "heart",
+                title: String(localized: "No favorite channels yet"),
+                message: String(localized: "Press and hold a programme in any category and choose Favorite to keep its channel here."),
+                actionTitle: String(localized: "Show all channels"),
+                action: { select(.all) }
+            )
+        case .all:
+            return TVGuideEmptyMessage(systemName: "tv", title: String(localized: "No channels"), message: String(localized: "Your sources didn't list any live channels this profile can watch."))
+        case .category:
+            return TVGuideEmptyMessage(
+                systemName: "square.stack",
+                title: String(localized: "Nothing in this category"),
+                message: String(localized: "It's empty, or hidden for this profile."),
+                actionTitle: String(localized: "Show all channels"),
+                action: { select(.all) }
+            )
         }
     }
 

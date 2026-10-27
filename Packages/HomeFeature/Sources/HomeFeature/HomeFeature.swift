@@ -40,6 +40,21 @@ public struct HomeView<ProfileSwitcher: View>: View {
     @State private var episodeFetchesTried: Set<ItemKey> = []
 
     public var body: some View {
+        Group {
+            if layout == .tv {
+                HomeTVContent(snapshot: snapshot, status: status, hasLoaded: hasLoaded, profileSwitcher: profileSwitcher)
+                    .toolbar(.hidden, for: .automatic)
+            } else {
+                touchBody
+            }
+        }
+        .onChange(of: reloadKey, initial: true) { reload() }
+        .task(id: snapshot.seriesNeedingEpisodes.map(\.key)) { await fetchMissingEpisodes() }
+        .task(id: snapshot.favoriteChannels.map(\.key)) { await keepFavoriteGuidesFresh() }
+    }
+
+    /// The phone and sidebar layouts.
+    private var touchBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: HearthMetrics.sectionSpacing) {
                 HomeHeader(profileSwitcher: profileSwitcher, greeting: greeting)
@@ -60,9 +75,6 @@ public struct HomeView<ProfileSwitcher: View>: View {
         // the bar stays: on iPad and iPhone Duo it holds the sidebar button,
         // on the Mac it is the window's toolbar.
         .toolbar(layout == .compact ? .hidden : .automatic, for: .automatic)
-        .onChange(of: reloadKey, initial: true) { reload() }
-        .task(id: snapshot.seriesNeedingEpisodes.map(\.key)) { await fetchMissingEpisodes() }
-        .task(id: snapshot.favoriteChannels.map(\.key)) { await keepFavoriteGuidesFresh() }
     }
 
     private var gutter: CGFloat { HomeLayoutMetrics.gutter(layout: layout, width: contentWidth) }

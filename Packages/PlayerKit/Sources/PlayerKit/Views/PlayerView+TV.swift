@@ -8,7 +8,9 @@ import SwiftUI
 /// While the controls are hidden the whole picture is one focused surface:
 /// click or swipe left and right to skip 10 seconds, up and down to change
 /// channel (live), select to bring up the controls, Play/Pause to pause, Menu
-/// to close. A skip shows the timeline without taking focus off the picture,
+/// to close. Clicks and swipes both arrive as focus moves, so the surface is
+/// ringed by four invisible targets: moving onto one does its action and
+/// hands focus straight back to the picture. A skip shows the timeline without taking focus off the picture,
 /// so a run of skips stays a run of skips. Select moves focus into the
 /// controls (−10, play, +10, the live pills, the channel pills, tracks), where
 /// the focus engine walks them; Menu there goes back to the picture, and so
@@ -32,7 +34,7 @@ struct TVPlayerScreen: View {
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
 
-            surface
+            remoteSurface
 
             if model.controlsVisible || failureMessage != nil {
                 TVPlayerOverlay(model: model, isInteractive: controlsActive, focus: $focus)
@@ -60,6 +62,11 @@ struct TVPlayerScreen: View {
             } else {
                 model.close()
             }
+        }
+        .onChange(of: focus) { _, newValue in
+            guard let newValue, let direction = newValue.direction else { return }
+            move(direction)
+            focus = .surface
         }
         .onChange(of: model.controlsVisible) { _, visible in
             // The fade puts focus back on the picture.
@@ -91,12 +98,34 @@ struct TVPlayerScreen: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(TVInvisibleButtonStyle())
-        .ignoresSafeArea()
         .focused($focus, equals: .surface)
         .disabled(controlsActive)
-        .onMoveCommand(perform: move)
         .accessibilityLabel(Text(model.item.title))
         .accessibilityHint(Text("Shows the player controls"))
+    }
+
+    /// The surface with its four edges, edge to edge.
+    private var remoteSurface: some View {
+        HStack(spacing: 0) {
+            edge(.edge(.left)).frame(width: 40)
+            VStack(spacing: 0) {
+                edge(.edge(.up)).frame(height: 40)
+                surface
+                edge(.edge(.down)).frame(height: 40)
+            }
+            edge(.edge(.right)).frame(width: 40)
+        }
+        .ignoresSafeArea()
+    }
+
+    private func edge(_ value: TVPlayerFocus) -> some View {
+        Button {} label: {
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(TVInvisibleButtonStyle())
+        .focused($focus, equals: value)
+        .disabled(controlsActive)
+        .accessibilityHidden(true)
     }
 
     private func move(_ direction: MoveCommandDirection) {
@@ -181,11 +210,18 @@ private struct TVPlayerOverlay: View {
     }
 }
 
-/// Where focus can be sent: the picture, the play button, the error's Retry.
+/// Where focus can be sent: the picture, its four edges, the play button,
+/// the error's Retry.
 enum TVPlayerFocus: Hashable {
     case surface
+    case edge(MoveCommandDirection)
     case playPause
     case retry
+
+    var direction: MoveCommandDirection? {
+        if case .edge(let direction) = self { return direction }
+        return nil
+    }
 }
 
 /// The channel's logo, its name and programme (or the title and episode),
@@ -200,11 +236,6 @@ private struct TVPlayerTopBar: View {
                 ChannelLogo(name: logoName, url: model.item.logoURL, size: 80)
             }
             VStack(alignment: .leading, spacing: 4) {
-                if let number = model.item.channelNumber, model.item.isLive {
-                    Text(verbatim: "\(number)")
-                        .font(.hearthMono(24, weight: .medium, relativeTo: .caption))
-                        .foregroundStyle(PlayerPalette.secondaryText)
-                }
                 Text(model.item.title)
                     .font(.hearthDisplay(40, weight: .semibold, relativeTo: .title))
                     .foregroundStyle(.white)
@@ -260,10 +291,12 @@ private struct TVPlayerTracksMenu: View {
                 }
             }
         } label: {
-            Label("Audio and subtitles", systemImage: "captions.bubble")
-                .labelStyle(.iconOnly)
+            Image(systemName: "captions.bubble")
                 .font(.system(size: 30, weight: .semibold))
+                .frame(width: 88, height: 88)
         }
+        .menuStyle(.button)
+        .buttonStyle(TVPlayerGlassButtonStyle(shape: .circle))
         .accessibilityLabel(Text("Audio, subtitles and picture size"))
     }
 
