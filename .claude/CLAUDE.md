@@ -1,42 +1,69 @@
 # CLAUDE.md
 
-Hearth (working title) — an IPTV player for Stalker portals, Xtream logins and M3U playlists, with Netflix-style profiles shared by a household through iCloud. SwiftUI, iOS 18 / macOS 15, built with Xcode 27.1 (iOS 27.1 SDK, needed for iPhone Duo), Swift 6. TestFlight only for now.
+Hearth (working title) — an IPTV player for Stalker portals, Xtream logins and M3U playlists, with Netflix-style profiles shared by a household through iCloud. iPhone (including iPhone Duo), iPad and Mac today, Apple TV in progress. SwiftUI, Swift 6, iOS 18 / macOS 15 deployment, built with **Xcode 27.1** (the iOS 27.1 SDK is the first with iPhone Duo's full-screen layout). Distributed through TestFlight only. Repo `bhavik3jain/bhavik-iptv` (public); sister app Multitrack is `bhavik3jain/bhavik-ios` (`../bhavik-ios`), whose CloudKit, sharing and CI code this repo borrows.
 
-**Read `docs/TRACKING.md` first** — status, blockers, workstreams and the session log. Update it at the end of a session. The specs are in `docs/handoff/` (requirement ids like SRC-1 come from `docs/handoff/docs/2-Product-spec.md`). This file is only the things that cost an hour if you don't know them; many are lessons from the sister app Multitrack (`../bhavik-ios`, its `.claude/CLAUDE.md`).
+**Read first:** `docs/TRACKING.md` (status, blockers, workstreams, the dated session log — add to it at the end of a session), `docs/RELEASE.md` (TestFlight, secrets, the iCloud schema ritual), `README.md` (commands). Specs and mockups: `docs/handoff/` (requirement ids like SRC-1 and PRF-3 come from `docs/handoff/docs/2-Product-spec.md`). This file is only the things that cost an hour if you don't know them.
 
-## Layout and the rules that hold it together
+## The project file is generated
 
-- `project.yml` is the source of truth; `Hearth.xcodeproj` is XcodeGen output and gitignored. Run `xcodegen generate` after any change to `project.yml` or a file move. Signing, entitlements and Info.plist keys live in `project.yml`, never Xcode's GUI. XcodeGen has no `resources:` key — assets go under `sources:` (a `resources:` key is silently ignored).
-- `App/Resources/Info*.plist` are generated from `project.yml`'s `info:` blocks; hand edits vanish.
-- Packages: `Core` (depends on nothing) · `SourceKit` (nothing) · `CatalogKit` (Core, SourceKit) · `HouseholdKit` (Core) · `PlayerKit` (Core, VLCKit) · features (`HomeFeature`, `LiveTVFeature`, `LibraryFeature`, `ProfilesFeature`, `HouseholdFeature`, `SearchFeature`, `SettingsFeature`: Core plus the kits they need, **never each other**). SourceKit and CatalogKit never touch iCloud; HouseholdKit never talks to a provider; VLCKit is the only remote dependency and only PlayerKit imports it.
-- **Public APIs marked CONTRACT are additive-only.** Features and the app compile against them.
-- Features reach other screens through Core's `HearthRoute` (`NavigationLink(value:)`, mapped in `App/Sources`) and start playback with `@Environment(\.play)` + `PlayIntent`. The app's playback coordinator resolves a fresh link, checks stream limits, opens `PlayerView`, writes progress and who's-watching rows.
+- `project.yml` is the source of truth; `Hearth.xcodeproj` is XcodeGen output and gitignored. Run `xcodegen generate` after any change to `project.yml` or a file move. Signing, entitlements and Info.plist keys live in `project.yml`, never Xcode's Signing & Capabilities tab.
+- `App/Resources/Info*.plist` are generated from the targets' `info:` blocks — hand edits vanish. `CFBundleShortVersionString` and `CFBundleVersion` are set there to `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)`: XcodeGen's defaults are the literals `1.0` / `1`, which silently ignored every build number passed to an archive.
+- XcodeGen has no `resources:` key — assets go under `sources:`; a `resources:` key is silently ignored.
+- Debug is its own app: `com.bhavikjain.hearth.dev` ("Hearth Dev"), own sandbox and keychain, syncing with iCloud **Development** only. Never give Debug the release id (it crashed Multitrack's TestFlight three times).
+
+## Packages and the rules that hold them together
+
+- `Core` (nothing) · `SourceKit` (nothing) · `CatalogKit` (Core, SourceKit) · `HouseholdKit` (Core) · `PlayerKit` (Core, VLCKit) · features `HomeFeature`, `LiveTVFeature`, `LibraryFeature`, `ProfilesFeature`, `HouseholdFeature`, `SearchFeature`, `SettingsFeature` (Core plus the kits they need, **never each other**). SourceKit and CatalogKit never touch iCloud; HouseholdKit never talks to a provider; VLCKit (4.0.0-a25 from code.videolan.org, ≈900 MB first download, pinned exactly) is the only remote dependency and only PlayerKit imports it, behind `#if canImport(VLCKit)`.
+- Public APIs marked **CONTRACT** are additive-only: change what they do, never their signatures.
+- Navigation between features: Core's `HearthRoute` with `NavigationLink(value:)` / `@Environment(\.openRoute)`, mapped to views by `RouteDestination` in `App/Sources/AppNavigation.swift`. Playback: `@Environment(\.play)` with a `PlayIntent`; `App/Sources/PlaybackCoordinator.swift` resolves a fresh link, checks stream limits, opens `PlayerView`, writes progress and who's-watching rows.
 - Services reach views as environment objects: `CatalogService`, `HouseholdStore`, `ProfileSession`.
+- Name clashes bite across packages: Core's `StreamBarUsage` is not HouseholdKit's `StreamUsage`, and HouseholdKit's `ProgressKind` clashes with Foundation's — spell it `HouseholdProgressKind` in any file that imports Foundation.
 
 ## Platforms: one place for conditionals
 
-- Feature packages contain **zero** `#if os(...)`. iOS-only modifiers go through shims in `Core/MacCompat.swift` (`inlineNavigationTitle()`, `urlEntryKeyboard()`, `hearthFullScreenCover`, …). Add a shim there rather than a conditional at a call site.
-- Features ask `@Environment(\.hearthLayout)` (`.compact` or `.sidebar`) — never the platform, the idiom, the orientation or `UIScreen.main`. `.sidebar` is the Mac, iPad and **iPhone Duo's inner display** (regular width). The app sets it once with `.hearthLayoutFromSizeClass()`.
-- `App/Sources` is the composition root and may use `#if os(macOS)` directly.
-- `if #available(iOS 26, *)` does not gate macOS: write `#available(iOS 26, macOS 26, *)`.
+- Feature packages contain **zero** `#if os(...)`. An iOS-only (or Mac-only) modifier a feature needs becomes a shim in `Packages/Core/Sources/Core/MacCompat.swift` (`inlineNavigationTitle()`, `urlEntryKeyboard()`, `hearthFullScreenCover`, …) or `CloudSharingPresenter.swift`.
+- Features ask `@Environment(\.hearthLayout)` — `.compact` or `.sidebar` — never the platform, the idiom, the orientation or `UIScreen.main`. `.sidebar` is the Mac, iPad and iPhone Duo's inner display; the app sets it once with `.hearthLayoutFromSizeClass()`.
+- `App/Sources` is the composition root and may use `#if os(...)` directly. Kits may too (PlayerKit's engine views, HouseholdKit's one nudge).
+- `if #available(iOS 26, *)` doesn't gate macOS: write `#available(iOS 26, macOS 26, *)`.
+- iPhone tab bar: five tabs. Sidebar-only tabs (Search, Household, Settings) are added only at regular width — `.tabPlacement(.sidebarOnly)` alone still folds them into a "More" tab on the phone and hides My List.
 
 ## iPhone Duo
 
-Folded it is a compact iPhone; opened, the inner display is regular × regular, like a small iPad. Rules: lay out by size class; `NavigationSplitView` and `TabView(.sidebarAdaptable)` adapt on their own; keep controls inside the safe area and let video and artwork run past it (`.ignoresSafeArea()` on backgrounds only); never assume opposite insets are equal; never `UIScreen.main` (use the scene or trait collection). The simulator is "iPhone Duo" on the iOS 27.1 runtime; Device Hub has the open/close/rotate controls (no `simctl` hinge command).
+Folded it's a compact iPhone; opened it's regular × regular (≈466×678 pt, status bar down one side). Lay out by size class, keep controls in the safe area and let video and artwork run past it, never assume symmetric insets, never `UIScreen.main`. The simulator is "iPhone Duo" on the iOS 27.1 runtime; open/close/rotate it in Device Hub (Xcode 27's Simulator; no `simctl` hinge command). The Claude desktop app's simulator side panel doesn't show the Duo — drive it headlessly. Don't run CI tests on it (first boot can take minutes); `scripts/pick-simulator.sh` skips it unless asked by name.
+
+## Stalker portals: what real providers do
+
+Learned against the owner's real portal (iSTB worked, Hearth didn't):
+- The address a provider gives can be a host that only **301-redirects its root** to the real portal and answers every API path with 404. Discovery tries the typed host's paths, then follows where the typed page and the root land (`StalkerClient.discoverAndHandshake`).
+- **Device ids**: send `device_id`, `device_id2` and `signature` **blank** unless the provider gave them. Some portals refuse stalkerhek's 64-`f` placeholder ("Device conflict - device_id mismatch"); it's tried once only after blank ids are refused.
+- Catalogs can be enormous (162,634 VOD titles at 14 per page, ~1.5 s a page). CatalogKit imports a movie/show list whole only under `CatalogImporter.fullImportLimit` (5,000); otherwise each category's first page, four at a time, with a `BrowseCursor` per category (persisted in `SourceState.browseJSON`), and `CatalogService.loadMore(kind:categoryID:)` as a category is browsed. Never reintroduce a whole-catalog import for Stalker.
+- Big portals file series categories under `vod` too; a movie category whose first page holds no movies is dropped.
+- Pages go out as `p = page + 1` (Ministra reads `p=0` as "last watched"). Links expire: fetch one at every play, never store it.
+- Debug a portal with a throwaway executable that depends on `Packages/SourceKit` (or CatalogKit) and reads the login from environment variables, or `-SourceProbe <source name>`. Logins and MACs never go into the repo, logs or docs.
 
 ## Household store (Core Data + CloudKit) — model rules or a crash at launch
 
-Every non-optional attribute has a default; every relationship is optional with an inverse; nothing is unique; enums are `…Raw` strings with a fallback. Predicates and sort descriptors touch stored attributes only. Never call the sharing API on the main thread; members leave a share (purge the zone), never delete its root. Don't write what changes every second: progress on pause/stop/finish/background and every 5 minutes; who's-watching rows at play, stop and every 10 minutes. Adding an entity or attribute needs the schema ritual before a TestFlight build: run a Debug build with `-InitializeCloudKitSchema YES`, check Development in the CloudKit Console, Deploy Schema Changes to Production. Encrypted attributes (logins) must be marked before the first Production deploy.
+- Every non-optional attribute has a default; every relationship is optional with an inverse; nothing is unique; enums are `…Raw` strings with a fallback. Predicates and sort descriptors touch stored attributes only. Logins are encrypted attributes (`allowsCloudEncryption`), which must be in place before the first Production deploy.
+- Core Data's classes set themselves up on first touch, and **two threads doing that at once deadlock**. `HouseholdStore.init` goes through `HouseholdModel.shared` before anything typed over `NSManagedObjectID`; keep any new Core Data first touch behind that one-time build (parallel tests hung forever until this was fixed).
+- Never call the sharing API on the main thread; members leave a share (purge the zone), never delete its root.
+- Don't write what changes every second: progress on pause/stop/finish/background and every 5 minutes; who's-watching rows at play, stop and every 10 minutes.
+- Adding an entity or attribute needs the schema ritual (`docs/RELEASE.md` §3: `scripts/cloudkit/init-schema.sh`, then Deploy Schema Changes in the CloudKit Console) before the TestFlight build that ships it. A raw-string enum case is not a schema change.
 
-## Privacy
+## Signing and running
 
-No analytics, ads or tracking. Logins, MACs and device ids are never logged, printed or committed — use `SourceConfiguration.redacted` and `Redaction`. Test fixtures are scrubbed provider responses.
+- **An unsigned build has no entitlements**, and the CloudKit-backed store then crashes at launch ("must have a com.apple.developer.icloud-services entitlement"). `CODE_SIGNING_ALLOWED=NO` builds are fine for compile checks and for runs with `-InMemoryStores YES`, nothing else. To run for real: `scripts/run-sim.sh <simulator>` (signs simulator builds the normal way) or Xcode; on the Mac, `xcodebuild … -scheme Hearth-macOS -configuration Debug -allowProvisioningUpdates` (development profile) — `scripts/run-mac-local.sh` is ad hoc, no iCloud, demo only.
+- `scripts/run-sim.sh "iPhone 18 Pro"` runs the demo (`-StubProvider YES -InMemoryStores YES`); `REAL=YES scripts/run-sim.sh …` runs with the store on disk and no demo, for real sources.
+- Uploads: `scripts/testflight.sh ios|mac|all` (Xcode's Apple ID, or `ASC_KEY_ID`/`ASC_ISSUER_ID`/`ASC_KEY_PATH`), or the `TestFlight` workflow. Local build numbers are `yyDDDHHMM` (under 2^31). `xcodebuild -exportArchive` from a Claude-launched shell has reported "No Accounts" even with Xcode signed in; the owner runs uploads from their own Terminal or uses the API key.
 
 ## Building and testing
 
 - **Never point `-derivedDataPath` or `--scratch-path` at `/tmp`.** Use the default DerivedData or your session's scratchpad, and delete one-off build folders.
-- Package tests: `cd Packages/<Name> && swift test --scratch-path <somewhere outside ~/Documents>` (runs on macOS). The repo lives under `~/Documents`, which iCloud Drive syncs: the File Provider tags an in-tree `.build/…/*.xctest` with Finder info and codesign of the test bundle fails. `swift build` in-tree is fine. iOS-only compile errors only show in an iOS build: `xcodebuild build -scheme <Package> -destination 'generic/platform=iOS Simulator'` from the package directory, or the app scheme.
-- App: `xcodegen generate`, then `xcodebuild -project Hearth.xcodeproj -scheme Hearth -destination 'platform=iOS Simulator,name=iPhone Duo'` (or `Hearth-macOS`). Unsigned local builds: `CODE_SIGNING_ALLOWED=NO`.
-- Swift Testing only (no XCTest). Views are untested by policy: put logic in value types and test those. Network is faked with a `URLProtocol` stub. Tests needing a real login are gated with `.enabled(if:)` and skip by name.
-- Debug launch arguments (`#if DEBUG`): `-StubProvider YES` (a fake provider with Apple's public HLS samples, no login), `-InMemoryStores YES` (no iCloud), `-SourceProbe <name>` (sign in to a real source, print each step with timings, logins masked), `-InitializeCloudKitSchema YES`.
-- Debug is its own app (`com.bhavikjain.hearth.dev`, "Hearth Dev") with its own container. Never give Debug the release bundle id.
+- The repo lives under `~/Documents`, which iCloud Drive syncs: an in-tree `.build/…/*.xctest` gets Finder info and codesign fails. Run package tests with `swift test --scratch-path <outside ~/Documents>`; `swift build` in-tree is fine.
+- Swift Testing only (no XCTest). Views are untested by policy: logic lives in small value types, tested. Network is faked with a `URLProtocol` stub; nothing touches iCloud or a real provider (gate any such test with `.enabled(if:)` so it skips by name).
+- The `AllPackageTests` scheme in `project.yml` runs every package's suite plus the app-hosted `HearthTests`; a suite left out of it never runs in CI. CI: `.github/workflows/tests.yml` (runner `xcode-27`, Xcode 27.1 pinned, docs-only changes skipped) and `testflight.yml` (by hand or a `v*` tag; secrets in the `testflight` environment, `docs/RELEASE.md` §2).
+- Debug launch arguments (`#if DEBUG`, `App/Sources/LaunchOptions.swift`): `-InMemoryStores YES`, `-StubProvider YES` (demo provider with Apple's HLS samples and the mockup's household), `-SeedPIN 1234`, `-SelectProfile <name>`, `-OpenTab home|live|movies|shows|mylist`, `-OpenRoute series|movie|channel:first|<itemKey>`, `-AutoPlay first-channel|first-movie`, `-SourceProbe <source name>`, `-InitializeCloudKitSchema YES`.
+- `sample` on this Mac's PATH is a broken Python script; use `/usr/bin/sample <pid>` to see where a hung process is stuck.
+
+## Privacy
+
+No analytics, ads or tracking. Logins, MACs, serials and device ids are never logged, printed or committed — use `SourceConfiguration.redacted`, `Redaction` and `Redaction.scrub`. Test fixtures are hand-written or scrubbed. The repo is public.
