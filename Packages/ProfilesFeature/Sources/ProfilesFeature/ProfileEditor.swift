@@ -157,7 +157,13 @@ struct ProfileEditorScreen: View {
             draft = ProfileDraft(record: original)
         } else if profileID == nil {
             draft = ProfileDraft.new(existing: store.profiles)
-            nameIsFocused = true
+            // The name field only exists once the form draws with the new
+            // draft, and a sheet is still sliding in: focus it a beat later,
+            // or the request lands on nothing.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                nameIsFocused = true
+            }
         }
         initialDraft = draft
         opensHere = profileID != nil && session.alwaysOpenProfileID == profileID
