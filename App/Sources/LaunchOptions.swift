@@ -128,13 +128,27 @@ struct LaunchOptions: Equatable, Sendable {
     private init() {}
 
     /// This launch's options: parsed from the process in Debug, none in Release.
+    /// A Debug app that is only hosting HearthTests opens in-memory stores
+    /// whatever its arguments say: a test run never touches iCloud or the
+    /// Debug app's real household and catalog.
     static let current: LaunchOptions = {
         #if DEBUG
-        LaunchOptions(arguments: Array(ProcessInfo.processInfo.arguments.dropFirst()))
+        var options = LaunchOptions(arguments: Array(ProcessInfo.processInfo.arguments.dropFirst()))
+        if isHostingTests(environment: ProcessInfo.processInfo.environment) {
+            options.inMemoryStores = true
+        }
+        return options
         #else
         .empty
         #endif
     }()
+
+    /// Whether the process is the host of an XCTest or Swift Testing bundle:
+    /// Xcode sets these for the app it injects a test bundle into.
+    static func isHostingTests(environment: [String: String]) -> Bool {
+        ["XCTestConfigurationFilePath", "XCTestBundlePath", "XCTestSessionIdentifier"]
+            .contains { environment[$0] != nil }
+    }
 
     /// A value never starts with "-" followed by a letter ("-5" is a value).
     private static func isKey(_ text: String) -> Bool {
