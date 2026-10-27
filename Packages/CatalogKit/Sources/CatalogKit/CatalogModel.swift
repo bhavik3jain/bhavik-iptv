@@ -190,6 +190,10 @@ enum CatalogModel {
             int64("channelCount"),
             int64("movieCount"),
             int64("seriesCount"),
+            // Large catalogs load as they are browsed: where each category's
+            // provider list stands (`BrowseCursor`, JSON). Optional, so stores
+            // from before it migrate on their own.
+            optionalBinary("browseJSON"),
         ], indexes: [["sourceID"]])
 
         let removedItem = entity(Entity.removedItem, [

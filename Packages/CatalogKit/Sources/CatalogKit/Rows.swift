@@ -411,6 +411,8 @@ struct PersistedSourceState: Sendable, Hashable {
     var channelCount = 0
     var movieCount = 0
     var seriesCount = 0
+    /// Categories too big to import whole, by `CatalogCategory.id`.
+    var browseCursors: [String: BrowseCursor] = [:]
 
     init() {}
 
@@ -423,6 +425,7 @@ struct PersistedSourceState: Sendable, Hashable {
         channelCount = row.int("channelCount")
         movieCount = row.int("movieCount")
         seriesCount = row.int("seriesCount")
+        browseCursors = (row.value(forKey: "browseJSON") as? Data).flatMap { try? JSONDecoder().decode([String: BrowseCursor].self, from: $0) } ?? [:]
     }
 
     var hasCatalog: Bool { generation > 0 }

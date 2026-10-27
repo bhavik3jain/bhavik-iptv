@@ -54,6 +54,8 @@ public final class CatalogService {
     /// New sources waiting for their first import, walked one at a time.
     @ObservationIgnored var pendingRefreshes: [UUID] = []
     @ObservationIgnored var backgroundRunner: Task<Void, Never>?
+    /// Categories with a page on its way from the provider (`loadMore`).
+    @ObservationIgnored var loadingMoreCategories: Set<String> = []
     /// When each channel's short guide was last asked for (throttle).
     @ObservationIgnored var shortGuideRequestedAt: [ItemKey: Date] = [:]
     /// Category keys whose names match as adult, per `revision`.

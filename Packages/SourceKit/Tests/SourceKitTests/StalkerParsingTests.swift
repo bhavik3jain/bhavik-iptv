@@ -254,9 +254,12 @@ import Testing
         let portal = try StalkerPortal(configuration: SourceConfiguration(name: "P", kind: .stalker, serverURL: "portal.test/c/", macAddress: "00-1a-79-aa-bb-41"))
         #expect(portal.mac == "00:1A:79:AA:BB:41")
         #expect(portal.serial == "0000000000000")
-        #expect(portal.deviceID == String(repeating: "f", count: 64))
-        #expect(portal.deviceID2 == String(repeating: "f", count: 64))
-        #expect(portal.signature == String(repeating: "f", count: 64))
+        // Blank, not stalkerhek's 64 "f": portals that keep a box's device id
+        // refuse the placeholder ("Device conflict - device_id mismatch").
+        #expect(portal.deviceID.isEmpty)
+        #expect(portal.deviceID2.isEmpty)
+        #expect(portal.signature.isEmpty)
+        #expect(portal.withPlaceholderDeviceIDs.deviceID == String(repeating: "f", count: 64))
         #expect(portal.model == "MAG254")
         #expect(portal.typedURL.absoluteString == "http://portal.test/c/")
     }

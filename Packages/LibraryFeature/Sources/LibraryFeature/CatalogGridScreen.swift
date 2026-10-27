@@ -291,12 +291,18 @@ struct CatalogGridScreen: View {
                     .onAppear {
                         if paging.shouldGrow(appearingIndex: entry.index, loaded: entries.count) {
                             paging.grow()
+                        } else if needsProviderPage(appearingIndex: entry.index), let categoryID {
+                            // Everything stored is on screen and the provider
+                            // has more (a big Stalker catalog loads as it's
+                            // browsed): ask for its next page; the catalog's
+                            // revision bump re-runs the query.
+                            Task { await catalog.loadMore(kind: shelf.contentKind, categoryID: categoryID) }
                         }
                     }
             }
         }
         .overlay(alignment: .bottom) {
-            if paging.hasMore(loaded: entries.count) {
+            if paging.hasMore(loaded: entries.count) || providerHasMore {
                 ProgressView()
                     .tint(HearthColor.accent)
                     .offset(y: 28)
@@ -306,6 +312,18 @@ struct CatalogGridScreen: View {
     }
 
     // MARK: State
+
+    /// The selected category's provider list holds more than is stored.
+    private var providerHasMore: Bool {
+        guard let categoryID else { return false }
+        return catalog.canLoadMore(kind: shelf.contentKind, categoryID: categoryID)
+    }
+
+    /// A tile near the end of a fully shown stored list, in a category the
+    /// provider has more of.
+    private func needsProviderPage(appearingIndex index: Int) -> Bool {
+        !paging.hasMore(loaded: entries.count) && index >= entries.count - 18 && providerHasMore
+    }
 
     private var sourceStates: [SourceRefreshState] {
         catalog.sources.compactMap { catalog.refreshStates[$0.id] }

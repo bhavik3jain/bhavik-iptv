@@ -27,6 +27,14 @@ struct CatalogImporter: Sendable {
     /// past any real catalog, short of looping forever on a portal that
     /// keeps answering `hasMore`.
     static let pageCap = 10_000
+    /// A movie or show list longer than this isn't imported whole: each
+    /// category keeps its first page and the rest loads as it's browsed
+    /// (`BrowseCursor`). At 14 titles and ~1.5 s a page, 5,000 is about nine
+    /// minutes of requests, the most a refresh should spend on one list.
+    static let fullImportLimit = 5_000
+    /// First pages asked for at once when browsing: quick, without hammering
+    /// a portal that answers one box at a time.
+    static let firstPageConcurrency = 4
     /// The guide is kept from 7 days back to 7 days ahead (Technical spec,
     /// Catalog store): far enough for catch-up, small enough to stay fast.
     static let guideKeptBack: TimeInterval = 7 * 86_400
@@ -78,7 +86,10 @@ struct CatalogImporter: Sendable {
             }
             try Task.checkCancellation()
         }
-        try await insert(CatalogModel.Entity.category, kinds.flatMap { categoriesByKind[$0] ?? [] }) { category, _ in
+        // Live categories now; movie and show categories after their lists,
+        // which may drop the empty ones (a big portal files series under
+        // `vod` too, and they list no movies).
+        try await insert(CatalogModel.Entity.category, categoriesByKind[.live] ?? []) { category, _ in
             RowWriter.category(category, sourceID: sourceID, generation: generation)
         }
 
@@ -91,8 +102,12 @@ struct CatalogImporter: Sendable {
         }
 
         var movieCount = 0
+        var seriesCount = 0
+        var browseCursors: [String: BrowseCursor] = [:]
+        var listedCategories: [RemoteCategory] = []
         if capabilities.hasMovies {
-            movieCount = try await importPaged(
+            let movies = try await importList(
+                kind: .vod,
                 entity: CatalogModel.Entity.movie,
                 label: String(localized: "Movies"),
                 slice: 0.15...0.6,
@@ -107,11 +122,14 @@ struct CatalogImporter: Sendable {
                 },
                 row: { movie, position in RowWriter.movie(movie, position: position, sourceID: sourceID, generation: generation) }
             )
+            movieCount = movies.count
+            browseCursors.merge(movies.cursors) { _, new in new }
+            listedCategories += movies.categories
         }
 
-        var seriesCount = 0
         if capabilities.hasSeries {
-            seriesCount = try await importPaged(
+            let shows = try await importList(
+                kind: .series,
                 entity: CatalogModel.Entity.series,
                 label: String(localized: "Shows"),
                 slice: 0.6...0.95,
@@ -126,6 +144,12 @@ struct CatalogImporter: Sendable {
                 },
                 row: { series, position in RowWriter.series(series, position: position, sourceID: sourceID, generation: generation) }
             )
+            seriesCount = shows.count
+            browseCursors.merge(shows.cursors) { _, new in new }
+            listedCategories += shows.categories
+        }
+        try await insert(CatalogModel.Entity.category, listedCategories) { category, _ in
+            RowWriter.category(category, sourceID: sourceID, generation: generation)
         }
 
         try Task.checkCancellation()
@@ -139,7 +163,9 @@ struct CatalogImporter: Sendable {
         state.channelCount = channels.count
         state.movieCount = movieCount
         state.seriesCount = seriesCount
+        state.browseCursors = browseCursors
         let swapped = state
+        let cursorData = try? JSONEncoder().encode(browseCursors)
         try await store.write { context in
             try SourceStateRow.update(sourceID, in: context) { row in
                 row.setValue(swapped.generation, forKey: "generation")
@@ -147,6 +173,7 @@ struct CatalogImporter: Sendable {
                 row.setValue(Int64(swapped.channelCount), forKey: "channelCount")
                 row.setValue(Int64(swapped.movieCount), forKey: "movieCount")
                 row.setValue(Int64(swapped.seriesCount), forKey: "seriesCount")
+                row.setValue(cursorData, forKey: "browseJSON")
                 SourceStateRow.setAccount(account, on: row, readAt: now)
             }
         }
@@ -266,6 +293,110 @@ struct CatalogImporter: Sendable {
     }
 
     // MARK: Steps
+
+    /// What `importList` wrote: how many titles the provider says it has,
+    /// the cursors of categories left to load as they're browsed, and the
+    /// categories worth listing.
+    private struct ListOutcome: Sendable {
+        var count: Int
+        var cursors: [String: BrowseCursor]
+        var categories: [RemoteCategory]
+    }
+
+    /// Movies or shows: the whole list when it's small enough
+    /// (`fullImportLimit`), else each category's first page with a cursor
+    /// for the rest (BrowseCursor). A category whose first page lists
+    /// nothing is left out — a big Stalker portal files its series
+    /// categories under `vod` as well, and they hold no movies.
+    private func importList<Item: Sendable & Hashable>(
+        kind: ContentKind,
+        entity: String,
+        label: String,
+        slice: ClosedRange<Double>,
+        categories: [RemoteCategory],
+        progress: ProgressThrottle,
+        fetch: @escaping @Sendable (String?, Int) async throws -> Page<Item>,
+        id: @escaping @Sendable (Item) -> String,
+        filed: @escaping @Sendable (Item, String) -> Item,
+        row: @escaping @Sendable (Item, Int) -> [String: Any]
+    ) async throws -> ListOutcome {
+        var whole: Page<Item>?
+        do {
+            whole = try await fetch(nil, 0)
+        } catch let error as SourceError where error.code == .notSupported {
+            whole = nil
+        }
+        func importEverything() async throws -> ListOutcome {
+            let count = try await importPaged(entity: entity, label: label, slice: slice, categories: categories, progress: progress, fetch: fetch, id: id, filed: filed, row: row)
+            return ListOutcome(count: count, cursors: [:], categories: categories)
+        }
+        if let whole, whole.totalItems.map({ $0 <= Self.fullImportLimit }) ?? true {
+            return try await importEverything()
+        }
+
+        let firsts = try await firstPages(categories, fetch: fetch, progress: progress, label: label, slice: slice)
+        let remoteTotal = zip(categories, firsts).reduce(0) { sum, pair in
+            sum + (pair.1.map { $0.totalItems ?? $0.items.count } ?? 0)
+        }
+        if whole == nil, remoteTotal <= Self.fullImportLimit {
+            return try await importEverything()
+        }
+
+        var seen = Set<String>()
+        var items: [Item] = []
+        var cursors: [String: BrowseCursor] = [:]
+        var kept: [RemoteCategory] = []
+        for (category, page) in zip(categories, firsts) {
+            guard let page, !page.items.isEmpty else { continue }
+            kept.append(category)
+            for item in page.items where seen.insert(id(item)).inserted {
+                items.append(filed(item, category.id))
+            }
+            let key = CategoryKey.make(source: sourceID, kind: kind.rawValue, remoteID: category.id)
+            cursors[key] = BrowseCursor(nextPage: 1, hasMore: page.hasMore, remoteTotal: page.totalItems)
+        }
+        try await insert(entity, items, row: row)
+        await progress.update(slice.upperBound, "\(label): \(items.count.formatted())", force: true)
+        return ListOutcome(count: max(items.count, remoteTotal), cursors: cursors, categories: kept)
+    }
+
+    /// Page 0 of every category, `firstPageConcurrency` at a time, in the
+    /// categories' order; nil where a category failed.
+    private func firstPages<Item: Sendable & Hashable>(
+        _ categories: [RemoteCategory],
+        fetch: @escaping @Sendable (String?, Int) async throws -> Page<Item>,
+        progress: ProgressThrottle,
+        label: String,
+        slice: ClosedRange<Double>
+    ) async throws -> [Page<Item>?] {
+        let ids = categories.map(\.id)
+        guard !ids.isEmpty else { return [] }
+        let width = slice.upperBound - slice.lowerBound
+        return try await withThrowingTaskGroup(of: (Int, Page<Item>?).self) { group in
+            var pages = [Page<Item>?](repeating: nil, count: ids.count)
+            var next = 0
+            var done = 0
+            while next < min(Self.firstPageConcurrency, ids.count) {
+                let index = next
+                let id = ids[index]
+                group.addTask { (index, try? await fetch(id, 0)) }
+                next += 1
+            }
+            while let (index, page) = try await group.next() {
+                try Task.checkCancellation()
+                pages[index] = page
+                done += 1
+                await progress.update(slice.lowerBound + width * Double(done) / Double(ids.count), "\(label): \(done) of \(ids.count) categories")
+                if next < ids.count {
+                    let index = next
+                    let id = ids[index]
+                    group.addTask { (index, try? await fetch(id, 0)) }
+                    next += 1
+                }
+            }
+            return pages
+        }
+    }
 
     /// A whole paged list (movies or shows): asks for everything at once and,
     /// when the provider won't (`notSupported`), category by category, filing

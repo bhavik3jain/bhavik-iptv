@@ -6,6 +6,8 @@ struct HTTPResponse: Sendable {
     var data: Data
     var status: Int
     var headers: [String: String]
+    /// Where the request ended up after `URLSession` followed any redirects.
+    var url: URL? = nil
 
     var isSuccess: Bool { (200..<300).contains(status) }
 
@@ -36,7 +38,7 @@ enum HTTP {
     /// itself (Stalker path discovery tells a dead host from a wrong path).
     static func sendRaw(_ request: URLRequest, session: URLSession) async throws -> HTTPResponse {
         let (data, response) = try await session.data(for: request)
-        return HTTPResponse(data: data, status: (response as? HTTPURLResponse)?.statusCode ?? 200, headers: headers(of: response))
+        return HTTPResponse(data: data, status: (response as? HTTPURLResponse)?.statusCode ?? 200, headers: headers(of: response), url: response.url)
     }
 
     /// Downloads to a file this process owns (the caller deletes it). File

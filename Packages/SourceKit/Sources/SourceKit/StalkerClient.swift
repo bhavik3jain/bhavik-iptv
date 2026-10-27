@@ -24,6 +24,9 @@ public actor StalkerClient: SourceClient {
     /// Which module answers series: Ministra 5.3+ has `series`; older portals
     /// keep shows inside `vod`, flagged `is_series`.
     private var seriesModule: String?
+    /// The portal refused blank device ids and took stalkerhek's placeholder,
+    /// so later sign-ins go straight to it.
+    private var usesPlaceholderDeviceIDs = false
 
     public init(configuration: SourceConfiguration, session: URLSession = .shared) {
         self.configuration = configuration
@@ -302,15 +305,34 @@ public actor StalkerClient: SourceClient {
     /// Handshake → token, `get_profile` → signed in when `js.id` is set, and
     /// `do_auth` when the login has a username (Source protocols, Stalker).
     private func performAuthentication() async throws {
-        let portal = try portal.get()
-        let (api, handshake) = try await discoverAndHandshake(portal)
+        let base = try portal.get()
+        let (api, handshake) = try await discoverAndHandshake(base)
         self.api = api
         // A portal that accepts the offered (empty) token sends none back;
         // stalkerhek carries on without one, and so do we.
         token = handshake.js.string("token") ?? ""
 
+        var portal = usesPlaceholderDeviceIDs ? base.withPlaceholderDeviceIDs : base
         var profile = try await sessionlessCall(portal.request(api, portal.profileParameters, token: token), what: "get_profile")
         var signedIn = StalkerParse.profileIsSignedIn(profile.js)
+
+        // Blank device ids are refused by some portals that want stalkerhek's
+        // placeholder; others refuse the placeholder ("Device conflict -
+        // device_id mismatch") and take blank ids. Blank goes first; the
+        // placeholder gets one try, on a fresh token, when blank was refused.
+        if !signedIn, base.hasBlankDeviceIDs, !usesPlaceholderDeviceIDs {
+            let retry = base.withPlaceholderDeviceIDs
+            let fresh = try? await sessionlessCall(retry.request(api, [("type", "stb"), ("action", "handshake"), ("token", "")], token: nil), what: "handshake")
+            let retryToken = fresh?.js.string("token") ?? token
+            if let second = try? await sessionlessCall(retry.request(api, retry.profileParameters, token: retryToken), what: "get_profile"),
+               StalkerParse.profileIsSignedIn(second.js) {
+                portal = retry
+                profile = second
+                token = retryToken
+                signedIn = true
+                usesPlaceholderDeviceIDs = true
+            }
+        }
 
         if !portal.username.isEmpty {
             let form = portal.formRequest(api, [
@@ -347,30 +369,85 @@ public actor StalkerClient: SourceClient {
             candidates.insert(api, at: 0)
         }
         guard !candidates.isEmpty else { throw SourceError(.invalidConfiguration, detail: "The portal URL has no host") }
+        var tried: Set<URL> = []
         var lastResponse: HTTPResponse?
-        for candidate in candidates {
-            try Task.checkCancellation()
-            let request = portal.request(candidate, [("type", "stb"), ("action", "handshake"), ("token", "")], token: nil)
-            let response: HTTPResponse
-            do {
-                response = try await HTTP.sendRaw(request, session: session)
-            } catch {
-                if HTTP.isHostFailure(error) || error is CancellationError || (error as? URLError)?.code == .cancelled {
-                    throw HTTP.sourceError(for: error, host: candidate.host())
-                }
-                continue
+
+        for candidate in candidates where tried.insert(candidate).inserted {
+            switch try await handshake(at: candidate, portal: portal) {
+            case .answered(let envelope): return (candidate, envelope)
+            case .notAPortal(let response): lastResponse = response
+            case .noAnswer: break
             }
-            if response.isSuccess, let envelope = StalkerEnvelope(data: response.data), envelope.js.object != nil {
-                return (candidate, envelope)
-            }
-            lastResponse = response
         }
+
+        // Nothing answered on the typed host. Some providers give out a host
+        // that only redirects its root to the real portal and 404s every API
+        // path itself (iSTB follows the hop); see where the typed page and the
+        // root land, and try the same paths there.
+        redirects: for base in await redirectTargets(of: portal) {
+            for candidate in portal.candidateAPIURLs(from: base) where tried.insert(candidate).inserted {
+                do {
+                    switch try await handshake(at: candidate, portal: portal) {
+                    case .answered(let envelope): return (candidate, envelope)
+                    case .notAPortal(let response): lastResponse = response
+                    case .noAnswer: break
+                    }
+                } catch let error as SourceError where error.code == .unreachable {
+                    continue redirects // that host is down; the next target may not be
+                }
+            }
+        }
+
         let refused = lastResponse.map { $0.status == 401 || $0.status == 403 } ?? false
         throw SourceError(
             refused ? .authenticationFailed : .badResponse,
             providerMessage: scrubbed(lastResponse?.plainText),
-            detail: "No Stalker API answered the handshake (tried \(candidates.count) paths)"
+            detail: "No Stalker API answered the handshake (tried \(tried.count) paths)"
         )
+    }
+
+    private enum HandshakeOutcome {
+        case answered(StalkerEnvelope)
+        /// It answered, but not as a portal (a 404 page, a login wall).
+        case notAPortal(HTTPResponse)
+        case noAnswer
+    }
+
+    /// One handshake attempt. A host that can't be reached at all throws, so
+    /// discovery stops at once; a wrong path is just not a portal.
+    private func handshake(at candidate: URL, portal: StalkerPortal) async throws -> HandshakeOutcome {
+        try Task.checkCancellation()
+        let request = portal.request(candidate, [("type", "stb"), ("action", "handshake"), ("token", "")], token: nil)
+        let response: HTTPResponse
+        do {
+            response = try await HTTP.sendRaw(request, session: session)
+        } catch {
+            if HTTP.isHostFailure(error) || error is CancellationError || (error as? URLError)?.code == .cancelled {
+                throw HTTP.sourceError(for: error, host: candidate.host())
+            }
+            return .noAnswer
+        }
+        if response.isSuccess, let envelope = StalkerEnvelope(data: response.data), envelope.js.object != nil {
+            return .answered(envelope)
+        }
+        return .notAPortal(response)
+    }
+
+    /// Where the typed page and the typed host's root end up after redirects,
+    /// when that is another origin.
+    private func redirectTargets(of portal: StalkerPortal) async -> [URL] {
+        guard let typedOrigin = StalkerPortal.origin(of: portal.typedURL) else { return [] }
+        var targets: [URL] = []
+        for page in [portal.typedURL, URL(string: typedOrigin + "/")].compactMap({ $0 }) {
+            guard let response = try? await HTTP.sendRaw(portal.pageRequest(page), session: session),
+                  let landed = response.url,
+                  let origin = StalkerPortal.origin(of: landed),
+                  origin != typedOrigin,
+                  !targets.contains(where: { StalkerPortal.origin(of: $0) == origin })
+            else { continue }
+            targets.append(landed)
+        }
+        return targets
     }
 
     /// A call made while signing in: no retry, since signing in is the retry.

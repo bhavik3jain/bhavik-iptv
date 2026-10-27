@@ -116,9 +116,9 @@ import Testing
         #expect(query["hd"] == "1")
         #expect(query["sn"] == "0000000000000")
         #expect(query["stb_type"] == "MAG254")
-        #expect(query["device_id"] == String(repeating: "f", count: 64))
-        #expect(query["device_id2"] == String(repeating: "f", count: 64))
-        #expect(query["signature"] == String(repeating: "f", count: 64))
+        #expect(query["device_id"] == "")
+        #expect(query["device_id2"] == "")
+        #expect(query["signature"] == "")
         #expect(query["auth_second_step"] == "1")
 
         // The handshake goes out without a bearer; everything carries 1-xml.
@@ -147,7 +147,7 @@ import Testing
         #expect(auth.httpMethod == "POST")
         #expect(auth.form["login"] == "demo-user")
         #expect(auth.form["password"] == "demo-pass")
-        #expect(auth.form["device_id"] == String(repeating: "f", count: 64))
+        #expect(auth.form["device_id"] == "")
         // The password never sits in a URL.
         #expect(auth.url?.absoluteString.contains("demo-pass") == false)
     }

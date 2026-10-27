@@ -8,15 +8,19 @@ struct StalkerPortal: Sendable {
     /// What stalkerhek sends; portals check for a MAG box.
     static let userAgent = "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 2116 Mobile Safari/533.3"
     static let defaultSerial = "0000000000000"
-    static let defaultDeviceID = String(repeating: "f", count: 64)
+    /// stalkerhek's stand-in for device ids and signature. Not the default:
+    /// portals that keep a box's device id refuse it ("Device conflict -
+    /// device_id mismatch") where blank ids sign in, so it is only tried once,
+    /// after blank ids have been refused.
+    static let placeholderDeviceID = String(repeating: "f", count: 64)
     static let defaultModel = "MAG254"
 
     let typedURL: URL
     let mac: String
     let serial: String
-    let deviceID: String
-    let deviceID2: String
-    let signature: String
+    var deviceID: String
+    var deviceID2: String
+    var signature: String
     let model: String
     /// The zone sent in the cookie, which is also the zone the portal writes
     /// guide times in when it leaves the offset off.
@@ -34,9 +38,10 @@ struct StalkerPortal: Sendable {
         typedURL = url
         self.mac = mac
         serial = Self.value(configuration.serialNumber, or: Self.defaultSerial)
-        deviceID = Self.value(configuration.deviceID, or: Self.defaultDeviceID)
-        deviceID2 = Self.value(configuration.deviceID2, or: Self.defaultDeviceID)
-        signature = Self.value(configuration.signature, or: Self.defaultDeviceID)
+        // Blank unless the provider gave them (see placeholderDeviceID).
+        deviceID = configuration.deviceID.trimmingCharacters(in: .whitespaces)
+        deviceID2 = configuration.deviceID2.trimmingCharacters(in: .whitespaces)
+        signature = configuration.signature.trimmingCharacters(in: .whitespaces)
         model = Self.value(configuration.model, or: Self.defaultModel)
         timeZone = TimeZone(identifier: configuration.timeZone.trimmingCharacters(in: .whitespaces)) ?? .current
         username = configuration.username.trimmingCharacters(in: .whitespaces)
@@ -48,10 +53,16 @@ struct StalkerPortal: Sendable {
     /// API endpoints to try, most likely first, until one answers the
     /// handshake with JSON. The typed URL is often the web player's `/c/`
     /// page; the API sits beside it (Source protocols, Where to send calls).
-    var candidateAPIURLs: [URL] {
-        guard let origin = Self.origin(of: typedURL) else { return [] }
+    var candidateAPIURLs: [URL] { candidateAPIURLs(from: typedURL) }
+
+    /// The same paths, worked out from another base: where the typed host
+    /// redirects to. Some providers hand out a vanity host that only forwards
+    /// its root to the real portal (`t.example.com` → `https://portal.example/`)
+    /// and answers every API path itself with 404 — iSTB follows that hop.
+    func candidateAPIURLs(from base: URL) -> [URL] {
+        guard let origin = Self.origin(of: base) else { return [] }
         var paths: [String] = []
-        let typedPath = typedURL.path(percentEncoded: true)
+        let typedPath = base.path(percentEncoded: true)
         if typedPath.lowercased().hasSuffix(".php") {
             paths.append(typedPath)
         }
@@ -91,6 +102,14 @@ struct StalkerPortal: Sendable {
         return request
     }
 
+    /// A plain GET of a page with the box's headers and cookie, to see where a
+    /// host redirects (path discovery).
+    func pageRequest(_ url: URL) -> URLRequest {
+        var request = URLRequest(url: url, timeoutInterval: HTTP.apiTimeout)
+        applyHeaders(to: &request, api: url, token: nil)
+        return request
+    }
+
     /// A form POST (`do_auth`), so the password never sits in a URL.
     func formRequest(_ api: URL, _ parameters: [(String, String)], token: String?) -> URLRequest {
         var request = URLRequest(url: api, timeoutInterval: HTTP.apiTimeout)
@@ -125,6 +144,19 @@ struct StalkerPortal: Sendable {
     /// PHP session otherwise and then expect it back.
     var cookie: String {
         "PHPSESSID=null; sn=\(QueryEncoding.encode(serial)); mac=\(QueryEncoding.encode(mac)); stb_lang=en; timezone=\(QueryEncoding.encode(timeZone.identifier))"
+    }
+
+    /// True when the owner left every device field blank, so the placeholder
+    /// may be tried if a portal refuses blank ones.
+    var hasBlankDeviceIDs: Bool { deviceID.isEmpty && deviceID2.isEmpty && signature.isEmpty }
+
+    /// This login with stalkerhek's placeholder in every blank device field.
+    var withPlaceholderDeviceIDs: StalkerPortal {
+        var copy = self
+        if copy.deviceID.isEmpty { copy.deviceID = Self.placeholderDeviceID }
+        if copy.deviceID2.isEmpty { copy.deviceID2 = Self.placeholderDeviceID }
+        if copy.signature.isEmpty { copy.signature = Self.placeholderDeviceID }
+        return copy
     }
 
     /// Parameters of `get_profile`: the doc's set (hd, sn, stb_type, device
