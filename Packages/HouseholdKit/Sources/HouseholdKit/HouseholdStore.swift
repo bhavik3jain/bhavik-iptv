@@ -42,6 +42,15 @@ public final class HouseholdStore {
     /// Opens both stores. Throws `HouseholdStoreError` when either can't load
     /// (the app shows it); never crashes on it.
     public init(mode: Mode) throws {
+        // Core Data's classes set themselves up on first touch, and two
+        // threads doing that at once can deadlock: tests running in parallel
+        // hung for good with one thread building HouseholdModel.shared and the
+        // main thread here initialising NSManagedObjectID for the properties
+        // below. Going through the model's one-time build first makes the
+        // set-up happen once, in one order.
+        _ = HouseholdModel.shared
+        shareCalls = ShareCallLedger()
+        runningShareCalls = [:]
         self.mode = mode
         let built = try HouseholdContainer.make(mode: mode)
         container = built.container
@@ -86,8 +95,9 @@ public final class HouseholdStore {
     @ObservationIgnored var lastHouseholdFoldAttempt: Date?
     @ObservationIgnored var lastNudgeAt: Date?
     @ObservationIgnored var refreshTask: Task<Void, Never>?
-    @ObservationIgnored var shareCalls = ShareCallLedger<NSManagedObjectID>()
-    @ObservationIgnored var runningShareCalls: [NSManagedObjectID: Task<Result<CKShare, ShareCallError>, Never>] = [:]
+    // Set in init, after HouseholdModel.shared: see the note there.
+    @ObservationIgnored var shareCalls: ShareCallLedger<NSManagedObjectID>
+    @ObservationIgnored var runningShareCalls: [NSManagedObjectID: Task<Result<CKShare, ShareCallError>, Never>]
     @ObservationIgnored private var accountStatus: CKAccountStatus?
 
     var viewContext: NSManagedObjectContext { container.viewContext }
