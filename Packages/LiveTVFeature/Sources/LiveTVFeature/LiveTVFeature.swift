@@ -24,6 +24,7 @@ public struct LiveTVView: View {
 /// One channel: now, next and the rest of its guide, with favorite and play.
 public struct ChannelDetailView: View {
     let itemKey: String
+    @Environment(\.hearthLayout) private var layout
 
     public init(itemKey: String) {
         self.itemKey = itemKey
@@ -31,6 +32,8 @@ public struct ChannelDetailView: View {
 
     public var body: some View {
         ChannelDetailScreen(itemKey: ItemKey(rawValue: itemKey))
+            // The TV shows the wide layout as it is, its type scaled up.
+            .hearthTVScaledText(layout == .tv)
     }
 }
 

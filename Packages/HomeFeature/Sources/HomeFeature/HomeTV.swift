@@ -162,13 +162,15 @@ private struct TVContinueHero: View {
                     .buttonStyle(.hearthTV)
                 }
                 .padding(.top, 10)
-                .hearthFocusSection()
             }
             .padding(56)
             .frame(maxWidth: 1100, alignment: .leading)
         }
         .frame(maxWidth: .infinity, minHeight: 500, maxHeight: 500)
         .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+        // The whole card is one target: moving down from the profile menu at
+        // the far right still lands on Resume.
+        .hearthFocusSection()
         .accessibilityElement(children: .contain)
     }
 

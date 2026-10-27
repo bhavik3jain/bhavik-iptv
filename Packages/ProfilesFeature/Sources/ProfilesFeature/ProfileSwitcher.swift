@@ -58,6 +58,14 @@ struct ProfileSwitcher: View {
     private var headerLabel: some View {
         HStack(spacing: isTV ? 16 : 10) {
             avatar(size: isTV ? 56 : 36)
+                // tvOS fills a focused menu button with the tint, which an
+                // amber avatar would vanish into; a dark rim keeps it.
+                .overlay {
+                    if isTV {
+                        RoundedRectangle(cornerRadius: 56 * 0.27, style: .continuous)
+                            .strokeBorder(HearthColor.background.opacity(0.55), lineWidth: 3)
+                    }
+                }
             Text(current?.name ?? String(localized: "Profiles", bundle: .module))
                 .font(.hearthDisplay(isTV ? 30 : 20, weight: .semibold, relativeTo: .title3))
                 .foregroundStyle(HearthColor.textPrimary)

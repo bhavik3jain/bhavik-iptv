@@ -98,7 +98,7 @@ struct TVDetailLayout<Actions: View, Info: View, Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 56) {
                 HStack(alignment: .top, spacing: 64) {
-                    ArtworkView(url: artworkURL, title: title, showsTitleOnPlaceholder: true)
+                    TVPosterArtwork(title: title, url: artworkURL)
                         .frame(width: 380)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .shadow(color: .black.opacity(0.5), radius: 30, y: 16)

@@ -1,6 +1,6 @@
 # Hearth
 
-Hearth (a working title) is an IPTV player for iPhone, iPad and Mac. It plays Stalker portals (MAC address), Xtream Codes logins and M3U playlists with XMLTV guides, and adds Netflix-style profiles that a whole household shares through iCloud, with favorites, progress and who's watching synced between members. SwiftUI, iOS 18 / macOS 15, Swift 6, installed through TestFlight only for now. The specs live in [docs/handoff](docs/handoff/README.md): requirement ids such as SRC-1 come from the [product spec](docs/handoff/docs/2-Product-spec.md). Status, blockers and the session log are in [docs/TRACKING.md](docs/TRACKING.md).
+Hearth (a working title) is an IPTV player for iPhone, iPad, Mac and Apple TV. It plays Stalker portals (MAC address), Xtream Codes logins and M3U playlists with XMLTV guides, and adds Netflix-style profiles that a whole household shares through iCloud, with favorites, progress and who's watching synced between members. SwiftUI, iOS 18 / macOS 15 / tvOS 18, Swift 6, installed through TestFlight only for now. The specs live in [docs/handoff](docs/handoff/README.md): requirement ids such as SRC-1 come from the [product spec](docs/handoff/docs/2-Product-spec.md). Status, blockers and the session log are in [docs/TRACKING.md](docs/TRACKING.md).
 
 ## Layout
 
@@ -9,7 +9,7 @@ App/
   Sources/        Composition root: navigation, the playback coordinator, launch arguments (the only place #if os() is allowed)
   Resources/      Entitlements, the asset catalog, Info*.plist (generated from project.yml; hand edits vanish)
 Packages/
-  Core/           Theme, shared components, HearthRoute, PlayIntent, the Mac shims (MacCompat.swift)
+  Core/           Theme, shared components (and their TV versions), HearthRoute, PlayIntent, the platform shims (MacCompat.swift)
   SourceKit/      Stalker and Xtream clients, the M3U and XMLTV parsers, one SourceClient protocol
   CatalogKit/     The per-device catalog store, imports from SourceKit, stable keys, search
   HouseholdKit/   The household store (Core Data + CloudKit), sharing, roles, profiles, who's watching
@@ -26,7 +26,7 @@ The rules that hold it together:
 - **Dependencies:** Core and SourceKit depend on nothing; CatalogKit on Core and SourceKit; HouseholdKit and PlayerKit on Core. Features depend on Core plus the kits they need, **never on each other**: they reach other screens through `HearthRoute` and start playback with `@Environment(\.play)`.
 - **Boundaries:** SourceKit and CatalogKit never touch iCloud; HouseholdKit never talks to a provider. VLCKit is the only remote dependency, and only PlayerKit imports it.
 - **Contracts:** public APIs marked CONTRACT are additive-only; features and the app compile against them.
-- **Platforms:** feature packages contain no `#if os(...)`. They read `@Environment(\.hearthLayout)` (`.compact` or `.sidebar`) and use Core's shims for iOS-only modifiers.
+- **Platforms:** feature packages contain no `#if os(...)`. They read `@Environment(\.hearthLayout)` (`.compact`, `.sidebar` or `.tv`) and use Core's shims for platform-only modifiers (tvOS has no file picker, share sheet, stepper or keyboard shortcuts, for instance).
 
 ## Requirements
 
@@ -47,6 +47,10 @@ CONSOLE=YES scripts/run-sim.sh "iPhone Duo"                    # stay attached t
 # The Mac app, unsigned build signed ad hoc, no Apple ID needed
 scripts/run-mac-local.sh
 
+# The Apple TV app on the Apple TV simulator, the same demo set-up
+scripts/run-tv.sh
+scripts/run-tv.sh "" -SelectProfile Bhavik -OpenTab live      # "" keeps the default Apple TV 4K
+
 # One package's tests (on macOS)
 cd Packages/SourceKit && swift test
 
@@ -62,12 +66,15 @@ xcodebuild build -project Hearth.xcodeproj -scheme Hearth \
   -destination 'platform=iOS Simulator,name=iPhone Duo' CODE_SIGNING_ALLOWED=NO
 xcodebuild build -project Hearth.xcodeproj -scheme Hearth-macOS \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+xcodebuild build -project Hearth.xcodeproj -scheme Hearth-tvOS \
+  -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
 | Script | What it does |
 | --- | --- |
 | `scripts/run-sim.sh "<simulator>" [args…]` | Generates the project, builds Debug for that simulator, boots it, opens Device Hub, installs and launches Hearth Dev with `-StubProvider YES -InMemoryStores YES` plus your arguments |
 | `scripts/run-mac-local.sh [--no-launch] [args…]` | Builds Debug `Hearth-macOS` unsigned, signs it ad hoc, and runs it the same way in the foreground |
+| `scripts/run-tv.sh ["<Apple TV>"] [args…]` | Builds Debug `Hearth-tvOS` for an Apple TV simulator (Apple TV 4K (3rd generation) by default), boots it and launches Hearth Dev with `-StubProvider YES -InMemoryStores YES` plus your arguments |
 | `scripts/testflight.sh ios\|mac\|all [--no-upload]` | Archives Release and uploads to TestFlight from this Mac (see Release) |
 | `scripts/cloudkit/init-schema.sh [--simulator ["<name>"]]` | Sends the household model's schema to CloudKit Development (see Release) |
 | `scripts/pick-simulator.sh ["<name>"]` | Prints a simulator's UDID: that name, else iPhone Duo, else the newest runtime's iPhone. CI and the scripts above use it |
@@ -80,6 +87,8 @@ The scripts keep DerivedData in `build/DerivedData` and their logs in `build/log
 Debug builds are their own app, **Hearth Dev** (`com.bhavikjain.hearth.dev`), with their own sandbox and store, and they sync with iCloud's Development environment only. Never give Debug the release bundle id.
 
 **iPhone Duo.** Folded, it is a compact iPhone. Opened, the inner display is regular × regular, like a small iPad, and the app switches to its `.sidebar` layout. Open, close and rotate it from **Device Hub**'s controls (Xcode 27's successor to Simulator.app); `simctl` has no hinge command. Check both states and both orientations: controls stay inside the safe area, video and artwork run past it, and opposite insets are not always equal.
+
+**Apple TV.** `Hearth-tvOS` is the same code and packages with the same bundle ids and iCloud container, so it is one more platform of the same App Store Connect app. Its root (`App/Sources/TVRootView.swift`) is "Who's watching?" and then tvOS's top tab bar (Search, Home, Live TV, Movies, Shows, My List, Settings); every feature draws a TV variant when `hearthLayout` is `.tv` — large cards that lift with focus, a Live TV guide whose programme cells play on select and whose three-hour window pages when focus runs off a row's end, and the player driven by the Siri Remote (click or swipe left/right for ±10 s, up/down for the next or previous channel, select for the controls, Menu to close). Sources, people and profiles are added and edited from an iPhone, iPad or Mac in the same household; the TV shows them and says so. It needs the tvOS simulator runtime: `xcodebuild -downloadPlatform tvOS`. In the simulator the Mac's arrow keys, Return, Escape and Space are the remote's directions, select, Menu and Play/Pause. The icon and top shelf images are rendered by `scripts/design/render-icon.swift` (its second argument is the brand asset set).
 
 **Tests.** Swift Testing only. Logic lives in value types and is tested; views are not. The network is faked with a `URLProtocol` stub, fixtures are scrubbed provider responses, and nothing touches iCloud. A test that needs a real login is gated with `.enabled(if:)` and skips by name without one. Every package's suite must be listed in `project.yml`'s `AllPackageTests` scheme, or CI never runs it.
 
@@ -101,7 +110,8 @@ Debug builds only (`#if DEBUG`). Pass them in Xcode (Product → Scheme → Edit
 - generates the project;
 - picks a simulator (iPhone Duo if the image has it, else an iPhone on the newest runtime);
 - runs `AllPackageTests`, which also builds the iOS app;
-- builds `Hearth-macOS` unsigned, in a parallel job.
+- builds `Hearth-macOS` unsigned, in a parallel job;
+- builds `Hearth-tvOS` unsigned for the generic tvOS Simulator, in another.
 
 SwiftPM checkouts (VLCKit is large) are cached under `build/SourcePackages`. CI holds no provider credentials and no Apple account.
 

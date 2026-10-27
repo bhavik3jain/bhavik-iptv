@@ -47,10 +47,11 @@ public enum HearthTVMetrics {
 
 // MARK: - Buttons
 
-/// A text button or pill on the TV: a raised surface at rest; amber with
-/// dark ink, a little larger and lifted, when focused. `isSelected` marks the
-/// current choice in a row (a category) with amber text while unfocused;
-/// `isProminent` is the screen's main action (Play), amber at rest too.
+/// A text button or pill on the TV: a raised surface at rest; white with dark
+/// ink, a little larger and lifted, when focused — tvOS's own convention, so
+/// focus is never mistaken for anything else. Amber stays Hearth's mark:
+/// `isProminent` is the screen's main action (Play), amber at rest;
+/// `isSelected` is the current choice in a row (a category), amber text.
 public struct HearthTVButtonStyle: ButtonStyle {
     public var isProminent: Bool
     public var isSelected: Bool
@@ -95,13 +96,14 @@ private struct HearthTVButtonLabel: View {
     }
 
     private var foreground: Color {
-        if isFocused || isProminent { return HearthColor.onAccent }
+        if isFocused { return HearthColor.background }
+        if isProminent { return HearthColor.onAccent }
         return isSelected ? HearthColor.accent : HearthColor.textPrimary
     }
 
     private var fill: Color {
-        if isFocused { return HearthColor.accent }
-        if isProminent { return HearthColor.accent.opacity(0.85) }
+        if isFocused { return HearthColor.textPrimary }
+        if isProminent { return HearthColor.accent }
         return isSelected ? HearthColor.surfaceRaised : HearthColor.surfaceButton
     }
 }
@@ -504,5 +506,19 @@ public struct TVNoticeCard: View {
                 .fill(HearthColor.surface)
         )
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Reused screens
+
+extension View {
+    /// For a phone screen the TV shows as it is (Settings, Household): its
+    /// fonts are sized `relativeTo:` text styles, so a larger Dynamic Type
+    /// size scales them up to be read across the room. The TV has no Dynamic
+    /// Type setting of its own; this sets one for the screen.
+    public func hearthTVScaledText(_ enabled: Bool) -> some View {
+        transformEnvironment(\.dynamicTypeSize) { size in
+            if enabled { size = .accessibility2 }
+        }
     }
 }

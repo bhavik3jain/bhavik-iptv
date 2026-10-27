@@ -70,6 +70,85 @@ private struct SearchScreen: View {
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
+        if layout == .tv {
+            tvBody
+        } else {
+            touchBody
+        }
+    }
+
+    // MARK: TV
+
+    /// The Apple TV: tvOS's search keyboard at the top (`.searchable`), the
+    /// results as shelves under it. A query is remembered when submitted.
+    private var tvBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: HearthTVMetrics.shelfSpacing) {
+                tvContent
+            }
+            .padding(.bottom, 60)
+        }
+        .scrollClipDisabled()
+        .searchable(text: $query, prompt: Text("Channels, programmes, movies, shows", bundle: .module))
+        .autocorrectionDisabled()
+        .onSubmit(of: .search) { remember(query) }
+        .hearthScreenBackground()
+        .task(id: SearchRequest(query: query, revision: catalog.revision)) {
+            await runSearch()
+        }
+        .onChange(of: query) { _, _ in expanded = [] }
+    }
+
+    @ViewBuilder private var tvContent: some View {
+        if trimmedQuery.isEmpty {
+            if keepsRecents, !recents.isEmpty {
+                TVShelf(String(localized: "Recent searches", bundle: .module), spacing: 20) {
+                    ForEach(recents.items, id: \.self) { item in
+                        Button(item) {
+                            query = item
+                            remember(item)
+                        }
+                        .buttonStyle(.hearthTV)
+                    }
+                } accessory: {
+                    Button(String(localized: "Clear", bundle: .module)) {
+                        recentsStorage = RecentSearches().storage
+                    }
+                    .buttonStyle(.hearthTV)
+                }
+            } else {
+                SearchTVNotice(
+                    systemName: "magnifyingglass",
+                    title: String(localized: "Search everything", bundle: .module),
+                    message: String(localized: "Channels, the next 24 hours of the guide, movies and shows from all your sources. What you type stays on this device.", bundle: .module)
+                )
+            }
+        } else if catalog.sources.isEmpty {
+            SearchTVNotice(
+                systemName: "antenna.radiowaves.left.and.right",
+                title: String(localized: "No sources yet", bundle: .module),
+                message: String(localized: "Add a portal, Xtream login or playlist from Hearth on your iPhone, iPad or Mac, then search here.", bundle: .module)
+            )
+        } else if let outcome {
+            if outcome.groups.isEmpty {
+                SearchTVNotice(
+                    systemName: "magnifyingglass",
+                    title: String(localized: "No results for “\(trimmedQuery)”", bundle: .module),
+                    message: String(localized: "Check the spelling, or try a shorter name or a channel number.", bundle: .module)
+                )
+            } else {
+                SearchTVResults(groups: outcome.groups) { remember(query) }
+            }
+        } else {
+            ProgressView()
+                .tint(HearthColor.textSecondary)
+                .frame(maxWidth: .infinity, minHeight: 300)
+        }
+    }
+
+    // MARK: Phone and sidebar
+
+    private var touchBody: some View {
         ScrollView {
             content
                 .padding(.horizontal, horizontalPadding)

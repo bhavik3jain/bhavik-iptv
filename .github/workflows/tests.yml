@@ -127,3 +127,33 @@ jobs:
             -destination "platform=macOS,arch=$(uname -m)" \
             -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+
+  tv:
+    name: Build the Apple TV app
+    # Its own job, like the Mac's: the tvOS target compiles the same sources,
+    # and an iOS-only call slips in easily (features go through Core's shims).
+    # Unsigned for the generic simulator, so no runtime or account is needed.
+    runs-on: xcode-27
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Restore Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SOURCE_PACKAGES }}
+          key: spm-xcode27.1-${{ hashFiles('Packages/*/Package.swift') }}
+          restore-keys: spm-xcode27.1-
+
+      - name: Build the Apple TV app
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project Hearth.xcodeproj \
+            -scheme Hearth-tvOS \
+            -destination "generic/platform=tvOS Simulator" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions

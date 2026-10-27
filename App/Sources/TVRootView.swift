@@ -5,9 +5,10 @@ import ProfilesFeature
 import SwiftUI
 
 /// The Apple TV root. "Who's watching?" until a profile is chosen (PRF-2);
-/// then tvOS's own top tab bar — Home, Live TV, Movies, Shows, My List,
-/// Search and Settings — each tab with its own navigation stack, so Menu on
-/// the remote walks back through it and, at a tab's root, back to the bar.
+/// then tvOS's own top tab bar — Search, Home, Live TV, Movies, Shows, My
+/// List and Settings, opening on Home — each tab with its own navigation
+/// stack, so Menu on the remote walks back through it and, at a tab's root,
+/// back to the bar.
 ///
 /// The features draw their TV variants from `\.hearthLayout == .tv`
 /// (`hearthLayoutFromSizeClass()` sets it on tvOS): large cards that lift
@@ -58,15 +59,19 @@ struct TVRootView: View {
     private var tabs: some View {
         @Bindable var navigation = navigation
         return TabView(selection: $navigation.selection) {
-            ForEach(availableTabs.filter { $0 != .search }, id: \.self) { tab in
-                Tab(tab.title, systemImage: tab.systemImage, value: tab) {
+            // Words, not icons, as tvOS's own apps label their tabs (seven
+            // with icons overflow the bar); Search is the magnifier alone.
+            ForEach(availableTabs, id: \.self) { tab in
+                Tab(value: tab) {
                     TVTabStack(tab: tab, navigation: navigation)
+                } label: {
+                    if tab == .search {
+                        Image(systemName: tab.systemImage)
+                            .accessibilityLabel(Text(tab.title))
+                    } else {
+                        Text(tab.title)
+                    }
                 }
-            }
-            // The search role puts the magnifier at the bar's leading end,
-            // where tvOS apps keep it.
-            Tab(value: AppTab.search, role: .search) {
-                TVTabStack(tab: .search, navigation: navigation)
             }
         }
     }
@@ -81,6 +86,43 @@ private struct TVTabStack: View {
         NavigationStack(path: navigation.path(for: tab)) {
             TabRoot(tab: tab, navigation: navigation)
                 .hearthRouteDestinations()
+        }
+    }
+}
+#endif
+
+#if os(tvOS)
+/// Where the TV sends a profile or source edit: to an iPhone, iPad or Mac in
+/// the same household, whose change then syncs here.
+struct TVEditElsewhereView: View {
+    enum Subject { case profile, source }
+    let subject: Subject
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 40) {
+            TVPageHeader(title)
+            TVNoticeCard(systemName: "ipad.and.iphone", title: String(localized: "Use Hearth on your iPhone, iPad or Mac"), message: message)
+                .frame(maxWidth: 1200, alignment: .leading)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .hearthScreenBackground()
+        .toolbar(.hidden, for: .automatic)
+    }
+
+    private var title: String {
+        switch subject {
+        case .profile: String(localized: "Profiles")
+        case .source: String(localized: "Sources")
+        }
+    }
+
+    private var message: String {
+        switch subject {
+        case .profile:
+            String(localized: "Add and edit profiles — names, colours, PINs, Kids categories — in Hearth on another device signed in to the same iCloud household. They appear on this Apple TV on their own.")
+        case .source:
+            String(localized: "Add a Stalker portal, an Xtream login or an M3U playlist in Hearth on another device signed in to the same iCloud household: Household › Add a source. Its channels, movies and shows appear on this Apple TV on their own.")
         }
     }
 }

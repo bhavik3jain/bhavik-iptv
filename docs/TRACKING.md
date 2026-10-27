@@ -14,6 +14,7 @@ Specs live in [docs/handoff](handoff/README.md): the [handoff](handoff/docs/1-Ha
 | Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 |
 | Bundle ids | `com.bhavikjain.hearth` (release), `com.bhavikjain.hearth.dev` (Debug) · iCloud `iCloud.com.bhavikjain.hearth` · team Y4M3S6H4NK |
 | Builds | The whole app builds clean for iOS Simulator and macOS; runs on iPhone 18 Pro, iPhone Duo (iOS 27.1) and the Mac with the demo provider |
+| Apple TV | `Hearth-tvOS` (tvOS 18, same bundle ids and iCloud container) builds and runs on the Apple TV 4K simulator (tvOS 27.0) with the demo provider: gate, Home, Live TV guide, Movies, Shows, My List, Search, Settings, details and the remote-driven player. On branch `claude/apple-tv-58e4a8`, not merged |
 | TestFlight | Not yet uploaded — local `scripts/testflight.sh` with Xcode's Apple ID (owner signing in, creating the app record) |
 
 ## Blocked on the owner
@@ -61,6 +62,7 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ☑ merged |
 | 14 | Integration | whole tree | both platforms build, tests pass, runs on iPhone / Duo / Mac | ◐ runs on iPhone, Duo, Mac |
 | 15 | TestFlight | signing, upload | Distribution | ⚠ owner |
+| 16 | Apple TV | `Hearth-tvOS`, `App/Sources/TVRootView.swift`, each feature's `.tv` variant, Core's TV components and shims | TV app (handoff: "later", pulled forward) | ◐ runs in the simulator; not on a device or TestFlight yet |
 
 ## Next up
 
@@ -99,3 +101,8 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Owner's real Stalker portal failed in the app though iSTB works. Found by probing it (logins kept out of the repo): (1) the address the provider gives only 301-redirects its root to the real portal host and 404s every API path itself — SourceKit now follows that redirect during discovery; (2) the portal refuses stalkerhek's 64-'f' placeholder device ids ("Device conflict - device_id mismatch") but signs in with blank ones — blank is now the default, placeholder only as a retry; (3) the catalog lists 162,634 VOD titles at 14 per page — CatalogKit now imports whole lists only under 5,000 titles, otherwise each category's first page with on-demand `loadMore` as it's browsed (Library grid wired), and drops movie categories that hold only series. With CatalogKit run against the portal: refresh 78 s, 5,904 channels, 58 movie + 44 show categories, HLS links, guide now/next. iSTB.app wasn't needed.
 - Note: an unsigned simulator build (`CODE_SIGNING_ALLOWED=NO`) has no entitlements, and the CloudKit-backed store then crashes at launch ("must have a com.apple.developer.icloud-services entitlement"); demo mode (`-InMemoryStores`) hides it. Use `scripts/run-sim.sh` / Xcode, which sign simulator builds normally.
 - Merged the agents' last follow-up commits (Profiles, Home, Household, Library string catalog) and fast-forwarded `main` to the build branch: 115 commits, every worktree branch merged. Both apps build clean. Launched a signed Debug Mac app (development profile, iCloud on, store on disk) and reinstalled a signed simulator build on the iPhone Duo (the unsigned demo build there crashed when opened from its icon).
+
+### 2026-10-26 — Apple TV
+
+- Branch `claude/apple-tv-58e4a8`, its own session: `Hearth-tvOS` target and `.tvOS(.v18)` on every package; Core shims for what tvOS lacks (file picker, share sheet, stepper, disclosure groups, keyboard shortcuts, drag and drop, text selection) and a `.tv` `HearthLayout`; Core's TV kit (10-foot type, focus button styles, shelves, cards using the system card style); TV variants inside each feature (gate, Home, a paged three-hour Live TV guide built for the focus engine, grids, shelves, movie and show pages, search under tvOS's keyboard, Settings and a read-only Household scaled with Dynamic Type); the player driven by the Siri Remote through focus edges; the layered icon and top shelf from `render-icon.swift`; `scripts/run-tv.sh`; a TV build job in `tests.yml`. Profiles and sources are edited from an iPhone, iPad or Mac; the TV says so. Not yet: a real device, TestFlight for tvOS, multi-view and PiP on the TV, background refresh (the TV refreshes at launch and on becoming active).
+- Checked on the Apple TV 4K (3rd generation) simulator with `-InMemoryStores YES -StubProvider YES` (tvOS 27.0 runtime downloaded with `xcodebuild -downloadPlatform tvOS`), driving the remote with the arrow keys: the gate, Home, the guide (focus, paging both ways, select plays), the player (Apple's sample stream, controls focus on select), Movies and a show page. The iOS and Mac schemes still build.
