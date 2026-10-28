@@ -60,6 +60,14 @@ struct WhoIsWatchingTVScreen: View {
             ids.contains { store.verifyPIN(pin, for: $0) }
         }
         .defaultFocus($focusedProfile, initialProfileID)
+        // After Switch Profile, Menu goes back to the profile just left
+        // rather than out of the app; at launch it leaves as usual.
+        .hearthOnExitCommand(previousProfile.map { profile in { choose(profile) } })
+    }
+
+    /// The profile Switch Profile left, if the household still has it.
+    private var previousProfile: ProfileRecord? {
+        session.previousProfileID.flatMap { id in store.profiles.first { $0.id == id } }
     }
 
     // MARK: Profiles

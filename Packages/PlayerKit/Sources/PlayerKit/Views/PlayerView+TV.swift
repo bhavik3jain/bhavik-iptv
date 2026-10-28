@@ -64,7 +64,14 @@ struct TVPlayerScreen: View {
             }
         }
         .onChange(of: focus) { _, newValue in
-            guard let newValue, let direction = newValue.direction else { return }
+            guard let newValue else {
+                // Focus can drop off the player (a channel change rebuilds
+                // the picture), and then Menu reaches nothing: the first
+                // press only brought focus back. Take it straight back.
+                if !controlsActive { focus = .surface }
+                return
+            }
+            guard let direction = newValue.direction else { return }
             move(direction)
             focus = .surface
         }

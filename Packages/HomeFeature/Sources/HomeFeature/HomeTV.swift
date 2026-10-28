@@ -16,6 +16,8 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
 
     @Environment(CatalogService.self) private var catalog
     @Environment(ProfileSession.self) private var session
+    @Environment(HouseholdStore.self) private var store
+    @FocusState private var focus: HomeTVFocus?
 
     var body: some View {
         ScrollView {
@@ -27,6 +29,9 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
         }
         .scrollClipDisabled()
         .hearthScreenBackground()
+        // Down from the tab bar lands on Resume, not on the profile menu in
+        // the far corner that the focus engine finds first.
+        .defaultFocus($focus, .resume, priority: .userInitiated)
     }
 
     private var header: some View {
@@ -46,11 +51,10 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
     private var content: some View {
         switch status {
         case .noSources:
-            TVNoticeCard(
-                systemName: "antenna.radiowaves.left.and.right",
-                title: String(localized: "Add a source to start watching", bundle: .module),
-                message: String(localized: "Add a Stalker portal, an Xtream login or an M3U playlist from Hearth on your iPhone, iPad or Mac — signed in to the same iCloud household. It appears here on its own.", bundle: .module)
-            )
+            // The TV's sources only ever arrive through iCloud, so when
+            // iCloud is the problem, say so rather than "add a source".
+            let notice = TVNoSourcesNotice(syncStatus: store.syncStatus)
+            TVNoticeCard(systemName: notice.systemName, title: notice.title, message: notice.message)
         case .firstRefresh(let sourceName, let progress, let message):
             TVFirstRefresh(sourceName: sourceName, progress: progress, message: message)
         case .failed(let sourceID, let sourceName, let message):
@@ -76,7 +80,7 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
         let profileID = session.isGuest ? nil : session.currentProfile?.id
 
         if let item = snapshot.continueWatching {
-            TVContinueHero(item: item, profileID: profileID)
+            TVContinueHero(item: item, profileID: profileID, focus: $focus)
         }
 
         TVFavoriteChannelsShelf(channels: snapshot.favoriteChannels, catalogRevision: catalog.revision, profileID: profileID, isGuest: session.isGuest)
@@ -91,13 +95,46 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
     }
 }
 
+/// What the TV's Home says before it has a source: the household's sources
+/// are added on an iPhone, iPad or Mac and reach the TV through iCloud, so
+/// an Apple TV that isn't signed in, or whose sync is failing, is told why
+/// nothing arrives.
+struct TVNoSourcesNotice {
+    let systemName: String
+    let title: String
+    let message: String
+
+    init(syncStatus: HouseholdSyncStatus) {
+        switch syncStatus {
+        case .noAccount:
+            systemName = "icloud.slash"
+            title = String(localized: "This Apple TV isn't signed in to iCloud", bundle: .module)
+            message = String(localized: "Hearth gets your household — its sources, profiles and favorites — from iCloud. In this Apple TV's Settings, open Users and Accounts, choose yourself, and sign in to iCloud with the same Apple Account as your iPhone. Then open Hearth again.", bundle: .module)
+        case .failed(let reason):
+            systemName = "exclamationmark.icloud"
+            title = String(localized: "Hearth can't reach your household in iCloud", bundle: .module)
+            message = String(localized: "\(reason) Sources added in Hearth on your iPhone, iPad or Mac arrive here through iCloud once it syncs.", bundle: .module)
+        case .local, .syncing, .upToDate:
+            systemName = "antenna.radiowaves.left.and.right"
+            title = String(localized: "Add a source to start watching", bundle: .module)
+            message = String(localized: "Add a Stalker portal, an Xtream login or an M3U playlist from Hearth on your iPhone, iPad or Mac — signed in to the same iCloud household. It appears here on its own.", bundle: .module)
+        }
+    }
+}
+
 // MARK: - Continue watching
+
+/// Where the remote starts on Home.
+enum HomeTVFocus: Hashable {
+    case resume
+}
 
 /// The hero: the backdrop full width, the title and episode over it, Resume
 /// and the way to the movie or show as the two buttons the remote starts on.
 private struct TVContinueHero: View {
     let item: ContinueItem
     let profileID: UUID?
+    var focus: FocusState<HomeTVFocus?>.Binding
 
     @Environment(HouseholdStore.self) private var store
     @Environment(\.play) private var play
@@ -145,6 +182,7 @@ private struct TVContinueHero: View {
                         Label(String(localized: "Resume", bundle: .module), systemImage: "play.fill")
                     }
                     .buttonStyle(.hearthTV(isProminent: true))
+                    .focused(focus, equals: .resume)
                     .contextMenu { menu }
                     Button {
                         openRoute(item.route)

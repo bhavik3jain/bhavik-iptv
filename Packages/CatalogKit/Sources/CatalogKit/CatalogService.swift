@@ -26,7 +26,14 @@ public final class CatalogService {
 
     /// The default on-disk location: Application Support/Catalog/Catalog.sqlite.
     public static var defaultStoreURL: URL {
+        #if os(tvOS)
+        // An Apple TV keeps only purgeable files beyond a few hundred KB of
+        // defaults, so the catalog goes in Caches; a purge only means
+        // fetching it from the provider again.
+        URL.cachesDirectory.appending(path: "Catalog/Catalog.sqlite")
+        #else
         URL.applicationSupportDirectory.appending(path: "Catalog/Catalog.sqlite")
+        #endif
     }
 
     let storeURL: URL?

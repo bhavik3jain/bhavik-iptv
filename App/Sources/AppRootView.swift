@@ -82,10 +82,20 @@ struct WindowPresentations: ViewModifier {
     func body(content: Content) -> some View {
         @Bindable var navigation = navigation
         content
+            #if os(tvOS)
+            // A tvOS sheet is a narrow card in the middle of the room, which
+            // squeezes a page; the TV's pages fill the screen and Menu
+            // closes them.
+            .fullScreenCover(item: $navigation.sheet) { sheet in
+                RouteSheet(navigation: navigation, root: sheet.root)
+                    .environment(\.play, playAction)
+            }
+            #else
             .sheet(item: $navigation.sheet) { sheet in
                 RouteSheet(navigation: navigation, root: sheet.root)
                     .environment(\.play, playAction)
             }
+            #endif
             .sheet(item: limitPrompt) { prompt in
                 StreamLimitSheet(prompt: prompt) { decision in
                     playback.resolveLimitPrompt(decision)
