@@ -241,12 +241,24 @@ public actor StalkerClient: SourceClient {
             return try await catchupLink(channel: channel, start: start, duration: duration, portal: portal, headers: headers)
 
         case .movie(let movie):
-            let command = StalkerParse.movieCommand(movie.command ?? movie.id)
-            let envelope = try await call([("type", "vod"), ("action", "create_link"), ("cmd", command)], what: "create_link (vod)")
-            guard let link = StalkerParse.vodLink(envelope.js, streamServerBase: StalkerPortal.streamServerBase(for: api), mac: portal.mac, linkType: "movie"),
-                  let url = URL(string: link)
-            else { throw noLink(envelope, what: "create_link (vod)") }
-            return StreamLink(url: url, headers: headers, formatHint: Self.hint(for: url, fallback: .fromExtension(movie.containerExtension)))
+            // Ministra 5 keeps a movie's video in file rows of its own and
+            // links a file, not the movie: asked for the movie's own cmd, the
+            // owner's portal took 20 s to answer nothing_to_play, while its
+            // file's `/media/file_<id>.mpg` linked in 0.1 s. A portal without
+            // file rows plays the movie's cmd, as before.
+            var commands: [String] = []
+            if let fileCommand = try? await movieFileCommand(movie) { commands.append(fileCommand) }
+            commands.append(StalkerParse.movieCommand(movie.command ?? movie.id))
+            var failure: SourceError?
+            for command in commands {
+                let envelope = try await call([("type", "vod"), ("action", "create_link"), ("cmd", command)], what: "create_link (vod)")
+                if let link = StalkerParse.vodLink(envelope.js, streamServerBase: StalkerPortal.streamServerBase(for: api), mac: portal.mac, linkType: "movie"),
+                   let url = URL(string: link) {
+                    return StreamLink(url: url, headers: headers, formatHint: Self.hint(for: url, fallback: .fromExtension(movie.containerExtension)))
+                }
+                failure = noLink(envelope, what: "create_link (vod)")
+            }
+            throw failure ?? SourceError(.noLink, detail: "create_link (vod) answered without a URL")
 
         case .episode(let episode, _):
             let command = StalkerParse.movieCommand(episode.command ?? episode.id)
@@ -258,6 +270,16 @@ public actor StalkerClient: SourceClient {
             else { throw noLink(envelope, what: "create_link (episode)") }
             return StreamLink(url: url, headers: headers, formatHint: Self.hint(for: url, fallback: .fromExtension(episode.containerExtension)))
         }
+    }
+
+    /// The `cmd` of the movie's file, when the portal keeps its video in
+    /// file rows (`get_ordered_list` with the movie's id); nil otherwise.
+    private func movieFileCommand(_ movie: RemoteMovie) async throws -> String? {
+        let envelope = try await call(
+            [("type", "vod"), ("action", "get_ordered_list"), ("movie_id", movie.id), ("season_id", "0"), ("episode_id", "0"), ("row", "0"), ("p", "1")],
+            what: "get_ordered_list (files)"
+        )
+        return StalkerParse.movieFileCommand(StalkerParse.listPage(envelope.js).items, movieID: movie.id)
     }
 
     /// Catch-up (unverified — check with the probe): find the archived

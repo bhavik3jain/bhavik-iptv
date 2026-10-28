@@ -171,6 +171,21 @@ enum StalkerParse {
         return nil
     }
 
+    /// The `cmd` that plays a movie on a portal that keeps its video in file
+    /// rows (Ministra 5; verified): `/media/file_<file id>.mpg` for its best
+    /// file (highest `quality`, the first of equals). Nil when the rows
+    /// aren't files: a portal without them answers with nothing, or with
+    /// movies.
+    static func movieFileCommand(_ rows: [JSONValue], movieID: String) -> String? {
+        let files = rows.filter { $0.truthy("is_file") || $0.string("video_id") == movieID }
+        var best: JSONValue?
+        for file in files where file.string("id") != nil {
+            if best == nil || (file.int("quality") ?? 0) > (best?.int("quality") ?? 0) { best = file }
+        }
+        guard let id = best?.string("id") else { return nil }
+        return "/media/file_\(id).mpg"
+    }
+
     /// Prepares a movie `cmd` for `create_link`. stalkerhek wraps a `cmd`
     /// with no leading `/` or `ffmpeg` as `/media/file_<cmd>.mpg`; that is
     /// right for a bare file id, but many portals send a base64 JSON `cmd`

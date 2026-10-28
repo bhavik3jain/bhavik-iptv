@@ -343,6 +343,45 @@ import Testing
         #expect(request.query["series"] == nil)
     }
 
+    @Test func movieWithFileRowsLinksItsFile() async throws {
+        let portal = Portal { action, request, _ in
+            switch action {
+            case "get_ordered_list" where request.query["movie_id"] == "7101":
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"8800123","video_id":"7101","is_file":"1","quality":"6","protocol":"custom","cmd":"http://vod.portal.test/movie.m3u8"}]}}"#)
+            case "create_link" where request.query["cmd"] == "/media/file_8800123.mpg":
+                return .json(#"{"js":{"id":"8800123","cmd":"http://vod.portal.test:8080/movie/index.m3u8?token=Tk1"}}"#)
+            default:
+                return nil
+            }
+        }
+        let movie = RemoteMovie(id: "7101", name: "Paper Boats", command: "/media/7101.mpg")
+        let link = try await portal.client().streamLink(for: .movie(movie))
+        #expect(link.url.absoluteString == "http://vod.portal.test:8080/movie/index.m3u8?token=Tk1")
+        #expect(link.formatHint == .hls)
+        // The file linked, so the movie's own cmd was never tried.
+        #expect(portal.requests("create_link").count == 1)
+        #expect(portal.requests("get_ordered_list").first?.query["type"] == "vod")
+    }
+
+    @Test func movieWhoseFileWontLinkFallsBackToItsCommand() async throws {
+        let portal = Portal { action, request, _ in
+            switch action {
+            case "get_ordered_list" where request.query["movie_id"] == "7101":
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"8800123","video_id":"7101","is_file":"1"}]}}"#)
+            case "create_link" where request.query["cmd"] == "/media/7101.mpg":
+                return .fixture("stalker/movie_link_cmd.json")
+            case "create_link":
+                return .fixture("stalker/create_link_empty.json")
+            default:
+                return nil
+            }
+        }
+        let movie = RemoteMovie(id: "7101", name: "Paper Boats", command: "/media/7101.mpg")
+        let link = try await portal.client().streamLink(for: .movie(movie))
+        #expect(link.url.absoluteString == "http://vod.portal.test:8080/movies/7002.mkv?token=Pq7")
+        #expect(portal.requests("create_link").map { $0.query["cmd"] } == ["/media/file_8800123.mpg", "/media/7101.mpg"])
+    }
+
     @Test func episodeLinkSendsTheSeriesNumberAndBuildsMoviePHP() async throws {
         let portal = Portal { action, _, _ in
             action == "create_link" ? .fixture("stalker/episode_link_token.json") : nil
