@@ -145,19 +145,6 @@ public struct HomeView<ProfileSwitcher: View>: View {
                 UpNextTile(item: item, profileID: canKeepLists ? profileID : nil)
             }
         }
-
-        if !snapshot.newMovies.isEmpty {
-            PosterShelf(
-                title: String(localized: "New in Movies", bundle: .module),
-                items: snapshot.newMovies,
-                layout: layout,
-                gutter: gutter,
-                contentWidth: contentWidth,
-                maxRows: 2
-            ) { movie in
-                NewMovieTile(movie: movie, isOnMyList: snapshot.myListKeys.contains(movie.key.rawValue), profileID: canKeepLists ? profileID : nil)
-            }
-        }
     }
 
     // MARK: State

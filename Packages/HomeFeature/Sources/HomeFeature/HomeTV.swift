@@ -88,14 +88,6 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
                 }
             }
         }
-
-        if !snapshot.newMovies.isEmpty {
-            TVShelf(String(localized: "New in Movies", bundle: .module)) {
-                ForEach(snapshot.newMovies) { movie in
-                    TVNewMovieCard(movie: movie, isOnMyList: snapshot.myListKeys.contains(movie.key.rawValue), profileID: profileID)
-                }
-            }
-        }
     }
 }
 
@@ -329,51 +321,6 @@ private struct TVUpNextCard: View {
                     store.setWatched(true, profileID: profileID, itemKey: item.episodeKey)
                 } label: {
                     Label(String(localized: "Mark \(item.badge) as watched", bundle: .module), systemImage: "checkmark.circle")
-                }
-            }
-        }
-    }
-}
-
-/// A new movie: select opens its page, long-press plays or changes My List.
-private struct TVNewMovieCard: View {
-    let movie: CatalogMovie
-    let isOnMyList: Bool
-    let profileID: UUID?
-
-    @Environment(HouseholdStore.self) private var store
-    @Environment(\.play) private var play
-
-    var body: some View {
-        TVCard(
-            route: .movie(itemKey: movie.key.rawValue),
-            width: HearthTVMetrics.posterWidth,
-            title: movie.name,
-            caption: movie.year.map { String($0) }
-        ) {
-            TVPosterArtwork(title: movie.name, url: movie.posterURL)
-        }
-        .contextMenu {
-            Button {
-                play(PlayIntent(
-                    itemKey: movie.key.rawValue,
-                    kind: .movie,
-                    title: movie.name,
-                    subtitle: ContinueItem.movieSubtitle(movie),
-                    artworkURL: movie.posterURL
-                ))
-            } label: {
-                Label(String(localized: "Play", bundle: .module), systemImage: "play.fill")
-            }
-            if let profileID {
-                Button {
-                    store.toggleFavorite(profileID: profileID, itemKey: movie.key.rawValue, kind: .movie)
-                } label: {
-                    if isOnMyList {
-                        Label(String(localized: "Remove from My List", bundle: .module), systemImage: "minus.circle")
-                    } else {
-                        Label(String(localized: "Add to My List", bundle: .module), systemImage: "plus.circle")
-                    }
                 }
             }
         }
