@@ -272,6 +272,9 @@ final class VLCEngine: PlaybackEngine {
         // Live gets a short cache for a quick start (quality bar: 3 s for
         // MPEG-TS); files a longer one to ride out Wi-Fi dips.
         options.append(":network-caching=\(stream.isLive ? 1500 : 3000)")
+        // libVLC's HLS reader starts live streams 15 s behind the edge by
+        // default; a MAG box plays a segment or two from it.
+        if stream.isLive { options.append(":adaptive-livedelay=8000") }
         if let start = stream.startPosition, start > 0 {
             options.append(":start-time=\(Int(start))")
         }

@@ -111,6 +111,22 @@ public struct LiveClock: Sendable, Equatable {
     }
 }
 
+/// How far behind a live HLS stream's edge AVPlayer plays. Left alone it
+/// sits where the stream recommends, three target durations back: with the
+/// owner's provider's 6 s segments that's 18 s, about 10 s behind iSTB or a
+/// MAG box, which play a segment or two from the end. Half the
+/// recommendation keeps a segment and a half of buffer; never under 4 s,
+/// unless the recommendation itself is.
+enum LiveEdgeOffset {
+    static let floor: TimeInterval = 4
+
+    /// Nil when the stream gives no usable recommendation.
+    static func target(recommended: TimeInterval) -> TimeInterval? {
+        guard recommended.isFinite, recommended > 0 else { return nil }
+        return max(min(recommended, floor), recommended / 2)
+    }
+}
+
 // MARK: - Timeline
 
 /// What the scrub bar draws and what a drag on it means (mockup 06).

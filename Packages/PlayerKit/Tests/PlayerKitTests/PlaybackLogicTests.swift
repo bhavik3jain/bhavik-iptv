@@ -274,6 +274,7 @@ struct VLCMediaOptionsTests {
             ":http-referrer=http://portal.test/c/",
             ":http-user-agent=Mozilla/5.0 (QtEmbedded; MAG250)",
             ":network-caching=1500",
+            ":adaptive-livedelay=8000",
         ])
     }
 
@@ -296,5 +297,22 @@ struct VLCKitInfoTests {
         let kinds = PlaybackEngineFactory.standard.availableKinds
         #expect(kinds.contains(.avPlayer))
         #expect(kinds.contains(.vlc) == VLCKitInfo.isLinked)
+    }
+}
+
+@Suite struct LiveEdgeOffsetTests {
+    @Test func halfTheRecommendationWithAFloor() {
+        // 6 s segments: AVPlayer's 18 s becomes 9.
+        #expect(LiveEdgeOffset.target(recommended: 18) == 9)
+        #expect(LiveEdgeOffset.target(recommended: 33) == 16.5)
+        // Never under 4 s unless the stream asks for less.
+        #expect(LiveEdgeOffset.target(recommended: 6) == 4)
+        #expect(LiveEdgeOffset.target(recommended: 3) == 3)
+    }
+
+    @Test func noRecommendationNoChange() {
+        #expect(LiveEdgeOffset.target(recommended: .nan) == nil)
+        #expect(LiveEdgeOffset.target(recommended: 0) == nil)
+        #expect(LiveEdgeOffset.target(recommended: .infinity) == nil)
     }
 }
