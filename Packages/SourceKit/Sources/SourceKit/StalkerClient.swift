@@ -41,7 +41,7 @@ public actor StalkerClient: SourceClient {
     }
 
     public nonisolated var capabilities: SourceCapabilities {
-        SourceCapabilities(hasMovies: true, hasSeries: true, hasFullGuide: false, hasCatchup: true, reportsStreamCount: false)
+        SourceCapabilities(hasMovies: true, hasSeries: true, hasFullGuide: false, hasCatchup: true, reportsStreamCount: false, searchesCatalog: true)
     }
 
     // MARK: Session
@@ -193,6 +193,30 @@ public actor StalkerClient: SourceClient {
             episodes += seasonEpisodes
         }
         return SeriesDetail(series: series, seasons: seasons.sorted { $0.number < $1.number }, episodes: episodes)
+    }
+
+    /// Ministra's own search (verified): `get_ordered_list` with `search`
+    /// across every VOD category, shows flagged `is_series` among the movies;
+    /// a portal with a series module of its own is asked there too.
+    public func search(_ query: String, page: Int) async throws -> RemoteSearchPage {
+        let (portal, api) = try await sessionEndpoint()
+        let envelope = try await call(
+            [("type", "vod"), ("action", "get_ordered_list"), ("category", "*"), ("search", query), ("p", StalkerParse.portalPage(page))],
+            what: "get_ordered_list (search)"
+        )
+        let list = StalkerParse.listPage(envelope.js)
+        let movies = list.items.filter { !$0.truthy("is_series") }.compactMap { StalkerParse.movie($0, api: api, timeZone: portal.timeZone) }
+        var series = list.items.filter { $0.truthy("is_series") }.compactMap { StalkerParse.series($0, api: api, timeZone: portal.timeZone) }
+        var hasMore = list.hasMore(after: page)
+        if seriesModule != "vod", let shows = try? await call(
+            [("type", "series"), ("action", "get_ordered_list"), ("category", "*"), ("search", query), ("p", StalkerParse.portalPage(page))],
+            what: "get_ordered_list (series search)"
+        ) {
+            let showList = StalkerParse.listPage(shows.js)
+            series += showList.items.compactMap { StalkerParse.series($0, api: api, timeZone: portal.timeZone) }
+            hasMore = hasMore || showList.hasMore(after: page)
+        }
+        return RemoteSearchPage(movies: movies, series: series, page: page, hasMore: hasMore)
     }
 
     // MARK: Guide

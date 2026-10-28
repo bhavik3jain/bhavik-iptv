@@ -343,6 +343,30 @@ import Testing
         #expect(request.query["series"] == nil)
     }
 
+    @Test func searchSplitsShowsFromMoviesAndAsksTheSeriesModuleToo() async throws {
+        let portal = Portal { action, request, _ in
+            guard action == "get_ordered_list", let term = request.query["search"] else { return nil }
+            switch request.query["type"] {
+            case "vod":
+                #expect(term == "lucifer")
+                return .json(#"{"js":{"total_items":20,"max_page_items":14,"data":[{"id":"501","name":"Lucifer","is_series":"1","category_id":"4"},{"id":"502","name":"Lucifer's Women","is_series":"0","category_id":"9"}]}}"#)
+            case "series":
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"601","name":"Lucifer (2016)","category_id":"5"}]}}"#)
+            default:
+                return nil
+            }
+        }
+        let page = try await portal.client().search("lucifer", page: 0)
+        #expect(page.movies.map(\.name) == ["Lucifer's Women"])
+        #expect(page.series.map(\.name) == ["Lucifer", "Lucifer (2016)"])
+        #expect(page.series.first?.categoryID == "4")
+        #expect(page.hasMore) // 20 titles, 2 on this page of 14
+        let vod = try #require(portal.requests("get_ordered_list").first { $0.query["type"] == "vod" })
+        #expect(vod.query["category"] == "*")
+        #expect(vod.query["p"] == "1")
+        #expect(portal.client().capabilities.searchesCatalog)
+    }
+
     @Test func movieWithFileRowsLinksItsFile() async throws {
         let portal = Portal { action, request, _ in
             switch action {

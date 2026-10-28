@@ -13,10 +13,12 @@ import SwiftUI
 ///
 /// Host it inside a `NavigationStack` that maps `HearthRoute` (posters push
 /// `.movie` / `.series`, guide hits `.channel`); it sets its own navigation
-/// title. Every query is a local read of the catalog on this device —
-/// nothing typed here leaves it (SRCH-2) — and the catalog applies the
-/// current profile's filter, so a Kids profile only finds what it may watch
-/// (SRCH-3).
+/// title. Every query is a read of the catalog on this device, and the
+/// catalog applies the current profile's filter, so a Kids profile only
+/// finds what it may watch (SRCH-3). A source that keeps only part of its
+/// movies and shows here (a big Stalker portal) is also asked, once the
+/// typing settles, and what it finds joins the catalog: the owner chose
+/// complete answers over the query staying on the device (SRCH-2).
 public struct SearchView: View {
     let initialQuery: String
     public init(initialQuery: String = "") { self.initialQuery = initialQuery }
@@ -120,7 +122,9 @@ private struct SearchScreen: View {
                 SearchTVNotice(
                     systemName: "magnifyingglass",
                     title: String(localized: "Search everything", bundle: .module),
-                    message: String(localized: "Channels, the next 24 hours of the guide, movies and shows from all your sources. What you type stays on this device.", bundle: .module)
+                    message: catalog.searchesProviders
+                    ? String(localized: "Channels, the next 24 hours of the guide, movies and shows from all your sources. Movies and shows are also looked up on your provider.", bundle: .module)
+                    : String(localized: "Channels, the next 24 hours of the guide, movies and shows from all your sources. What you type stays on this device.", bundle: .module)
                 )
             }
         } else if catalog.sources.isEmpty {
@@ -225,8 +229,11 @@ private struct SearchScreen: View {
             )
             .padding(.top, 40)
         } else if let outcome {
+            if catalog.providerSearchesRunning > 0 {
+                ProviderSearchNote()
+            }
             if outcome.groups.isEmpty {
-                noResults(for: outcome)
+                if catalog.providerSearchesRunning == 0 { noResults(for: outcome) }
             } else {
                 SearchResultsList(
                     groups: outcome.groups,
@@ -261,7 +268,9 @@ private struct SearchScreen: View {
             EmptyStateView(
                 systemName: "magnifyingglass",
                 title: String(localized: "Search everything", bundle: .module),
-                message: String(localized: "Channels, the next 24 hours of the guide, movies and shows from all your sources. What you type stays on this device.", bundle: .module)
+                message: catalog.searchesProviders
+                    ? String(localized: "Channels, the next 24 hours of the guide, movies and shows from all your sources. Movies and shows are also looked up on your provider.", bundle: .module)
+                    : String(localized: "Channels, the next 24 hours of the guide, movies and shows from all your sources. What you type stays on this device.", bundle: .module)
             )
             .padding(.top, 40)
         }
@@ -309,6 +318,15 @@ private struct SearchScreen: View {
         if !visible.isEmpty {
             Task { await catalog.loadShortGuide(for: visible) }
         }
+
+        // A big portal's titles aren't all here: once the typing settles,
+        // ask it too. Unstructured for the same reason as the short guides;
+        // its results bump `revision`, which re-runs this with them in.
+        guard catalog.searchesProviders else { return }
+        try? await Task.sleep(for: SearchRequest.providerDebounce)
+        if Task.isCancelled { return }
+        let settled = query
+        Task { await catalog.searchProviders(settled) }
     }
 
     /// Keeps the query in this profile's recent searches (not for a Guest).
@@ -387,5 +405,22 @@ private struct RecentSearchRow: View {
             .padding(.trailing, -10)
             .accessibilityLabel(Text("Remove “\(text)” from recent searches", bundle: .module))
         }
+    }
+}
+
+/// "Also searching your provider…" over the results while a big portal is
+/// asked.
+private struct ProviderSearchNote: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(HearthColor.textSecondary)
+            Text("Also searching your provider…", bundle: .module)
+                .font(.hearthFootnote)
+                .foregroundStyle(HearthColor.textSecondary)
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 }

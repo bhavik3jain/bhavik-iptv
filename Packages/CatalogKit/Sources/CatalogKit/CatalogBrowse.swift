@@ -81,6 +81,61 @@ extension CatalogService {
         }
     }
 
+    /// How many pages of a provider's search are asked for (14 titles a page
+    /// on Ministra, 2–4 s each, so the pages go out together).
+    static let providerSearchPages = 2
+
+    /// True when some source keeps only part of its movies and shows on this
+    /// device and can search the rest: a search there also asks the provider.
+    public var searchesProviders: Bool {
+        sources.contains { persisted[$0.id]?.browseCursors.isEmpty == false }
+    }
+
+    /// Asks each source that keeps only part of its catalog here (a big
+    /// Stalker portal, imported a page per category) for movies and shows
+    /// matching `query`, and adds what comes back, so `search(_:)` finds
+    /// titles nobody has browsed to yet and gives the same answer every time.
+    /// The query goes to the provider: the owner chose that over search
+    /// staying on the device for these sources (SRCH-2). Each query is asked
+    /// once a launch. Returns how many titles were new; `revision` bumps when
+    /// any were.
+    @discardableResult
+    public func searchProviders(_ query: String) async -> Int {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = SearchKey.normalize(trimmed)
+        guard normalized.count >= 2, let store = openStore(),
+              providerSearchedQueries.insert(normalized).inserted
+        else { return 0 }
+        let browsed = sources.filter { persisted[$0.id]?.browseCursors.isEmpty == false }
+        guard !browsed.isEmpty else { return 0 }
+        providerSearchesRunning += 1
+        defer { providerSearchesRunning -= 1 }
+
+        var added = 0
+        var answered = false
+        for configuration in browsed {
+            guard let client = try? await readyClient(for: configuration), client.capabilities.searchesCatalog else { continue }
+            let pages = await withTaskGroup(of: RemoteSearchPage?.self) { group in
+                for page in 0..<Self.providerSearchPages {
+                    group.addTask { try? await client.search(trimmed, page: page) }
+                }
+                var pages: [RemoteSearchPage] = []
+                for await page in group { if let page { pages.append(page) } }
+                return pages.sorted { $0.page < $1.page }
+            }
+            if !pages.isEmpty { answered = true }
+            let generation = persisted[configuration.id]?.generation ?? 0
+            let movies = pages.flatMap(\.movies)
+            let series = pages.flatMap(\.series)
+            added += (try? await CatalogWriter.appendMovies(movies, sourceID: configuration.id, generation: generation, store: store)) ?? 0
+            added += (try? await CatalogWriter.appendSeries(series, sourceID: configuration.id, generation: generation, store: store)) ?? 0
+        }
+        // Nothing came back (offline, cancelled): the query may be asked again.
+        if !answered { providerSearchedQueries.remove(normalized) }
+        if added > 0 { catalogDidChange() }
+        return added
+    }
+
     func browseCursor(_ categoryID: String) -> BrowseCursor? {
         guard let (sourceID, _) = Self.parseCategoryID(categoryID) else { return nil }
         return persisted[sourceID]?.browseCursors[categoryID]

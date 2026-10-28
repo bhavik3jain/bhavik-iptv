@@ -87,9 +87,11 @@ struct GridEntry: Identifiable, Equatable {
 }
 
 /// Movies or shows by category as a poster grid (VOD-1, SER-1): a large
-/// title with the sort menu, category chips, and posters that grow a page at a
-/// time. Its empty states come from the sources' refresh states, so a
-/// first-run import reads as "Loading…" rather than "No movies".
+/// title with the sort menu, a search field, category chips, and posters
+/// that grow a page at a time. Its empty states come from the sources'
+/// refresh states, so a first-run import reads as "Loading…" rather than
+/// "No movies". Typing searches this shelf (the catalog's search, and the
+/// provider's for a big portal) instead of listing a category.
 struct CatalogGridScreen: View {
     let shelf: LibraryShelf
 
@@ -107,7 +109,12 @@ struct CatalogGridScreen: View {
     @State private var entries: [GridEntry] = []
     @State private var chips = CategoryChips(categories: [], sourceNames: [:])
     @State private var hasLoaded = false
+    /// The shelf's search; empty lists the category.
+    @State private var query = ""
     private var metrics = PosterGridMetrics()
+
+    /// Titles a search shows at most (the catalog ranks name prefixes first).
+    static let searchLimit = 120
 
     init(shelf: LibraryShelf) {
         self.shelf = shelf
@@ -131,6 +138,7 @@ struct CatalogGridScreen: View {
         var categoryID: String?
         var sort: CatalogSort
         var limit: Int
+        var query: String
     }
 
     private var queryKey: QueryKey {
@@ -138,8 +146,11 @@ struct CatalogGridScreen: View {
         // latest episodes depends on the household store.
         QueryKey(catalogRevision: catalog.revision, storeRevision: shelf == .shows ? store.revision : 0,
                  profileID: session.currentProfile?.id,
-                 categoryID: storedCategoryID, sort: sort, limit: paging.limit)
+                 categoryID: storedCategoryID, sort: sort, limit: paging.limit, query: trimmedQuery)
     }
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var isSearching: Bool { !trimmedQuery.isEmpty }
 
     var body: some View {
         Group {
@@ -150,6 +161,15 @@ struct CatalogGridScreen: View {
             }
         }
         .onChange(of: queryKey, initial: true) { _, _ in reload() }
+        .task(id: trimmedQuery) {
+            // A big portal's titles aren't all on the device: once the
+            // typing settles, ask it; what it finds bumps the catalog's
+            // revision, which re-runs the query.
+            guard trimmedQuery.count >= 2, catalog.searchesProviders else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            if Task.isCancelled { return }
+            await catalog.searchProviders(trimmedQuery)
+        }
         .onChange(of: storedCategoryID) { _, _ in paging.reset() }
         .onChange(of: sortRaw) { _, _ in paging.reset() }
     }
@@ -164,10 +184,21 @@ struct CatalogGridScreen: View {
                 LibraryTitleRow(title: shelf.title) { sortMenu }
                     .padding(.horizontal, gutter)
                     .padding(.top, 4)
+                SearchField(
+                    shelf == .movies ? String(localized: "Search movies", bundle: .module) : String(localized: "Search shows", bundle: .module),
+                    text: $query
+                )
+                .autocorrectionDisabled()
+                .frame(maxWidth: layout == .sidebar ? 520 : .infinity, alignment: .leading)
+                .padding(.horizontal, gutter)
                 Section {
-                    content(gutter: gutter)
+                    if isSearching {
+                        searchContent(gutter: gutter)
+                    } else {
+                        content(gutter: gutter)
+                    }
                 } header: {
-                    if chips.chips.count > 1 {
+                    if chips.chips.count > 1, !isSearching {
                         chipRow(gutter: gutter)
                             .padding(.vertical, 6)
                             .background(HearthColor.background)
@@ -429,6 +460,41 @@ struct CatalogGridScreen: View {
         }
     }
 
+    /// A search's posters, or why there are none.
+    @ViewBuilder
+    private func searchContent(gutter: CGFloat) -> some View {
+        if catalog.providerSearchesRunning > 0 {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small).tint(HearthColor.textSecondary)
+                Text("Also searching your provider…", bundle: .module)
+                    .font(.hearthFootnote)
+                    .foregroundStyle(HearthColor.textSecondary)
+            }
+            .padding(.horizontal, gutter)
+            .accessibilityElement(children: .combine)
+        }
+        if entries.isEmpty {
+            if catalog.providerSearchesRunning == 0 {
+                EmptyStateView(
+                    systemName: "magnifyingglass",
+                    title: String(localized: "No results for “\(trimmedQuery)”", bundle: .module),
+                    message: shelf == .movies
+                        ? String(localized: "Check the spelling, or try a shorter part of the movie's name.", bundle: .module)
+                        : String(localized: "Check the spelling, or try a shorter part of the show's name.", bundle: .module)
+                )
+                .padding(.top, 40)
+            }
+        } else {
+            LazyVGrid(columns: metrics.columns(for: layout), alignment: .leading, spacing: 20) {
+                ForEach(entries) { entry in
+                    LibraryPosterLink(entry: entry)
+                }
+            }
+            .padding(.horizontal, gutter)
+            .padding(.top, 4)
+        }
+    }
+
     private var grid: some View {
         LazyVGrid(columns: metrics.columns(for: layout), alignment: .leading, spacing: 20) {
             ForEach(entries) { entry in
@@ -490,6 +556,19 @@ struct CatalogGridScreen: View {
         let sourceNames = Dictionary(catalog.sources.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         chips = CategoryChips(categories: catalog.categories(kind: shelf.contentKind), sourceNames: sourceNames)
         let category = chips.validSelection(storedCategoryID)
+
+        if isSearching {
+            let results = catalog.search(trimmedQuery, limitPerGroup: Self.searchLimit)
+            switch shelf {
+            case .movies:
+                entries = results.movies.enumerated().map { GridEntry(movie: $1, index: $0) }
+            case .shows:
+                let latest = latestEpisodeBySeries()
+                entries = results.series.enumerated().map { GridEntry(series: $1, index: $0, latest: latest[$1.key.rawValue]) }
+            }
+            hasLoaded = true
+            return
+        }
 
         switch shelf {
         case .movies:

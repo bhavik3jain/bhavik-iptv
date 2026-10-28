@@ -341,6 +341,21 @@ public struct SeriesDetail: Sendable, Hashable {
 /// One page of a paged list. Stalker pages count from 0 in this API (the
 /// client translates to whatever the portal wants); Xtream and M3U answer
 /// everything as page 0 with `hasMore == false`.
+/// One page of a provider's own search: the movies and the shows in it.
+public struct RemoteSearchPage: Sendable, Hashable {
+    public var movies: [RemoteMovie]
+    public var series: [RemoteSeries]
+    public var page: Int
+    public var hasMore: Bool
+
+    public init(movies: [RemoteMovie] = [], series: [RemoteSeries] = [], page: Int, hasMore: Bool) {
+        self.movies = movies
+        self.series = series
+        self.page = page
+        self.hasMore = hasMore
+    }
+}
+
 public struct Page<Item: Sendable & Hashable>: Sendable, Hashable {
     public var items: [Item]
     public var page: Int
@@ -429,13 +444,17 @@ public struct SourceCapabilities: Sendable, Hashable {
     public var hasCatchup: Bool
     /// The provider reports its stream limit and use (Xtream only).
     public var reportsStreamCount: Bool
+    /// The provider searches its own movies and shows (`search(_:page:)`):
+    /// a Stalker portal, whose catalog can be too big to keep on a device.
+    public var searchesCatalog: Bool
 
-    public init(hasMovies: Bool, hasSeries: Bool, hasFullGuide: Bool, hasCatchup: Bool, reportsStreamCount: Bool) {
+    public init(hasMovies: Bool, hasSeries: Bool, hasFullGuide: Bool, hasCatchup: Bool, reportsStreamCount: Bool, searchesCatalog: Bool = false) {
         self.hasMovies = hasMovies
         self.hasSeries = hasSeries
         self.hasFullGuide = hasFullGuide
         self.hasCatchup = hasCatchup
         self.reportsStreamCount = reportsStreamCount
+        self.searchesCatalog = searchesCatalog
     }
 }
 

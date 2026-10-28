@@ -107,6 +107,17 @@ final class FakeSourceClient: SourceClient {
         return detail
     }
 
+    /// Names containing the query, a page at a time, when the capabilities
+    /// say the provider searches.
+    func search(_ query: String, page: Int) async throws -> RemoteSearchPage {
+        record("search(\(query),\(page))")
+        let fixture = self.fixture
+        guard capabilities.searchesCatalog else { return RemoteSearchPage(page: page, hasMore: false) }
+        let movies = try paged(fixture.movies.filter { $0.name.localizedCaseInsensitiveContains(query) }, kind: .vod, categoryID: nil, page: page, fixture: fixture, category: \.categoryID)
+        let series = try paged(fixture.series.filter { $0.name.localizedCaseInsensitiveContains(query) }, kind: .series, categoryID: nil, page: page, fixture: fixture, category: \.categoryID)
+        return RemoteSearchPage(movies: movies.items, series: series.items, page: page, hasMore: movies.hasMore || series.hasMore)
+    }
+
     func shortGuide(for channel: RemoteChannel, limit: Int) async throws -> [RemoteProgramme] {
         record("shortGuide(\(channel.id))")
         return Array((fixture.shortGuides[channel.id] ?? []).prefix(limit))
