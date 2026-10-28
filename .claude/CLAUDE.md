@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Hearth (working title) — an IPTV player for Stalker portals, Xtream logins and M3U playlists, with Netflix-style profiles shared by a household through iCloud. iPhone (including iPhone Duo), iPad and Mac today, Apple TV in progress. SwiftUI, Swift 6, iOS 18 / macOS 15 deployment, built with **Xcode 27.1** (the iOS 27.1 SDK is the first with iPhone Duo's full-screen layout). Distributed through TestFlight only. Repo `bhavik3jain/bhavik-iptv` (public); sister app Multitrack is `bhavik3jain/bhavik-ios` (`../bhavik-ios`), whose CloudKit, sharing and CI code this repo borrows.
+Hearth (working title) — an IPTV player for Stalker portals, Xtream logins and M3U playlists, with Netflix-style profiles shared by a household through iCloud. iPhone (including iPhone Duo), iPad, Mac and Apple TV. SwiftUI, Swift 6, iOS 18 / macOS 15 deployment, built with **Xcode 27.1** (the iOS 27.1 SDK is the first with iPhone Duo's full-screen layout). Distributed through TestFlight only. Repo `bhavik3jain/bhavik-iptv` (public); sister app Multitrack is `bhavik3jain/bhavik-ios` (`../bhavik-ios`), whose CloudKit, sharing and CI code this repo borrows.
 
 **Read first:** `docs/TRACKING.md` (status, blockers, workstreams, the dated session log — add to it at the end of a session), `docs/RELEASE.md` (TestFlight, secrets, the iCloud schema ritual), `README.md` (commands). Specs and mockups: `docs/handoff/` (requirement ids like SRC-1 and PRF-3 come from `docs/handoff/docs/2-Product-spec.md`). This file is only the things that cost an hour if you don't know them.
 
@@ -53,7 +53,7 @@ Learned against the owner's real portal (iSTB worked, Hearth didn't):
 
 - **An unsigned build has no entitlements**, and the CloudKit-backed store then crashes at launch ("must have a com.apple.developer.icloud-services entitlement"). `CODE_SIGNING_ALLOWED=NO` builds are fine for compile checks and for runs with `-InMemoryStores YES`, nothing else. To run for real: `scripts/run-sim.sh <simulator>` (signs simulator builds the normal way) or Xcode; on the Mac, `xcodebuild … -scheme Hearth-macOS -configuration Debug -allowProvisioningUpdates` (development profile) — `scripts/run-mac-local.sh` is ad hoc, no iCloud, demo only.
 - `scripts/run-sim.sh "iPhone 18 Pro"` runs the demo (`-StubProvider YES -InMemoryStores YES`); `REAL=YES scripts/run-sim.sh …` runs with the store on disk and no demo, for real sources.
-- Uploads: `scripts/testflight.sh ios|mac|all` (Xcode's Apple ID, or `ASC_KEY_ID`/`ASC_ISSUER_ID`/`ASC_KEY_PATH`), or the `TestFlight` workflow. Local build numbers are `yyDDDHHMM` (under 2^31). `xcodebuild -exportArchive` from a Claude-launched shell has reported "No Accounts" even with Xcode signed in; the owner runs uploads from their own Terminal or uses the API key.
+- Uploads: `scripts/testflight.sh ios|mac|tv|all` (Xcode's Apple ID, or `ASC_KEY_ID`/`ASC_ISSUER_ID`/`ASC_KEY_PATH`), or the `TestFlight` workflow. Local build numbers are `yyDDDHHMM` (under 2^31). `xcodebuild -exportArchive` from a Claude-launched shell has reported "No Accounts" even with Xcode signed in; the owner runs uploads from their own Terminal or uses the API key.
 
 ## Building and testing
 

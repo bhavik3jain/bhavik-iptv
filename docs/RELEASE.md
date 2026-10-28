@@ -7,7 +7,7 @@ Already done (2026-10-24): Xcode is signed in to team Y4M3S6H4NK, and signed bui
 ## 1. Put Hearth on TestFlight (once)
 
 1. **Create the app record** at [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → **Apps** → **+** → **New App**:
-   - Platforms: **iOS** and **macOS** (one record for both: Universal Purchase). Add **tvOS** later from the app's page (**+ Platform**) once the Apple TV target is merged.
+   - Platforms: **iOS** and **macOS** (one record for both: Universal Purchase). Add **tvOS** from the app's page (**+ Platform**) before the first Apple TV upload; until then the workflow's Apple TV job fails at its upload, and the iOS and Mac jobs carry on.
    - Name: **Hearth** (must be unique on the App Store; "Hearth Player" works if it's taken — it can change later).
    - Primary language: English (U.S.). Bundle ID: **com.bhavikjain.hearth**. SKU: `hearth`. User access: Full Access.
 2. **Add the household as testers.** Internal testers skip App Review but must be users on your App Store Connect team (up to 100):
@@ -17,9 +17,10 @@ Already done (2026-10-24): Xcode is signed in to team Y4M3S6H4NK, and signed bui
 4. **Upload the first builds**, either:
    - from this Mac: `scripts/testflight.sh all` in your own Terminal (Xcode signed in; if the export says "No Accounts", sign in again in Xcode → Settings → Accounts, or use the API-key variables from part 2), or
    - from GitHub, once part 2 is done: `gh workflow run TestFlight --ref main` (or push a tag: `git tag v0.1.0 && git push --tags`).
-   Both build iOS and macOS. Build numbers only go up (the script uses `yyDDDHHMM`; the workflow uses its run number + 100).
+   Both build iOS, macOS and tvOS. Build numbers only go up (the script uses `yyDDDHHMM`; the workflow uses its run number + 100).
+   The iOS and Apple TV archives are development-signed before the export re-signs them for the App Store, so a development profile has to exist for each, and Apple only makes one for a platform the team has a registered device for. If the Apple TV archive stops at "Your team has no devices", register the Apple TV: pair it in Xcode (**Window** → **Devices and Simulators**), or add its UDID at developer.apple.com → **Devices** → **+**.
 5. **Wait for processing** (5–30 minutes; App Store Connect emails you). Export compliance is answered by the app (`ITSAppUsesNonExemptEncryption = NO`), so builds don't wait on that question.
-6. **Install**: the **TestFlight** app from the App Store on iPhone and iPad, from the Mac App Store on the Mac (and on Apple TV later). Accept the invitation; Hearth appears with an Install button. The Debug app ("Hearth Dev") and the TestFlight app are separate and can sit side by side.
+6. **Install**: the **TestFlight** app from the App Store on iPhone and iPad, from the Mac App Store on the Mac, from the App Store on Apple TV. Accept the invitation; Hearth appears with an Install button. The Debug app ("Hearth Dev") and the TestFlight app are separate and can sit side by side.
 
 External testers (people who aren't team users) go through Beta App Review, where guideline 5.2 (third-party content) applies — see the technical spec's *Build, release and App Review*. Stay internal for the household.
 

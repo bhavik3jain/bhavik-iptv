@@ -75,7 +75,7 @@ xcodebuild build -project Hearth.xcodeproj -scheme Hearth-tvOS \
 | `scripts/run-sim.sh "<simulator>" [args…]` | Generates the project, builds Debug for that simulator, boots it, opens Device Hub, installs and launches Hearth Dev with `-StubProvider YES -InMemoryStores YES` plus your arguments |
 | `scripts/run-mac-local.sh [--no-launch] [args…]` | Builds Debug `Hearth-macOS` unsigned, signs it ad hoc, and runs it the same way in the foreground |
 | `scripts/run-tv.sh ["<Apple TV>"] [args…]` | Builds Debug `Hearth-tvOS` for an Apple TV simulator (Apple TV 4K (3rd generation) by default), boots it and launches Hearth Dev with `-StubProvider YES -InMemoryStores YES` plus your arguments |
-| `scripts/testflight.sh ios\|mac\|all [--no-upload]` | Archives Release and uploads to TestFlight from this Mac (see Release) |
+| `scripts/testflight.sh ios\|mac\|tv\|all [--no-upload]` | Archives Release and uploads to TestFlight from this Mac (see Release) |
 | `scripts/cloudkit/init-schema.sh [--simulator ["<name>"]]` | Sends the household model's schema to CloudKit Development (see Release) |
 | `scripts/pick-simulator.sh ["<name>"]` | Prints a simulator's UDID: that name, else iPhone Duo, else the newest runtime's iPhone. CI and the scripts above use it |
 | `scripts/codesign-app.sh` | Signs a Mac app built unsigned, nested code (VLCKit) first, filling in the entitlements' `$(…)` variables. The Mac paths above use it |
@@ -117,11 +117,11 @@ SwiftPM checkouts (VLCKit is large) are cached under `build/SourcePackages`. CI 
 
 ## Release
 
-Builds go to internal TestFlight, which skips App Review. Both platforms are one App Store Connect app (Universal Purchase: one bundle id, `com.bhavikjain.hearth`), so one TestFlight serves iPhone, iPad and Mac. Signing is cloud-managed: Apple holds the distribution key.
+Builds go to internal TestFlight, which skips App Review. Every platform is one App Store Connect app (Universal Purchase: one bundle id, `com.bhavikjain.hearth`), so one TestFlight serves iPhone, iPad, Mac and Apple TV. Signing is cloud-managed: Apple holds the distribution key.
 
 **What the owner sets up once:**
 
-1. **The app record.** In App Store Connect → Apps → + → New App, create the app for bundle id `com.bhavikjain.hearth` with platforms iOS and macOS. The API can't create apps.
+1. **The app record.** In App Store Connect → Apps → + → New App, create the app for bundle id `com.bhavikjain.hearth` with platforms iOS and macOS, then add tvOS on its page (**+ Platform**). The API can't create apps or platforms.
 2. **The App ID.** In Certificates, Identifiers & Profiles → Identifiers, `com.bhavikjain.hearth` needs iCloud (CloudKit, container `iCloud.com.bhavikjain.hearth`) and Push Notifications. A signed build with automatic signing usually turns these on.
 3. **One way to sign the upload:**
    - **For the workflow:** a GitHub deployment environment named `testflight`, holding the secrets below. An environment rather than repository secrets, so only the branches and tags it allows can read them.
@@ -132,17 +132,17 @@ Builds go to internal TestFlight, which skips App Review. Both platforms are one
 | `ASC_KEY_ID` | App Store Connect API key id (Users and Access → Integrations) |
 | `ASC_ISSUER_ID` | The team's issuer id, on the same page |
 | `ASC_PRIVATE_KEY` | `base64 -i AuthKey_XXXX.p8`. The key needs the **Admin** role: with App Manager, cloud signing fails with "Cloud signing permission error" |
-| `IOS_DEV_P12` | `base64 -i development.p12`: an Apple Development certificate exported from Keychain Access. The iOS archive reuses it instead of minting a new certificate every run until the team hits its limit |
+| `IOS_DEV_P12` | `base64 -i development.p12`: an Apple Development certificate exported from Keychain Access. The iOS and Apple TV archives reuse it instead of minting a new certificate every run until the team hits its limit |
 | `IOS_DEV_P12_PASSWORD` | That `.p12`'s password |
 
 **Shipping a build:**
 
 ```bash
 gh workflow run TestFlight --ref main      # or: git tag v0.1.1 && git push --tags
-scripts/testflight.sh ios                  # local: ios, mac or all; --no-upload archives and exports only
+scripts/testflight.sh ios                  # local: ios, mac, tv or all; --no-upload archives and exports only
 ```
 
-- **The workflow:** builds both platforms in parallel jobs. Build numbers are the run number + 100; the `build_number` input overrides it. A tag doesn't run Tests, so tag a commit whose tests passed.
+- **The workflow:** builds iOS, Apple TV and Mac in parallel jobs (iOS and Apple TV share one job definition, a matrix, since they sign the same way). Build numbers are the run number + 100; the `build_number` input overrides it. A tag doesn't run Tests, so tag a commit whose tests passed.
 - **`scripts/testflight.sh`:** uses the API key when `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_PATH` (the `.p8` file) are all set, otherwise the Apple ID in Xcode. Build numbers default to UTC `yyDDDHHMM` (day of the year, so it stays under 2^31); `BUILD_NUMBER` overrides it. Archives, exports and logs land in `build/testflight/<build>/`. When an upload fails, it explains the usual causes: no account, no app record, an unregistered bundle id, the wrong key role, or a duplicate build number.
 - **The Mac build, both ways:** archived unsigned, then signed ad hoc with `App-macOS.entitlements` (`scripts/codesign-app.sh`), because a Mac development profile only covers registered Macs. The App Store export re-signs it.
 

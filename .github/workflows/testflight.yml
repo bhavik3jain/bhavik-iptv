@@ -37,8 +37,8 @@ permissions:
 env:
   # App Store Connect rejects a build number it has already seen, and on the
   # Mac one lower than the last, so this only ever goes up. run_number is
-  # monotonic per workflow and never repeats, even across re-runs. Both jobs
-  # use the same number so one run's two builds are easy to match. Builds
+  # monotonic per workflow and never repeats, even across re-runs. Every job
+  # uses the same number so one run's builds are easy to match. Builds
   # uploaded with scripts/testflight.sh are numbered by date (yyDDDHHMM),
   # far above these; the export's default manageAppVersionAndBuildNumber lets
   # Xcode raise a number App Store Connect has already passed, and the
@@ -46,8 +46,23 @@ env:
   BUILD_OFFSET: 100
 
 jobs:
-  ios:
-    name: Archive and upload the iOS app
+  device:
+    # The iPhone and iPad app and the Apple TV app sign the same way: a
+    # development-signed archive, re-signed for distribution by the export.
+    # One job each, side by side; a failure in one never holds the other back.
+    name: Archive and upload the ${{ matrix.name }} app
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: iOS
+            scheme: Hearth
+            platform: iOS
+          # Needs tvOS on the App Store Connect record (the app's page → +
+          # Platform); until then this job fails at the upload.
+          - name: Apple TV
+            scheme: Hearth-tvOS
+            platform: tvOS
     runs-on: xcode-27
     timeout-minutes: 60
 
@@ -76,7 +91,7 @@ jobs:
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
-            echo "::error::Missing from the testflight environment's secrets:$missing (README → Release)"
+            echo "::error::Missing from the testflight environment's secrets:$missing (docs/RELEASE.md §2)"
             exit 1
           fi
 
@@ -150,13 +165,15 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          SCHEME: ${{ matrix.scheme }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           xcodebuild archive \
             -project Hearth.xcodeproj \
-            -scheme Hearth \
+            -scheme "$SCHEME" \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
+            -destination "generic/platform=$PLATFORM" \
             -archivePath "$RUNNER_TEMP/Hearth.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$ASC_KEY_PATH" \
@@ -168,6 +185,7 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          NAME: ${{ matrix.name }}
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
@@ -198,7 +216,7 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" | xcbeautify --renderer github-actions
 
-          echo "Uploaded iOS build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
+          echo "Uploaded $NAME build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
 
       - name: Clean up the API key and signing keychain
         # Runs even on failure, so a failed archive never leaves the API key or
@@ -213,9 +231,9 @@ jobs:
   mac:
     name: Archive and upload the Mac app
     # The Mac build of the same App Store Connect app (Universal Purchase: one
-    # bundle id, com.bhavikjain.hearth, on both platforms), so it lands in the
-    # same TestFlight. Its own job, alongside the iOS one, so a failure here
-    # never holds the iOS build back.
+    # bundle id, com.bhavikjain.hearth, on every platform), so it lands in the
+    # same TestFlight. Its own job, alongside the others, so a failure here
+    # never holds them back.
     runs-on: xcode-27
     timeout-minutes: 60
     environment: testflight
@@ -234,7 +252,7 @@ jobs:
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
-            echo "::error::Missing from the testflight environment's secrets:$missing (README → Release)"
+            echo "::error::Missing from the testflight environment's secrets:$missing (docs/RELEASE.md §2)"
             exit 1
           fi
 
