@@ -20,6 +20,7 @@ struct MultiViewModelTests {
         #expect(model.audibleTileID == nil)
         #expect(model.firstEmptyTileID == 0)
         #expect(makeModel(.two).tiles.count == 2)
+        #expect(makeModel(.three).tiles.count == 3)
     }
 
     @Test func firstChannelHasTheSoundAndTheRestAreMuted() async throws {

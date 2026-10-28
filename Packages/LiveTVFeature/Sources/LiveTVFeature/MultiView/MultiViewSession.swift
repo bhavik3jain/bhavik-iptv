@@ -116,7 +116,7 @@ final class MultiViewSession {
 
     // MARK: Arrangement
 
-    /// One, two or four tiles. Going down keeps the tile with the sound on
+    /// One to four tiles. Going down keeps the tile with the sound on
     /// screen, moving it into a remaining slot if it sat in one going away.
     func setArrangement(_ new: MultiViewArrangement, store: HouseholdStore) {
         guard new != arrangement else { return }
@@ -130,21 +130,20 @@ final class MultiViewSession {
             if keep != target { move(tile: keep, to: target) }
             model.setLayout(.two)
             focusTileID = target
-        case .two:
-            if arrangement == .four {
-                // Keep the tile with the sound if it's in the bottom row.
-                if let audible = model.audibleTileID, audible >= 2 {
-                    let target = model.tiles.prefix(2).first(where: \.isEmpty)?.id ?? 1
+        case .two, .three, .four:
+            let count = new.modelLayout.tileCount
+            if count < model.tiles.count {
+                // Keep the tile with the sound if it sits in a slot going away.
+                if let audible = model.audibleTileID, audible >= count {
+                    let target = model.tiles.prefix(count).first(where: \.isEmpty)?.id ?? count - 1
                     if !model.tiles[target].isEmpty { clear(tile: target, store: store) }
                     move(tile: audible, to: target)
                 }
-                for id in [2, 3] where occupants[id] != nil {
+                for id in count..<model.tiles.count where occupants[id] != nil {
                     clear(tile: id, store: store)
                 }
             }
-            model.setLayout(.two)
-        case .four:
-            model.setLayout(.four)
+            model.setLayout(new.modelLayout)
         }
         arrangement = new
     }
