@@ -111,6 +111,19 @@ import Testing
         #expect(StalkerParse.movieCommand("eyJ0eXBlIjoibW92aWUiLCJzdHJlYW1faWQiOiI3MDAxIn0=") == "eyJ0eXBlIjoibW92aWUiLCJzdHJlYW1faWQiOiI3MDAxIn0=")
     }
 
+    @Test func movieFileCommandPicksTheBestFile() {
+        let files: [JSONValue] = [
+            .object(["id": .string("8800120"), "video_id": .string("7101"), "is_file": .string("1"), "quality": .string("3")]),
+            .object(["id": .string("8800123"), "video_id": .string("7101"), "is_file": .string("1"), "quality": .string("6")]),
+            .object(["id": .string("8800124"), "video_id": .string("7101"), "is_file": .string("1"), "quality": .string("6")]),
+        ]
+        #expect(StalkerParse.movieFileCommand(files, movieID: "7101") == "/media/file_8800123.mpg")
+        // Movies, not files (a portal that ignores movie_id), and nothing.
+        let movies: [JSONValue] = [.object(["id": .string("7101"), "name": .string("Paper Boats"), "is_movie": .string("1")])]
+        #expect(StalkerParse.movieFileCommand(movies, movieID: "7101") == nil)
+        #expect(StalkerParse.movieFileCommand([], movieID: "7101") == nil)
+    }
+
     @Test func shortGuideFromArrayWithTimestamps() {
         let programmes = StalkerParse.programmes(Fixture.json("stalker/short_epg_timestamps.json")["js"]!, guideChannelID: "1001", timeZone: london)
         #expect(programmes.count == 2)

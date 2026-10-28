@@ -11,9 +11,6 @@ struct HomeSnapshot: Equatable, Sendable {
     /// profile may see), in the profile's order.
     var favoriteChannels: [CatalogChannel] = []
     var upNext: [UpNextItem] = []
-    var newMovies: [CatalogMovie] = []
-    /// Movie keys on the profile's My List, for the posters' menus.
-    var myListKeys: Set<String> = []
     /// Shows Home needs episodes for: never cached on this device (progress
     /// synced from elsewhere), or caught up on a cache that may be stale.
     /// Fetched in the background, one at a time; each landing re-reads Home.
@@ -33,13 +30,12 @@ struct HomeLoader {
 
     /// How many shows "Up next" lists at most; also caps the episode reads.
     static let upNextLimit = 12
-    static let newMoviesLimit = 20
 
     func load(profileID: UUID?) -> HomeSnapshot {
         var snapshot = HomeSnapshot()
-        snapshot.newMovies = catalog.movies(sort: .dateAdded, limit: Self.newMoviesLimit)
-        // Guests get no rows from the store (no favorites, no progress), so
-        // this falls through to just the movies for them.
+        // "New in Movies" is gone (the owner's call): on a big portal it only
+        // showed the first page the provider sent, not what was new. Guests
+        // get no rows from the store (no favorites, no progress).
         guard let profileID else { return snapshot }
 
         var needing = NeedingEpisodes()
@@ -50,7 +46,6 @@ struct HomeLoader {
 
         let favoriteKeys = store.favorites(profileID: profileID, kind: .channel).map { ItemKey(rawValue: $0.itemKey) }
         snapshot.favoriteChannels = catalog.channels(keys: favoriteKeys)
-        snapshot.myListKeys = Set(store.favorites(profileID: profileID, kind: .movie).map(\.itemKey))
 
         snapshot.upNext = upNext(profileID: profileID, excludingSeries: snapshot.continueWatching?.seriesKey, needing: &needing)
         snapshot.seriesNeedingEpisodes = needing.series

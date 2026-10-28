@@ -62,7 +62,8 @@ private struct ReadyRoot: View {
 
 /// What every main window presents on top of its content: a route opened in
 /// a sheet, the stream-limit warning (HH-6), a play that couldn't start, the
-/// player itself on iOS (full screen; the Mac opens a window), multi-view
+/// player itself (full screen on iOS and the TV; over the whole window on the
+/// Mac, as the owner asked, rather than a window of its own), multi-view
 /// from the player, and a failed household invitation. Also gives the window
 /// its `\.play` and `\.openRoute`, outermost so the sheets inherit them.
 struct WindowPresentations: ViewModifier {
@@ -105,11 +106,28 @@ struct WindowPresentations: ViewModifier {
             } message: {
                 Text(model.shareAcceptError ?? "")
             }
+            #if os(macOS)
+            .overlay {
+                if let playerSession = presentedPlayer.wrappedValue {
+                    // Esc or the close button closes it (PlayerView); F or
+                    // ⌃⌘F takes the window full screen.
+                    PlayerView(model: playerSession.model)
+                        .background(Color.black)
+                        .preferredColorScheme(.dark)
+                        .ignoresSafeArea()
+                        .id(playerSession.id)
+                        .transition(.opacity)
+                }
+            }
+            .toolbar(presentedPlayer.wrappedValue == nil ? .automatic : .hidden, for: .windowToolbar)
+            .animation(.easeInOut(duration: 0.2), value: presentedPlayer.wrappedValue?.id)
+            #else
             .hearthFullScreenCover(item: presentedPlayer) { playerSession in
                 PlayerView(model: playerSession.model)
                     .hearthStatusBarHidden()
                     .preferredColorScheme(.dark)
             }
+            #endif
             .hearthFullScreenCover(isPresented: multiViewShowing) {
                 MultiViewSheet { playback.multiViewSceneID = nil }
                     .environment(services.catalog)
@@ -118,6 +136,17 @@ struct WindowPresentations: ViewModifier {
                     .environment(\.play, playAction)
                     .environment(\.hearthLayout, layout)
             }
+            .confirmationDialog(
+                String(localized: "Discard your changes?"),
+                isPresented: heldSwitchShowing,
+                titleVisibility: .visible
+            ) {
+                Button(String(localized: "Discard Changes"), role: .destructive) { navigation.discardChangesAndSwitch() }
+                Button(String(localized: "Keep Editing"), role: .cancel) { navigation.heldSelection = nil }
+            } message: {
+                Text("You're leaving a source you haven't saved.")
+            }
+            .environment(\.unsavedChanges, navigation.unsavedChanges)
             .onAppear { playback.lastSceneID = sceneID }
             .onChange(of: session.currentProfile?.id) { _, _ in
                 // A profile switch: nothing of the last profile's browsing stays.
@@ -182,6 +211,13 @@ struct WindowPresentations: ViewModifier {
             set: { newValue in
                 if newValue == nil, playback.presentedSession(forScene: sceneID) != nil { playback.closeCurrent() }
             }
+        )
+    }
+
+    private var heldSwitchShowing: Binding<Bool> {
+        Binding(
+            get: { navigation.heldSelection != nil },
+            set: { if !$0 { navigation.heldSelection = nil } }
         )
     }
 

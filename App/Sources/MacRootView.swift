@@ -20,7 +20,6 @@ struct MacRootView: View {
     @State private var sceneID = UUID()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @Environment(ProfileSession.self) private var session
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     private var navigation: AppNavigation { model.macNavigation }
@@ -54,8 +53,6 @@ struct MacRootView: View {
         .frame(minWidth: 1000, minHeight: 640)
         .windowPresentations(model: model, services: services, navigation: navigation, sceneID: sceneID)
         .onAppear {
-            // The Mac plays in a window of its own (see HearthApp).
-            services.playback.openPlayerWindow = { id in openWindow(id: HearthApp.playerWindowID, value: id) }
             navigation.showSettings = { openSettings() }
         }
     }
@@ -220,46 +217,6 @@ private struct FavoriteChannelRow: View {
 }
 
 // MARK: - Other windows
-
-/// The player in a window of its own (MAC-1): resizable, and full screen
-/// with F (PlayerView) or ⌃⌘F (View menu). Closing the window stops the
-/// stream; the player closing itself (Esc, its close button, a new play)
-/// closes the window.
-struct PlayerWindowContent: View {
-    let model: AppModel
-    let sessionID: UUID?
-
-    @Environment(\.dismiss) private var dismiss
-
-    private var playerSession: PlayerSession? {
-        guard let current = model.services?.playback.current, current.id == sessionID else { return nil }
-        return current
-    }
-
-    var body: some View {
-        Group {
-            if let playerSession {
-                PlayerView(model: playerSession.model)
-                    .navigationTitle(playerSession.model.item.title)
-            } else {
-                // A window restored or left over with no player behind it.
-                Color.black
-                    .onAppear { dismiss() }
-            }
-        }
-        .frame(minWidth: 640, minHeight: 360)
-        .background(Color.black)
-        .preferredColorScheme(.dark)
-        .onChange(of: model.services?.playback.current?.id) { _, newID in
-            if newID != sessionID { dismiss() }
-        }
-        .onDisappear {
-            if let playback = model.services?.playback, playback.current?.id == sessionID {
-                playback.closeCurrent()
-            }
-        }
-    }
-}
 
 /// The Settings window (⌘,, MAC-4). Kids profiles can't open it (PRF-4).
 struct SettingsWindowContent: View {

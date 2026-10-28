@@ -6,24 +6,30 @@ import PlayerKit
 // big the tiles can be in the space there is, each source's stream limit,
 // and what an empty tile says when the limits are why it's empty.
 
-/// One, two or four tiles. PlayerKit's `MultiViewModel` knows two and four;
-/// "one" is a two-tile model showing only the tile in focus, with the other
-/// tile's stream closed so it isn't held for nothing.
+/// One, two, three or four tiles. PlayerKit's `MultiViewModel` knows two,
+/// three and four; "one" is a two-tile model showing only the tile in focus,
+/// with the other tile's stream closed so it isn't held for nothing.
 enum MultiViewArrangement: String, CaseIterable, Hashable, Sendable, Identifiable {
     case one
     case two
+    case three
     case four
 
     var id: String { rawValue }
 
     var modelLayout: MultiViewModel.Layout {
-        self == .four ? .four : .two
+        switch self {
+        case .one, .two: .two
+        case .three: .three
+        case .four: .four
+        }
     }
 
     var title: String {
         switch self {
         case .one: String(localized: "One")
         case .two: String(localized: "Side by side")
+        case .three: String(localized: "Three")
         case .four: String(localized: "Grid of four")
         }
     }
@@ -32,6 +38,7 @@ enum MultiViewArrangement: String, CaseIterable, Hashable, Sendable, Identifiabl
         switch self {
         case .one: "rectangle"
         case .two: "rectangle.split.2x1"
+        case .three: "rectangle.split.3x1"
         case .four: "square.grid.2x2"
         }
     }
@@ -40,7 +47,8 @@ enum MultiViewArrangement: String, CaseIterable, Hashable, Sendable, Identifiabl
 /// How many columns the tiles take and how big each 16:9 tile is, so the
 /// grid fills the space above the now/next strip without scrolling: two
 /// tiles sit side by side when the space is wide and stack when it's tall
-/// (a phone, iPhone Duo's inner display in portrait).
+/// (a phone, iPhone Duo's inner display in portrait); three make a row, or
+/// two over one with the third centred.
 struct MultiViewGridGeometry: Hashable, Sendable {
     var columns: Int
     var tileSize: CGSize
@@ -49,7 +57,12 @@ struct MultiViewGridGeometry: Hashable, Sendable {
 
     static func make(tileCount: Int, available: CGSize, spacing: CGFloat) -> MultiViewGridGeometry {
         let count = max(tileCount, 1)
-        let candidates = count == 1 ? [1] : (count == 2 ? [1, 2] : [1, 2, 4])
+        let candidates: [Int] = switch count {
+        case 1: [1]
+        case 2: [1, 2]
+        case 3: [1, 2, 3]
+        default: [1, 2, 4]
+        }
         var best = MultiViewGridGeometry(columns: 1, tileSize: .zero)
         for columns in candidates {
             let rows = Int((Double(count) / Double(columns)).rounded(.up))

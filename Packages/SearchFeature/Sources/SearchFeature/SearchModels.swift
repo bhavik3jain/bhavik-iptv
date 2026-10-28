@@ -248,6 +248,9 @@ struct SearchRequest: Hashable, Sendable {
     /// Long enough that typing "cityline" runs one search, not eight; short
     /// enough that results feel live (~250 ms).
     static let debounce: Duration = .milliseconds(250)
+    /// Before a query goes to a provider (2–4 s a page there): long enough
+    /// that only a pause in the typing sends one.
+    static let providerDebounce: Duration = .milliseconds(600)
 
     var normalizedQuery: String { SearchKey.normalize(query) }
 }

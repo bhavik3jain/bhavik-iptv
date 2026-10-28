@@ -29,6 +29,11 @@ public protocol SourceClient: Sendable {
     /// Seasons and episodes, fetched when a show is opened.
     func seriesDetail(_ series: RemoteSeries) async throws -> SeriesDetail
 
+    /// Movies and shows whose names match `query`, asked of the provider,
+    /// for a catalog too big to keep whole on the device. Only where
+    /// `capabilities.searchesCatalog`; others answer an empty page.
+    func search(_ query: String, page: Int) async throws -> RemoteSearchPage
+
     /// The next few programmes for one channel (Stalker short guide, Xtream
     /// `get_short_epg`).
     func shortGuide(for channel: RemoteChannel, limit: Int) async throws -> [RemoteProgramme]
@@ -43,6 +48,13 @@ public protocol SourceClient: Sendable {
     /// Keeps a session alive while something plays (Stalker watchdog every
     /// few minutes). A no-op for sessionless sources.
     func keepAlive() async
+}
+
+extension SourceClient {
+    /// A provider whose whole catalog is on the device has nothing to add.
+    public func search(_ query: String, page: Int) async throws -> RemoteSearchPage {
+        RemoteSearchPage(page: page, hasMore: false)
+    }
 }
 
 /// Makes the right client for a configuration. `URLSession` is injectable so

@@ -1,7 +1,8 @@
 import Foundation
 import Observation
 
-/// Two or four channels at once, one of them with sound (PLY-9, mockup 07).
+/// Two, three or four channels at once, one of them with sound (PLY-9,
+/// mockup 07; three at the owner's request).
 ///
 /// Each tile is its own `PlayerModel` built with `PlayerConfiguration
 /// .multiViewTile` — muted, and leaving Now Playing to the full-screen player
@@ -17,6 +18,7 @@ import Observation
 public final class MultiViewModel {
     public enum Layout: Int, Sendable, Hashable, CaseIterable {
         case two = 2
+        case three = 3
         case four = 4
 
         public var tileCount: Int { rawValue }
@@ -114,7 +116,8 @@ public final class MultiViewModel {
         tiles[id].emptyReason = reason
     }
 
-    /// Two or four tiles. Going down to two closes the bottom row's players.
+    /// Two, three or four tiles. Going down closes the players in the slots
+    /// that go.
     public func setLayout(_ newLayout: Layout) {
         guard newLayout != layout else { return }
         if newLayout.tileCount < tiles.count {

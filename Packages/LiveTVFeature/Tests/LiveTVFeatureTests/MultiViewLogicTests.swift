@@ -7,11 +7,12 @@ import Testing
 
 @Suite struct MultiViewArrangementTests {
     @Test func oneAndTwoShareTheTwoTileModel() {
-        #expect(MultiViewArrangement.allCases == [.one, .two, .four])
+        #expect(MultiViewArrangement.allCases == [.one, .two, .three, .four])
         #expect(MultiViewArrangement.one.modelLayout == .two)
         #expect(MultiViewArrangement.two.modelLayout == .two)
+        #expect(MultiViewArrangement.three.modelLayout == .three)
         #expect(MultiViewArrangement.four.modelLayout == .four)
-        #expect(MultiViewArrangement.allCases.map(\.id) == ["one", "two", "four"])
+        #expect(MultiViewArrangement.allCases.map(\.id) == ["one", "two", "three", "four"])
     }
 }
 
@@ -54,8 +55,14 @@ import Testing
     }
 
     @Test func threeTilesRoundTheRowsUp() {
-        // Two columns, two rows, one empty slot.
+        // Two over one, the third centred.
         check(geometry(3, 1600, 900), columns: 2, width: 800, height: 450)
+    }
+
+    @Test func threeTilesMakeARowWhenTheSpaceIsWide() {
+        check(geometry(3, 1800, 340), columns: 3, width: 600, height: 337.5)
+        // Never four columns for three tiles.
+        check(geometry(3, 2400, 300), columns: 3, width: 533.333, height: 300)
     }
 
     @Test func aTieKeepsFewerColumns() {

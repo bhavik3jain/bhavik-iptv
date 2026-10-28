@@ -55,6 +55,11 @@ final class AppNavigation {
     var sheet: Sheet?
     /// The Mac sidebar's search, once submitted.
     var submittedSearch = ""
+    /// Screens with typing a switch would lose (the source editor).
+    let unsavedChanges = UnsavedChanges()
+    /// A tab switch held back by unsaved typing, until the user discards it
+    /// or keeps editing.
+    var heldSelection: AppTab?
     /// The Mac opens Settings in its own window (MAC-4) rather than a sheet;
     /// its root sets this to SwiftUI's `openSettings`.
     @ObservationIgnored var showSettings: (() -> Void)?
@@ -109,10 +114,27 @@ final class AppNavigation {
     }
 
     func select(_ tab: AppTab) {
+        if tab != selection, !unsavedChanges.isEmpty {
+            heldSelection = tab
+            return
+        }
         if tab == .live, selection == .live {
             paths[.live] = []
         }
         selection = tab
+    }
+
+    /// "Discard Changes" on the held switch: drop the typing and go.
+    func discardChangesAndSwitch() {
+        guard let tab = heldSelection else { return }
+        heldSelection = nil
+        unsavedChanges.discardAll()
+        select(tab)
+    }
+
+    /// The tab bar's selection, through `select` so a switch can be held.
+    var tabSelection: Binding<AppTab> {
+        Binding(get: { self.selection }, set: { self.select($0) })
     }
 
     /// `@Environment(\.openRoute)` for this window. With the gate up there
@@ -120,6 +142,10 @@ final class AppNavigation {
     func open(_ route: HearthRoute, gateShowing: Bool) {
         switch route {
         case .liveGuide:
+            if selection != .live, !unsavedChanges.isEmpty {
+                heldSelection = .live
+                return
+            }
             sheet = nil
             paths[.live] = []
             selection = .live

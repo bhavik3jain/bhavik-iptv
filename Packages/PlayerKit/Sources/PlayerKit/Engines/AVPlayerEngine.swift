@@ -32,6 +32,8 @@ final class AVPlayerEngine: PlaybackEngine {
     private var didReachEnd = false
     private var failureMessage: String?
     private var pendingStartPosition: TimeInterval?
+    /// The live edge offset is set once per link, when the item is ready.
+    private var didSetLiveOffset = false
 
     private var audibleGroup: AVMediaSelectionGroup?
     private var legibleGroup: AVMediaSelectionGroup?
@@ -127,6 +129,7 @@ final class AVPlayerEngine: PlaybackEngine {
         self.stream = stream
         hasStarted = false
         didReachEnd = false
+        didSetLiveOffset = false
         failureMessage = nil
         pendingStartPosition = stream.startPosition.flatMap { $0 > 0 ? $0 : nil }
 
@@ -173,8 +176,7 @@ final class AVPlayerEngine: PlaybackEngine {
             let length = window.duration.seconds
             var target = window.start.seconds + min(max(seconds, 0), length)
             if seconds >= length - 1 {
-                let offset = item.recommendedTimeOffsetFromLive.seconds
-                target = window.end.seconds - (offset.isFinite ? offset : 0)
+                target = window.end.seconds - liveOffset(of: item)
             }
             player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: tolerance, toleranceAfter: tolerance)
         } else {
@@ -287,11 +289,34 @@ final class AVPlayerEngine: PlaybackEngine {
                 pendingStartPosition = nil
                 let time = CMTime(seconds: position, preferredTimescale: 600)
                 player.seek(to: time, toleranceBefore: .zero, toleranceAfter: CMTime(seconds: 1, preferredTimescale: 600))
+            } else if isLiveStream, !didSetLiveOffset {
+                moveCloserToLive(item)
             }
             loadTracks(for: item)
         }
         refresh()
         onChange?()
+    }
+
+    /// Starts a live stream nearer its edge than AVPlayer would
+    /// (`LiveEdgeOffset`), and keeps it there after a stall.
+    private func moveCloserToLive(_ item: AVPlayerItem) {
+        didSetLiveOffset = true
+        guard let target = LiveEdgeOffset.target(recommended: item.recommendedTimeOffsetFromLive.seconds),
+              let window = seekableWindow else { return }
+        item.configuredTimeOffsetFromLive = CMTime(seconds: target, preferredTimescale: 600)
+        item.automaticallyPreservesTimeOffsetFromLive = true
+        let tolerance = CMTime(seconds: 0.5, preferredTimescale: 600)
+        player.seek(to: CMTime(seconds: window.end.seconds - target, preferredTimescale: 600), toleranceBefore: tolerance, toleranceAfter: tolerance)
+    }
+
+    /// Where "back to live" lands: the offset set for this link, else the
+    /// stream's own recommendation.
+    private func liveOffset(of item: AVPlayerItem) -> TimeInterval {
+        let configured = item.configuredTimeOffsetFromLive.seconds
+        if didSetLiveOffset, configured.isFinite, configured > 0 { return configured }
+        let recommended = item.recommendedTimeOffsetFromLive.seconds
+        return recommended.isFinite ? recommended : 0
     }
 
     private func tearDownItem() {

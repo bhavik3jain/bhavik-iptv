@@ -129,6 +129,47 @@ import Testing
         #expect(smallService.count(CatalogModel.Entity.movie, NSPredicate(value: true)) == 10)
     }
 
+    // MARK: Searching the provider
+
+    static let searching = SourceCapabilities(hasMovies: true, hasSeries: true, hasFullGuide: false, hasCatchup: true, reportsStreamCount: false, searchesCatalog: true)
+
+    @Test func aSearchAsksAPortalThatIsntAllHere() async throws {
+        let (service, fake) = await importedService(Self.hugeCatalog(), capabilities: Self.searching)
+        #expect(service.searchesProviders)
+        // Echo is on Action's third page, which nobody has browsed to.
+        #expect(service.search("echo").movies.isEmpty)
+        let revision = service.revision
+
+        #expect(await service.searchProviders("Echo") == 1)
+        #expect(service.search("echo").movies.map(\.name) == ["Echo"])
+        #expect(service.revision > revision)
+        // Both pages went out at once.
+        #expect(Set(fake.calls.filter { $0.hasPrefix("search(") }) == ["search(Echo,0)", "search(Echo,1)"])
+        // It joined its category, where browsing won't store it twice.
+        let action = Self.key(fake, "vod", "10")
+        #expect(Self.names(service.movies(categoryID: action)).contains("Echo"))
+        _ = await service.loadMore(kind: .vod, categoryID: action)
+        _ = await service.loadMore(kind: .vod, categoryID: action)
+        #expect(service.movies(categoryID: action).filter { $0.name == "Echo" }.count == 1)
+    }
+
+    @Test func aQueryIsAskedOnceALaunch() async throws {
+        let (service, fake) = await importedService(Self.hugeCatalog(), capabilities: Self.searching)
+        _ = await service.searchProviders("echo")
+        _ = await service.searchProviders(" Echo ")
+        #expect(fake.callCount("search(") == 2)
+        // Too short to send.
+        #expect(await service.searchProviders("e") == 0)
+        #expect(fake.callCount("search(") == 2)
+    }
+
+    @Test func aCatalogKeptWholeIsNeverSearchedRemotely() async throws {
+        let (service, fake) = await importedService(Fixtures.catalog(), capabilities: Self.searching)
+        #expect(!service.searchesProviders)
+        #expect(await service.searchProviders("echo") == 0)
+        #expect(fake.callCount("search(") == 0)
+    }
+
     // MARK: Loading more
 
     @Test func loadMoreAppendsPagesUntilTheProviderHasNoMore() async throws {

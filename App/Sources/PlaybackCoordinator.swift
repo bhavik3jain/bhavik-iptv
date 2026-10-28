@@ -93,9 +93,6 @@ final class PlaybackCoordinator {
     /// The window that asked for multi-view from the player.
     var multiViewSceneID: UUID?
 
-    /// The Mac's player window opener, set by the main window (it needs the
-    /// SwiftUI `openWindow` action). Nil on iOS, which presents in place.
-    @ObservationIgnored var openPlayerWindow: ((UUID) -> Void)?
     /// The window most recently used, for plays a launch argument starts.
     @ObservationIgnored var lastSceneID: UUID?
 
@@ -122,10 +119,10 @@ final class PlaybackCoordinator {
         target == sceneID || (target == nil && lastSceneID == sceneID)
     }
 
-    /// The player this window presents, if any (iOS; the Mac's player has a
-    /// window of its own).
+    /// The player this window presents, if any: full screen on iOS and the
+    /// TV, over the whole window on the Mac.
     func presentedSession(forScene sceneID: UUID) -> PlayerSession? {
-        guard openPlayerWindow == nil, let current, targets(current.sceneID, scene: sceneID) else { return nil }
+        guard let current, targets(current.sceneID, scene: sceneID) else { return nil }
         return current
     }
 
@@ -296,7 +293,6 @@ final class PlaybackCoordinator {
             Task { await model.start() }
             Task { await model.playFromStart() }
         }
-        openPlayerWindow?(playerSession.id)
     }
 
     /// PLY-4's last step: after the retry failed too, the same channel on

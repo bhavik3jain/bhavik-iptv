@@ -343,6 +343,69 @@ import Testing
         #expect(request.query["series"] == nil)
     }
 
+    @Test func searchSplitsShowsFromMoviesAndAsksTheSeriesModuleToo() async throws {
+        let portal = Portal { action, request, _ in
+            guard action == "get_ordered_list", let term = request.query["search"] else { return nil }
+            switch request.query["type"] {
+            case "vod":
+                #expect(term == "lucifer")
+                return .json(#"{"js":{"total_items":20,"max_page_items":14,"data":[{"id":"501","name":"Lucifer","is_series":"1","category_id":"4"},{"id":"502","name":"Lucifer's Women","is_series":"0","category_id":"9"}]}}"#)
+            case "series":
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"601","name":"Lucifer (2016)","category_id":"5"}]}}"#)
+            default:
+                return nil
+            }
+        }
+        let page = try await portal.client().search("lucifer", page: 0)
+        #expect(page.movies.map(\.name) == ["Lucifer's Women"])
+        #expect(page.series.map(\.name) == ["Lucifer", "Lucifer (2016)"])
+        #expect(page.series.first?.categoryID == "4")
+        #expect(page.hasMore) // 20 titles, 2 on this page of 14
+        let vod = try #require(portal.requests("get_ordered_list").first { $0.query["type"] == "vod" })
+        #expect(vod.query["category"] == "*")
+        #expect(vod.query["p"] == "1")
+        #expect(portal.client().capabilities.searchesCatalog)
+    }
+
+    @Test func movieWithFileRowsLinksItsFile() async throws {
+        let portal = Portal { action, request, _ in
+            switch action {
+            case "get_ordered_list" where request.query["movie_id"] == "7101":
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"8800123","video_id":"7101","is_file":"1","quality":"6","protocol":"custom","cmd":"http://vod.portal.test/movie.m3u8"}]}}"#)
+            case "create_link" where request.query["cmd"] == "/media/file_8800123.mpg":
+                return .json(#"{"js":{"id":"8800123","cmd":"http://vod.portal.test:8080/movie/index.m3u8?token=Tk1"}}"#)
+            default:
+                return nil
+            }
+        }
+        let movie = RemoteMovie(id: "7101", name: "Paper Boats", command: "/media/7101.mpg")
+        let link = try await portal.client().streamLink(for: .movie(movie))
+        #expect(link.url.absoluteString == "http://vod.portal.test:8080/movie/index.m3u8?token=Tk1")
+        #expect(link.formatHint == .hls)
+        // The file linked, so the movie's own cmd was never tried.
+        #expect(portal.requests("create_link").count == 1)
+        #expect(portal.requests("get_ordered_list").first?.query["type"] == "vod")
+    }
+
+    @Test func movieWhoseFileWontLinkFallsBackToItsCommand() async throws {
+        let portal = Portal { action, request, _ in
+            switch action {
+            case "get_ordered_list" where request.query["movie_id"] == "7101":
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"8800123","video_id":"7101","is_file":"1"}]}}"#)
+            case "create_link" where request.query["cmd"] == "/media/7101.mpg":
+                return .fixture("stalker/movie_link_cmd.json")
+            case "create_link":
+                return .fixture("stalker/create_link_empty.json")
+            default:
+                return nil
+            }
+        }
+        let movie = RemoteMovie(id: "7101", name: "Paper Boats", command: "/media/7101.mpg")
+        let link = try await portal.client().streamLink(for: .movie(movie))
+        #expect(link.url.absoluteString == "http://vod.portal.test:8080/movies/7002.mkv?token=Pq7")
+        #expect(portal.requests("create_link").map { $0.query["cmd"] } == ["/media/file_8800123.mpg", "/media/7101.mpg"])
+    }
+
     @Test func episodeLinkSendsTheSeriesNumberAndBuildsMoviePHP() async throws {
         let portal = Portal { action, _, _ in
             action == "create_link" ? .fixture("stalker/episode_link_token.json") : nil
