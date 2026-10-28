@@ -192,8 +192,9 @@ struct PosterCell: View {
     }
 }
 
-/// A poster in a grid that opens its detail screen, with a context menu to
-/// play or resume a movie, keep it in My List and mark it watched.
+/// A poster in a grid that opens its detail screen, with the My List heart
+/// on its corner and a context menu to play or resume a movie, keep it in My
+/// List and mark it watched.
 ///
 /// The profile's progress and My List state are read here, in the cell, and
 /// not when the grid's query runs: each read is a household store fetch, and
@@ -229,7 +230,33 @@ struct LibraryPosterLink: View {
             PosterCell(title: entry.title, url: entry.posterURL, caption: entry.caption, decoration: decoration)
         }
         .buttonStyle(.hearthTile)
+        // Beside the link, not inside it, so a tap on the heart doesn't open
+        // the title too.
+        .overlay(alignment: .topTrailing) {
+            if let profile { heart(profile: profile) }
+        }
         .contextMenu { menu(movieState: movieState) }
+    }
+
+    /// My List from the grid (the owner asked for it next to the poster, not
+    /// only in the menu and on the detail screen).
+    private func heart(profile: ProfileRecord) -> some View {
+        let isFavorite = store.isFavorite(profileID: profile.id, itemKey: entry.id.rawValue)
+        return Button {
+            store.toggleFavorite(profileID: profile.id, itemKey: entry.id.rawValue, kind: entry.favoriteKind)
+        } label: {
+            Image(systemName: isFavorite ? "heart.fill" : "heart")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isFavorite ? HearthColor.accent : Color.white)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.black.opacity(0.55)))
+                .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(isFavorite ? "Remove \(entry.title) from My List" : "Add \(entry.title) to My List", bundle: .module))
+        .sensoryFeedback(.selection, trigger: isFavorite)
     }
 
     @ViewBuilder
