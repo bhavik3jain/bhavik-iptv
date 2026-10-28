@@ -246,6 +246,13 @@ enum StreamMapping {
             startPosition: startPosition
         )
     }
+
+    /// A download on this device: an HLS package plays in AVPlayer, a file
+    /// by its extension (VLCKit for MKV and TS).
+    static func descriptor(localFile url: URL, isHLS: Bool) -> StreamDescriptor {
+        let hint: StreamFormatHint = isHLS ? .hls : .guess(fromURL: url)
+        return StreamDescriptor(url: url, format: StreamFormat(rawValue: hint.rawValue) ?? .unknown)
+    }
 }
 
 // MARK: - Text

@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import DownloadKit
 import HouseholdKit
 import LiveTVFeature
 import PlayerKit
@@ -35,6 +36,7 @@ struct AppRootView: View {
                     .environment(services.catalog)
                     .environment(services.store)
                     .environment(services.session)
+                    .environment(services.downloads)
             } else {
                 LaunchScreen()
             }
@@ -147,6 +149,9 @@ struct WindowPresentations: ViewModifier {
                 Text("You're leaving a source you haven't saved.")
             }
             .environment(\.unsavedChanges, navigation.unsavedChanges)
+            .environment(\.download, DownloadAction { [playback, sceneID] request in
+                playback.download(request, sceneID: sceneID)
+            })
             .onAppear { playback.lastSceneID = sceneID }
             .onChange(of: session.currentProfile?.id) { _, _ in
                 // A profile switch: nothing of the last profile's browsing stays.

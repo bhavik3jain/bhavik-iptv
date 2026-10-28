@@ -245,13 +245,16 @@ struct LibraryPosterLink: View {
         return Button {
             store.toggleFavorite(profileID: profile.id, itemKey: entry.id.rawValue, kind: entry.favoriteKind)
         } label: {
+            // Small and tucked into the corner, clear of the poster's badge
+            // ("New · S1 E2") at the other end of the top edge.
             Image(systemName: isFavorite ? "heart.fill" : "heart")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(isFavorite ? HearthColor.accent : Color.white)
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(Color.black.opacity(0.55)))
-                .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.black.opacity(0.6)))
+                .padding(5)
+                .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget, alignment: .topTrailing)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import DownloadKit
 import Foundation
 import HouseholdKit
 import PlayerKit
@@ -43,14 +44,16 @@ final class PlayerItemFactory {
     private let catalog: CatalogService
     private let store: HouseholdStore
     private let profileID: UUID
+    private let downloads: DownloadCenter?
     private var contexts: [String: PlayableContext] = [:]
     private var queue: PlaybackQueue?
     private var navigation: PlayIntent.Kind = .live
 
-    init(catalog: CatalogService, store: HouseholdStore, profileID: UUID) {
+    init(catalog: CatalogService, store: HouseholdStore, profileID: UUID, downloads: DownloadCenter? = nil) {
         self.catalog = catalog
         self.store = store
         self.profileID = profileID
+        self.downloads = downloads
     }
 
     func context(for itemID: String) -> PlayableContext? {
@@ -224,9 +227,17 @@ final class PlayerItemFactory {
         return (item, context)
     }
 
+    /// A finished download's file, which plays instead of the provider's
+    /// link, offline too (DL-1).
+    private func localDescriptor(for key: ItemKey) -> StreamDescriptor? {
+        guard let downloads, let file = downloads.localFile(for: key.rawValue) else { return nil }
+        return StreamMapping.descriptor(localFile: file, isHLS: downloads.record(for: key.rawValue)?.isHLS ?? false)
+    }
+
     private func movieItem(_ movie: CatalogMovie, intent: PlayIntent) -> (PlayerItem, PlayableContext) {
         let catalog = catalog
         let key = movie.key
+        let local = localDescriptor(for: key)
         let saved = store.progress(profileID: profileID, itemKey: key.rawValue)
         let details = [movie.year.map(String.init), movie.genre].compactMap { $0 }.joined(separator: " · ")
         let item = PlayerItem(
@@ -236,8 +247,9 @@ final class PlayerItemFactory {
             artworkURL: intent.artworkURL ?? movie.posterURL,
             isLive: false,
             startPosition: ResumePoint.position(requested: intent.startPosition, saved: saved),
-            resolve: { _ in
-                StreamMapping.descriptor(from: try await catalog.streamLink(for: key))
+            resolve: { [local] _ in
+                if let local { return local }
+                return StreamMapping.descriptor(from: try await catalog.streamLink(for: key))
             }
         )
         let context = PlayableContext(
@@ -254,6 +266,7 @@ final class PlayerItemFactory {
 
     private func episodeItem(_ key: ItemKey, episode: CatalogEpisode?, series: CatalogSeries?, intent: PlayIntent?) -> (PlayerItem, PlayableContext) {
         let catalog = catalog
+        let local = localDescriptor(for: key)
         let saved = store.progress(profileID: profileID, itemKey: key.rawValue)
         let code = key.seasonAndEpisode
         let episodeLine = code.map { PlaybackText.episodeSubtitle(season: $0.season, number: $0.number, title: episode?.title ?? "") }
@@ -265,8 +278,9 @@ final class PlayerItemFactory {
             artworkURL: intent?.artworkURL ?? episode?.posterURL ?? series?.posterURL,
             isLive: false,
             startPosition: ResumePoint.position(requested: intent?.startPosition, saved: saved),
-            resolve: { _ in
-                StreamMapping.descriptor(from: try await catalog.streamLink(for: key))
+            resolve: { [local] _ in
+                if let local { return local }
+                return StreamMapping.descriptor(from: try await catalog.streamLink(for: key))
             }
         )
         let recordTitle = [series?.name, code.map { HearthFormat.episodeCode(season: $0.season, episode: $0.number) }]

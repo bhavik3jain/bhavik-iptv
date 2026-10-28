@@ -1,6 +1,7 @@
 import CatalogKit
 import CloudKit
 import Core
+import DownloadKit
 import Foundation
 import HouseholdKit
 import Observation
@@ -19,6 +20,8 @@ struct AppServices {
     let catalog: CatalogService
     let session: ProfileSession
     let playback: PlaybackCoordinator
+    /// Movies and episodes saved on this device (DL-1).
+    let downloads: DownloadCenter
 }
 
 /// The composition root's state: opens the household store and the catalog,
@@ -110,8 +113,9 @@ final class AppModel {
         }
         let catalog = CatalogService(storeURL: launch.inMemoryStores ? nil : CatalogService.defaultStoreURL)
         let session = ProfileSession(store: store)
-        let playback = PlaybackCoordinator(catalog: catalog, store: store, session: session)
-        services = AppServices(store: store, catalog: catalog, session: session, playback: playback)
+        let downloads = DownloadCenter()
+        let playback = PlaybackCoordinator(catalog: catalog, store: store, session: session, downloads: downloads)
+        services = AppServices(store: store, catalog: catalog, session: session, playback: playback, downloads: downloads)
         Task { await prepare() }
     }
 
@@ -128,6 +132,7 @@ final class AppModel {
         await services.store.prepareHousehold(defaultName: names.household, firstProfileName: names.profile)
         services.session.restore()
         startObserving(services)
+        Task { await services.playback.downloadsLaunched() }
         phase = .ready
         readyWaiters.forEach { $0.resume() }
         readyWaiters.removeAll()

@@ -19,7 +19,7 @@ enum RouteAccess {
         case .household: canSeeHousehold(session)
         case .profileEditor, .sourceEditor: session.canManageHousehold
         case .settings: session.canOpenSettings
-        case .movie, .series, .channel, .liveGuide, .search: true
+        case .movie, .series, .channel, .liveGuide, .search, .downloads: true
         }
     }
 
@@ -233,6 +233,8 @@ struct RouteDestination: View {
         #endif
         case .settings:
             SettingsView()
+        case .downloads:
+            DownloadsView()
         }
     }
 }

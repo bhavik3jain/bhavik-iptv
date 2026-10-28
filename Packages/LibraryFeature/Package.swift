@@ -16,13 +16,14 @@ let package = Package(
         .package(path: "../SourceKit"),
         .package(path: "../CatalogKit"),
         .package(path: "../HouseholdKit"),
+        .package(path: "../DownloadKit"),
     ],
     targets: [
         .target(
             name: "LibraryFeature",
-            dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit"],
+            dependencies: ["Core", "SourceKit", "CatalogKit", "HouseholdKit", "DownloadKit"],
             resources: [.process("Resources")]
         ),
-        .testTarget(name: "LibraryFeatureTests", dependencies: ["LibraryFeature", "Core", "SourceKit", "CatalogKit", "HouseholdKit"]),
+        .testTarget(name: "LibraryFeatureTests", dependencies: ["LibraryFeature", "Core", "SourceKit", "CatalogKit", "HouseholdKit", "DownloadKit"]),
     ]
 )

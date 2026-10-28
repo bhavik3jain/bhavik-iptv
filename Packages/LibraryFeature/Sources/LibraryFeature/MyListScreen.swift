@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import DownloadKit
 import HouseholdKit
 import SwiftUI
 
@@ -45,6 +46,7 @@ struct MyListEntry: Identifiable, Equatable {
 struct MyListScreen: View {
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
+    @Environment(DownloadCenter.self) private var downloads
     @Environment(ProfileSession.self) private var session
     @Environment(\.hearthLayout) private var layout
 
@@ -86,11 +88,34 @@ struct MyListScreen: View {
         }
     }
 
+    /// The phone has no Downloads tab (five tabs, mockup 02): its downloads
+    /// are a page from here. The Mac and the iPad's sidebar have their own.
+    @ViewBuilder
+    private var downloadsLink: some View {
+        if layout == .compact, DownloadCenter.isSupported {
+            NavigationLink(value: HearthRoute.downloads) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(HearthColor.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(HearthColor.surface))
+                    .overlay(alignment: .topTrailing) {
+                        if !downloads.running.isEmpty {
+                            Circle().fill(HearthColor.accent).frame(width: 10, height: 10)
+                        }
+                    }
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Downloads", bundle: .module))
+        }
+    }
+
     private var touchBody: some View {
         let gutter = libraryGutter(layout)
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                LibraryTitleRow(title: String(localized: "My List", bundle: .module)) { EmptyView() }
+                LibraryTitleRow(title: String(localized: "My List", bundle: .module)) { downloadsLink }
                     .padding(.top, 4)
                 content
             }

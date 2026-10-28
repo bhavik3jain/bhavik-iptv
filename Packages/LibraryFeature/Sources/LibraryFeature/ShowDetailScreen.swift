@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import DownloadKit
 import HouseholdKit
 import SwiftUI
 
@@ -36,6 +37,7 @@ private struct ShowDetailContent: View {
 
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
+    @Environment(DownloadCenter.self) private var downloads
     @Environment(ProfileSession.self) private var session
     @Environment(\.hearthLayout) private var layout
     @Environment(\.play) private var play
@@ -491,20 +493,26 @@ private struct ShowDetailContent: View {
         let fraction: Double? = watched ? 1 : (started ? row?.fraction : nil)
         let resumeAt: TimeInterval? = started ? row?.position : (watched ? 0 : nil)
 
-        return Button {
-            playEpisode(episode, start: resumeAt, grouping: grouping)
-        } label: {
-            EpisodeRow(
-                number: episode.number,
-                title: episode.title,
-                stillURL: episode.posterURL,
-                duration: duration,
-                remaining: started ? row?.remaining : nil,
-                progress: fraction,
-                isWatched: watched
-            )
+        return HStack(spacing: 4) {
+            Button {
+                playEpisode(episode, start: resumeAt, grouping: grouping)
+            } label: {
+                EpisodeRow(
+                    number: episode.number,
+                    title: episode.title,
+                    stillURL: episode.posterURL,
+                    duration: duration,
+                    remaining: started ? row?.remaining : nil,
+                    progress: fraction,
+                    isWatched: watched,
+                    isDownloaded: downloads.localFile(for: episode.key.rawValue) != nil
+                )
+            }
+            .buttonStyle(.hearthTile)
+            if layout != .tv {
+                DownloadIconButton(request: DownloadRequest(episode: episode, series: series))
+            }
         }
-        .buttonStyle(.hearthTile)
         .accessibilityHint(Text(started ? "Resumes the episode" : "Plays the episode", bundle: .module))
         .contextMenu {
             if started || watched {
