@@ -140,7 +140,7 @@ enum RowWriter {
         row["containerExtension"] = episode.containerExtension
         row["posterURL"] = episode.posterURL?.absoluteString
         row["command"] = episode.command
-        row["seasonRemoteID"] = season?.remoteID
+        row["seasonRemoteID"] = episode.seasonID ?? season?.remoteID
         row["seasonName"] = season?.name
         return row
     }
@@ -353,7 +353,8 @@ enum RowReader {
             durationSeconds: row.optionalDouble("duration").map { Int($0) },
             containerExtension: row.optionalString("containerExtension"),
             posterURL: row.url("posterURL"),
-            command: row.optionalString("command")
+            command: row.optionalString("command"),
+            seasonID: row.optionalString("seasonRemoteID")
         )
     }
 }

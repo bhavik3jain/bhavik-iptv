@@ -184,7 +184,7 @@ public actor StalkerClient: SourceClient {
                 [("type", module), ("action", "get_ordered_list"), ("movie_id", series.id), ("season_id", seasonID), ("episode_id", "0")],
                 what: "get_ordered_list (episodes)"
             )
-            var seasonEpisodes = StalkerParse.episodes(episodeRows, seriesID: series.id, season: number, api: api)
+            var seasonEpisodes = StalkerParse.episodes(episodeRows, seriesID: series.id, season: number, seasonID: seasonID, api: api)
             if seasonEpisodes.isEmpty {
                 // Older portals list episode numbers on the season and play
                 // them as the season's cmd plus `series=<n>`.
@@ -285,15 +285,40 @@ public actor StalkerClient: SourceClient {
             throw failure ?? SourceError(.noLink, detail: "create_link (vod) answered without a URL")
 
         case .episode(let episode, _):
-            let command = StalkerParse.movieCommand(episode.command ?? episode.id)
-            var parameters = [("type", "vod"), ("action", "create_link"), ("cmd", command)]
-            if episode.number > 0 { parameters.append(("series", String(episode.number))) }
+            // Ministra 5 lists an episode with no cmd and keeps its video in
+            // file rows, like a movie's (verified). Its id is no file id:
+            // `/media/file_<episode id>.mpg` played another title (the
+            // owner's All American opened a different show). An episode with
+            // a cmd of its own, or its season's plus `series=<n>`, plays that.
+            var command = episode.command.map(StalkerParse.movieCommand)
+            var sendsNumber = true
+            if command == nil, let seasonID = episode.seasonID {
+                command = try await episodeFileCommand(episode, seasonID: seasonID)
+                sendsNumber = false
+                guard command != nil else {
+                    throw SourceError(.noLink, detail: "get_ordered_list (episode files) listed no file for the episode")
+                }
+            }
+            var parameters = [("type", "vod"), ("action", "create_link"), ("cmd", command ?? StalkerParse.movieCommand(episode.id))]
+            if sendsNumber, episode.number > 0 { parameters.append(("series", String(episode.number))) }
             let envelope = try await call(parameters, what: "create_link (episode)")
             guard let link = StalkerParse.vodLink(envelope.js, streamServerBase: StalkerPortal.streamServerBase(for: api), mac: portal.mac, linkType: "series"),
                   let url = URL(string: link)
             else { throw noLink(envelope, what: "create_link (episode)") }
             return StreamLink(url: url, headers: headers, formatHint: Self.hint(for: url, fallback: .fromExtension(episode.containerExtension)))
         }
+    }
+
+    /// The `cmd` of an episode's file on a portal that keeps episodes' video
+    /// in file rows (Ministra 5): asked by show, season and episode id — with
+    /// `season_id=0` the portal answers nothing (verified).
+    private func episodeFileCommand(_ episode: RemoteEpisode, seasonID: String) async throws -> String? {
+        let envelope = try await call(
+            [("type", "vod"), ("action", "get_ordered_list"), ("movie_id", episode.seriesID), ("season_id", seasonID), ("episode_id", episode.id), ("row", "0"), ("p", "1")],
+            what: "get_ordered_list (episode files)"
+        )
+        // Its file rows give the show, not the episode, as `video_id`; is_file picks them.
+        return StalkerParse.movieFileCommand(StalkerParse.listPage(envelope.js).items, movieID: episode.id)
     }
 
     /// The `cmd` of the movie's file, when the portal keeps its video in
