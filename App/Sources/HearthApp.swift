@@ -28,7 +28,6 @@ struct HearthApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     static let mainWindowID = "main"
-    static let playerWindowID = "player"
 
     init() {
         HearthFonts.register()
@@ -46,14 +45,6 @@ struct HearthApp: App {
         .windowResizability(.contentMinSize)
         .commands { HearthCommands(model: model) }
         .onChange(of: scenePhase) { _, phase in sceneChanged(phase) }
-
-        WindowGroup(Text("Player"), id: Self.playerWindowID, for: UUID.self) { $sessionID in
-            PlayerWindowContent(model: model, sessionID: sessionID)
-        }
-        .defaultSize(width: 1280, height: 720)
-        .windowResizability(.contentMinSize)
-        // A player window means nothing after a relaunch.
-        .restorationBehavior(.disabled)
 
         Settings {
             SettingsWindowContent(model: model)
