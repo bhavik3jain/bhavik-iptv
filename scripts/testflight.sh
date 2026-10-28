@@ -5,7 +5,8 @@
 #
 #   scripts/testflight.sh ios               # the iPhone and iPad app
 #   scripts/testflight.sh mac               # the Mac app
-#   scripts/testflight.sh all               # both, iOS first
+#   scripts/testflight.sh tv                # the Apple TV app
+#   scripts/testflight.sh all               # all three: iOS, then Mac, then Apple TV
 #   scripts/testflight.sh ios --no-upload   # archive and export into build/, upload nothing
 #
 # It signs and uploads as one of two identities:
@@ -44,7 +45,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 die() { echo "error: $*" >&2; exit 1; }
 
 usage() {
-    echo "usage: scripts/testflight.sh ios|mac|all [--no-upload]" >&2
+    echo "usage: scripts/testflight.sh ios|mac|tv|all [--no-upload]" >&2
     echo "  Signs with ASC_KEY_ID + ASC_ISSUER_ID + ASC_KEY_PATH when all are set, else the Apple ID in Xcode." >&2
     echo "  BUILD_NUMBER overrides the build number (default: UTC yyDDDHHMM)." >&2
     exit 2
@@ -56,7 +57,7 @@ PLATFORM=""
 UPLOAD=YES
 for arg in "$@"; do
     case "$arg" in
-        ios|mac|all) [[ -z $PLATFORM ]] || usage; PLATFORM=$arg ;;
+        ios|mac|tv|all) [[ -z $PLATFORM ]] || usage; PLATFORM=$arg ;;
         --no-upload) UPLOAD=NO ;;
         -h|--help) usage ;;
         *) echo "error: unknown argument '$arg'" >&2; usage ;;
@@ -142,13 +143,13 @@ explain_failure() {
         hint "The bundle id $BUNDLE_ID isn't registered to team $TEAM (or another team holds it). An Admin key or Xcode account registers it on the next run; otherwise add it in Certificates, Identifiers & Profiles → Identifiers with iCloud (container $CONTAINER) and Push Notifications."
     fi
     if says "no suitable application records|cannot determine the apple id from bundle id|no app (record )?(was )?found|app record|could not find (the )?app"; then
-        hint "App Store Connect has no app record for $BUNDLE_ID on this platform. Create it: App Store Connect → Apps → + → New App, bundle id $BUNDLE_ID, platforms iOS and macOS. The API can't create apps."
+        hint "App Store Connect has no app record for $BUNDLE_ID on this platform. Create it: App Store Connect → Apps → + → New App, bundle id $BUNDLE_ID, platforms iOS and macOS; add tvOS on the app's page with + Platform. The API can't create apps or platforms."
     fi
     if says "choose a certificate to revoke|maximum number of .*certificates|reached the maximum"; then
         hint "The team is at its certificate limit. Revoke an unused Apple Development certificate in Certificates, Identifiers & Profiles → Certificates, then run again."
     fi
     if says "your team has no devices"; then
-        hint "The iOS archive is development-signed first, and a development profile needs at least one registered device. Register an iPhone or iPad (Xcode → Window → Devices and Simulators, or the developer site)."
+        hint "The iOS and Apple TV archives are development-signed first, and a development profile needs at least one registered device of that kind. Register an iPhone or iPad, or an Apple TV for the tv archive (Xcode → Window → Devices and Simulators, or the developer site)."
     fi
     if says "redundant binary upload|bundle version must be higher|must contain a higher version|has already been (used|uploaded)"; then
         hint "App Store Connect already has build $BUILD_NUMBER, or a higher one, for this version. Run again with a higher BUILD_NUMBER, or raise MARKETING_VERSION in project.yml."
@@ -298,6 +299,32 @@ release_mac() {
     fi
 }
 
+# MARK: - Apple TV
+
+release_tv() {
+    local archive="$OUT/Hearth-tvOS.xcarchive"
+    echo "Archiving the Apple TV app (Release, build $BUILD_NUMBER)…"
+    # Signed the way the iOS archive is, and re-signed by the export the same
+    # way; the same bundle id, so it joins the iOS and Mac app's TestFlight.
+    xcb "$OUT/tv-archive.log" archive \
+        -project Hearth.xcodeproj \
+        -scheme Hearth-tvOS \
+        -configuration Release \
+        -destination 'generic/platform=tvOS' \
+        -archivePath "$archive" \
+        -derivedDataPath "$DERIVED_DATA" \
+        -allowProvisioningUpdates \
+        ${AUTH[@]+"${AUTH[@]}"} \
+        CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+    check_archive_build_number "$archive"
+    export_archive "$archive" "$OUT/tv-export" tv
+    if [[ $UPLOAD == YES ]]; then
+        echo "Uploaded Apple TV build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
+    else
+        echo "Exported to ${OUT#"$ROOT"/}/tv-export (nothing uploaded)."
+    fi
+}
+
 # MARK: - Run
 
 commit=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -315,5 +342,6 @@ xcodegen generate --quiet
 case "$PLATFORM" in
     ios) release_ios ;;
     mac) release_mac ;;
-    all) release_ios; echo; release_mac ;;
+    tv) release_tv ;;
+    all) release_ios; echo; release_mac; echo; release_tv ;;
 esac

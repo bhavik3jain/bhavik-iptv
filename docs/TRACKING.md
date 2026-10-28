@@ -14,14 +14,14 @@ Specs live in [docs/handoff](handoff/README.md): the [handoff](handoff/docs/1-Ha
 | Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 |
 | Bundle ids | `com.bhavikjain.hearth` (release), `com.bhavikjain.hearth.dev` (Debug) · iCloud `iCloud.com.bhavikjain.hearth` · team Y4M3S6H4NK |
 | Builds | The whole app builds clean for iOS Simulator and macOS; runs on iPhone 18 Pro, iPhone Duo (iOS 27.1) and the Mac with the demo provider |
-| Apple TV | `Hearth-tvOS` (tvOS 18, same bundle ids and iCloud container) builds and runs on the Apple TV 4K simulator (tvOS 27.0) with the demo provider: gate, Home, Live TV guide, Movies, Shows, My List, Search, Settings, details and the remote-driven player. On branch `claude/apple-tv-58e4a8`, not merged |
+| Apple TV | `Hearth-tvOS` (tvOS 18, same bundle ids and iCloud container) builds and runs on the Apple TV 4K simulator (tvOS 27.0) with the demo provider: gate, Home, Live TV guide, Movies, Shows, My List, Search, Settings, details and the remote-driven player. Merged (PR #2); uploads to TestFlight from branch `testflight-tvos` on |
 | TestFlight | Not yet uploaded — local `scripts/testflight.sh` with Xcode's Apple ID (owner signing in, creating the app record) |
 
 ## Blocked on the owner
 
 These need you; nothing else waits on them until the upload step.
 
-- [ ] **App Store Connect app record** (owner doing it, on appstoreconnect.apple.com → Apps → + → New App; the bundle id is now registered so it appears in the form): an app named Hearth (or the final name) with bundle id `com.bhavikjain.hearth`, platforms iOS and macOS (Universal Purchase). App Store Connect's API can't create apps.
+- [x] **App Store Connect app record** (created by the owner, 2026-10-27): bundle id `com.bhavikjain.hearth`, iOS and macOS (Universal Purchase). Add tvOS from the app's page (**+ Platform**) before the first Apple TV upload.
 - [x] **Xcode signed in** (team Y4M3S6H4NK). Upload path: **local, `scripts/testflight.sh`**, signed by that account. Signed builds with `-allowProvisioningUpdates` registered `com.bhavikjain.hearth` and `com.bhavikjain.hearth.dev` for iOS and macOS, with the iCloud container `iCloud.com.bhavikjain.hearth` and push (team provisioning profiles made by Xcode). The GitHub TestFlight workflow stays in the repo but needs the `testflight` environment secrets before it can run.
 - [ ] **A real portal to probe.** Portal URL + MAC (never committed) for `-SourceProbe` — the protocol rows marked "unverified" must be checked against your provider.
 - [ ] **Open questions 2–8** in the handoff (stream limit per MAC, name, roles, downloads, Apple TV, Multitrack code sharing).
@@ -67,9 +67,9 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 ## Next up
 
 1. Owner: add the real Stalker portal in the simulator again with the fixed build (Household → Add a portal; portal URL, MAC, and the serial under Advanced; Test, then Save). Run it with `REAL=YES scripts/run-sim.sh "iPhone 18 Pro"` (no demo, store kept on disk).
-2. TestFlight: the iOS Release archive builds and carries the right build number (`scripts/testflight.sh all --no-upload`), but the App Store export fails with "No Accounts" from Claude's shell, sandboxed or not — Xcode's Apple ID session there is expired or unreadable. Owner: create the App Store Connect app record, check Xcode → Settings → Accounts (sign in again if asked), then run `scripts/testflight.sh all` from your own Terminal (or archive and Distribute from Xcode's Organizer). Before relying on iCloud in TestFlight, run `scripts/cloudkit/init-schema.sh` and Deploy Schema Changes to Production.
+2. TestFlight: the iOS Release archive builds and carries the right build number (`scripts/testflight.sh all --no-upload`), but the App Store export fails with "No Accounts" from Claude's shell, sandboxed or not — Xcode's Apple ID session there is expired or unreadable. Owner (app record done): check Xcode → Settings → Accounts (sign in again if asked), then run `scripts/testflight.sh all` from your own Terminal (or archive and Distribute from Xcode's Organizer). iCloud schema: `scripts/cloudkit/init-schema.sh` sent it to Development on 2026-10-27 (Mac mode, `.dev` profile); the owner checked it and deployed it to Production the same day. Next: the `testflight` environment's secrets, then the first upload.
 3. Tune AVPlayer's 6 s start timeout against the real provider (Apple's 4K demo stream fell back to VLCKit in the simulator before playing).
-4. CI is green on `main`; PR #1 (CI and tests) and PR #2 (Apple TV) are merged. Next: add the `testflight` environment's secrets (docs/RELEASE.md §2), extend the TestFlight workflow and `scripts/testflight.sh` to archive tvOS, and add tvOS to the App Store Connect record.
+4. CI is green on `main`; PR #1 (CI and tests) and PR #2 (Apple TV) are merged, and the `testflight` environment has its five secrets. The TestFlight workflow and `scripts/testflight.sh` archive tvOS too (branch `testflight-tvos`). Owner: add tvOS to the App Store Connect record (**+ Platform**) before the first Apple TV upload; add branch rules (`main`, `v*`) to the `testflight` environment, which has none yet.
 
 ## Session log
 
@@ -117,3 +117,9 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Checked on the Apple TV 4K (3rd generation) simulator with `-InMemoryStores YES -StubProvider YES` (tvOS 27.0 runtime downloaded with `xcodebuild -downloadPlatform tvOS`), driving the remote with the arrow keys: the gate, Home, the guide (focus, paging both ways, select plays), the player (Apple's sample stream, controls focus on select), Movies and a show page. The iOS and Mac schemes still build.
 - Brought up to date with `main` after PR #1 (no conflicts beyond this file: packages carry both `.tvOS(.v18)` and their test targets; `project.yml` has `HearthTests` and `Hearth-tvOS`) as branch `apple-tv`, opened as its own PR so CI builds all three apps.
 - PR #2 (Apple TV) passed CI — tests + iOS 10 min, Mac and Apple TV builds 3 min each — and was merged (`f7e80c5`).
+
+### 2026-10-27 — Release set-up and Apple TV uploads
+
+- Owner created the App Store Connect record (iOS + macOS). `scripts/cloudkit/init-schema.sh` sent the household schema to CloudKit Development (Mac mode, signed with the `.dev` profile, one launch); the owner checked the encrypted `CD_Source` fields and deployed it to Production.
+- Owner made the API key and development `.p12` and set the `testflight` environment's five secrets (no branch rules on it yet). First TestFlight run (`40610987440`, build 101 from `128daf0`): the Mac job archived, signed and uploaded.
+- tvOS uploads: `testflight.yml`'s iOS job became a matrix over iOS and Apple TV (same signing: development-signed archive with the fixed certificate, cloud-signed export); `scripts/testflight.sh tv` and `all` = iOS, Mac, Apple TV. A local `tv --no-upload` archive stopped at "No Accounts" from Claude's shell (the known Xcode-session problem), so the first CI run is its real test. It may also need a registered Apple TV for the development profile.
