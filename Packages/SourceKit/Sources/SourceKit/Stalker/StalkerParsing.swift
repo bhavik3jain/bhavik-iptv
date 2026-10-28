@@ -364,7 +364,7 @@ extension StalkerParse {
     /// Episode rows of one season (`get_ordered_list` with a `season_id`).
     /// The number is `series_number`, else the number in the name, else the
     /// row's position; it, not the provider's id, goes into item keys.
-    static func episodes(_ rows: [JSONValue], seriesID: String, season: Int, api: URL) -> [RemoteEpisode] {
+    static func episodes(_ rows: [JSONValue], seriesID: String, season: Int, seasonID: String? = nil, api: URL) -> [RemoteEpisode] {
         rows.enumerated().compactMap { index, row in
             guard let id = row.string("id") else { return nil }
             let name = row.string("name") ?? ""
@@ -379,7 +379,8 @@ extension StalkerParse {
                 durationSeconds: duration(row),
                 containerExtension: row.string("container_extension"),
                 posterURL: poster(row, api: api),
-                command: row.string("cmd")
+                command: row.string("cmd"),
+                seasonID: row.string("season_id") ?? seasonID
             )
         }
     }

@@ -300,6 +300,9 @@ public struct RemoteEpisode: Sendable, Hashable, Codable, Identifiable {
     public var posterURL: URL?
     /// Stalker `cmd`, M3U URL; nil for Xtream (built from the id).
     public var command: String?
+    /// The provider's id for the episode's season. A Stalker episode with no
+    /// `cmd` (Ministra 5) is found among its season's files by it.
+    public var seasonID: String?
 
     public init(
         id: String,
@@ -311,7 +314,8 @@ public struct RemoteEpisode: Sendable, Hashable, Codable, Identifiable {
         durationSeconds: Int? = nil,
         containerExtension: String? = nil,
         posterURL: URL? = nil,
-        command: String? = nil
+        command: String? = nil,
+        seasonID: String? = nil
     ) {
         self.id = id
         self.seriesID = seriesID
@@ -323,6 +327,7 @@ public struct RemoteEpisode: Sendable, Hashable, Codable, Identifiable {
         self.containerExtension = containerExtension
         self.posterURL = posterURL
         self.command = command
+        self.seasonID = seasonID
     }
 }
 
