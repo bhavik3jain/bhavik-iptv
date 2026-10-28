@@ -125,6 +125,10 @@ struct TVDetailLayout<Actions: View, Info: View, Content: View>: View {
             }
             .padding(.top, 20)
             .padding(.bottom, 60)
+            // Edge to edge, so the backdrop behind the scroll view covers the
+            // screen: a movie's page has no full-width shelf to widen it, and
+            // the stack's grey showed down both sides.
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollClipDisabled()
         .background { backdrop }

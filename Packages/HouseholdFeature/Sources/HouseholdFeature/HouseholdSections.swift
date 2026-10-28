@@ -14,9 +14,11 @@ import SwiftUI
 struct ProfilesSection: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
+    @Environment(\.hearthLayout) private var layout
 
     var body: some View {
-        let canManage = session.canManageHousehold
+        // The TV shows profiles; they're edited on an iPhone, iPad or Mac.
+        let canManage = session.canManageHousehold && layout != .tv
         let atLimit = store.profiles.count >= HouseholdStore.maxProfiles
         GroupedCard(
             title: String(localized: "Profiles"),
@@ -63,16 +65,20 @@ struct SourcesSection: View {
     @Environment(ProfileSession.self) private var session
     @Environment(CatalogService.self) private var catalog
     @Environment(\.openRoute) private var openRoute
+    @Environment(\.hearthLayout) private var layout
 
     @State private var showsRemoved = false
     @State private var sourceToRemove: SourceRecord?
 
     var body: some View {
-        let canManage = session.canManageHousehold
+        // The TV shows sources and refreshes them; logins are typed on an
+        // iPhone, iPad or Mac.
+        let isTV = layout == .tv
+        let canManage = session.canManageHousehold && !isTV
         let removed = canManage ? removedSources : []
         VStack(alignment: .leading, spacing: 10) {
             header
-            GroupedCard(footer: canManage
+            GroupedCard(footer: isTV ? nil : canManage
                 ? String(localized: "Logins are shared with everyone in the household and kept encrypted in iCloud.")
                 : String(localized: "Only the owner and managers can see or change logins.")
             ) {
@@ -306,6 +312,7 @@ struct AddRowLabel: View {
 struct SyncSection: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
+    @Environment(\.hearthLayout) private var layout
 
     @State private var isMarkingCategories = false
 
@@ -313,7 +320,8 @@ struct SyncSection: View {
         let sync = SyncStatusText.text(store.syncStatus)
         let marked = store.household.adultCategoryKeys.count
         GroupedCard(title: String(localized: "Sync"), footer: footnote) {
-            if session.canManageHousehold {
+            // The TV shows the setting; it's changed on an iPhone, iPad or Mac.
+            if session.canManageHousehold && layout != .tv {
                 CardToggleRow(
                     String(localized: "Hide adult categories on every profile"),
                     subtitle: String(localized: "Categories named adult, XXX or 18+, and any marked by hand"),

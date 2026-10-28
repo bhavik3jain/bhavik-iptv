@@ -45,6 +45,11 @@ public final class ProfileSession {
     /// than picking a profile again.
     @ObservationIgnored private var choseGate = false
 
+    /// The profile Switch Profile left, while the gate it opened is up: the
+    /// TV's Menu button goes back to it (through its PIN, if it has one).
+    /// Nil at launch and once a profile is chosen.
+    public private(set) var previousProfileID: UUID?
+
     /// True when the gate should show: more than one profile, none chosen,
     /// and no always-open profile.
     public var needsProfileSelection: Bool { currentProfile == nil }
@@ -59,6 +64,7 @@ public final class ProfileSession {
     /// device. An always-open id the household no longer has is ignored.
     public func restore() {
         choseGate = false
+        previousProfileID = nil
         currentProfile = ProfileRestore.pick(alwaysOpen: alwaysOpenProfileID, profiles: store.profiles)
     }
 
@@ -67,6 +73,7 @@ public final class ProfileSession {
     public func select(_ profile: ProfileRecord) {
         leaveGuest(unlessSwitchingTo: profile.id)
         choseGate = false
+        previousProfileID = nil
         currentProfile = profile
         if !profile.isGuest {
             Self.writeID(profile.id, Keys.lastUsed, to: defaults)
@@ -78,6 +85,7 @@ public final class ProfileSession {
     public func signOut() {
         leaveGuest(unlessSwitchingTo: nil)
         choseGate = true
+        previousProfileID = currentProfile?.id
         currentProfile = nil
     }
 

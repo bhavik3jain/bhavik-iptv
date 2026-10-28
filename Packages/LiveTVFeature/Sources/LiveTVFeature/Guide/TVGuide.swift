@@ -79,6 +79,9 @@ struct TVLiveGuide: View {
                 }
             }
         }
+        // Down from the tab bar lands on what's on now, not on the paging
+        // buttons over the channel column.
+        .defaultFocus($focus, initialFocus, priority: .userInitiated)
         .onChange(of: focus) { _, newValue in
             handleFocus(newValue)
         }

@@ -258,12 +258,15 @@ struct RouteSheet: View {
         NavigationStack(path: navigation.sheetPath) {
             RouteDestination(route: root)
                 .hearthRouteDestinations()
+                #if !os(tvOS)
+                // The remote's Menu button closes it on the TV.
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(String(localized: "Done")) { dismiss() }
                             .accessibilityHint(Text("Closes this sheet"))
                     }
                 }
+                #endif
         }
         .environment(\.openRoute, OpenRouteAction { route in
             navigation.open(route, gateShowing: false)

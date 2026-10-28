@@ -8,6 +8,7 @@ import SwiftUI
 struct HouseholdCard: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
+    @Environment(\.hearthLayout) private var layout
 
     @State private var isRenaming = false
     @State private var draftName = ""
@@ -22,11 +23,12 @@ struct HouseholdCard: View {
     private var household: HouseholdInfo { store.household }
     private var isOwner: Bool { household.currentRole == .owner }
     /// The owner's controls (rename, invite, roles, remove) need the owner's
-    /// device on a profile that may manage: not a Guest handed the iPad.
-    private var canAdminister: Bool { isOwner && session.canManageHousehold }
+    /// device on a profile that may manage: not a Guest handed the iPad. The
+    /// TV only shows the household (tvOS can't send an invitation).
+    private var canAdminister: Bool { isOwner && session.canManageHousehold && layout != .tv }
     /// Leaving takes the household off every one of this person's devices,
-    /// so a Guest profile doesn't get the button.
-    private var canLeave: Bool { !isOwner && !session.isGuest }
+    /// so a Guest profile doesn't get the button, nor does the TV.
+    private var canLeave: Bool { !isOwner && !session.isGuest && layout != .tv }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

@@ -61,7 +61,14 @@ enum HouseholdContainer {
             sharedDescription.cloudKitContainerOptions = nil
 
         case .cloud(let containerIdentifier):
+            #if os(tvOS)
+            // An Apple TV keeps only purgeable files, so the household's local
+            // copy goes in Caches by name rather than wherever Core Data's
+            // default lands; a purge re-imports it from iCloud.
+            let base = URL.cachesDirectory.appendingPathComponent("\(name).sqlite")
+            #else
             let base = privateDescription.url ?? NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("\(name).sqlite")
+            #endif
             privateDescription.url = base
             sharedDescription.url = base.deletingLastPathComponent()
                 .appendingPathComponent(base.deletingPathExtension().lastPathComponent + "-shared")
