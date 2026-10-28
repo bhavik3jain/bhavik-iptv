@@ -110,6 +110,21 @@ targets:
         # Several windows on iPad and iPhone Duo's inner display.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+        # App Store validation rejects an iPad app without the orientation
+        # lists ("No orientations were specified … iPad multitasking"), though
+        # the simulator runs fine without them. All four on iPad; the iPhone
+        # (and the Duo, opened or folded) everything but upside down, which is
+        # what iOS allowed with no list at all. The player and the Duo's
+        # opened inner display need landscape.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           # Audio keeps playing with the screen off and drives picture in
           # picture (PLY-3).
