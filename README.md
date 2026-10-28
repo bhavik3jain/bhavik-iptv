@@ -132,19 +132,20 @@ Builds go to internal TestFlight, which skips App Review. Every platform is one 
 | `ASC_KEY_ID` | App Store Connect API key id (Users and Access → Integrations) |
 | `ASC_ISSUER_ID` | The team's issuer id, on the same page |
 | `ASC_PRIVATE_KEY` | `base64 -i AuthKey_XXXX.p8`. The key needs the **Admin** role: with App Manager, cloud signing fails with "Cloud signing permission error" |
-| `IOS_DEV_P12` | `base64 -i development.p12`: an Apple Development certificate exported from Keychain Access. The iOS and Apple TV archives reuse it instead of minting a new certificate every run until the team hits its limit |
+| `IOS_DEV_P12` | `base64 -i development.p12`: an Apple Development certificate exported from Keychain Access. The iOS archive reuses it instead of minting a new certificate every run until the team hits its limit |
 | `IOS_DEV_P12_PASSWORD` | That `.p12`'s password |
 
 **Shipping a build:**
 
 ```bash
 gh workflow run TestFlight --ref main      # or: git tag v0.1.1 && git push --tags
+gh workflow run TestFlight --ref main -f platform=tv   # one app only: ios, mac or tv
 scripts/testflight.sh ios                  # local: ios, mac, tv or all; --no-upload archives and exports only
 ```
 
-- **The workflow:** builds iOS, Apple TV and Mac in parallel jobs (iOS and Apple TV share one job definition, a matrix, since they sign the same way). Build numbers are the run number + 100; the `build_number` input overrides it. A tag doesn't run Tests, so tag a commit whose tests passed.
+- **The workflow:** builds iOS, Mac and Apple TV in parallel jobs. Build numbers are the run number + 100; the `build_number` input overrides it. A tag doesn't run Tests, so tag a commit whose tests passed.
 - **`scripts/testflight.sh`:** uses the API key when `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_PATH` (the `.p8` file) are all set, otherwise the Apple ID in Xcode. Build numbers default to UTC `yyDDDHHMM` (day of the year, so it stays under 2^31); `BUILD_NUMBER` overrides it. Archives, exports and logs land in `build/testflight/<build>/`. When an upload fails, it explains the usual causes: no account, no app record, an unregistered bundle id, the wrong key role, or a duplicate build number.
-- **The Mac build, both ways:** archived unsigned, then signed ad hoc with `App-macOS.entitlements` (`scripts/codesign-app.sh`), because a Mac development profile only covers registered Macs. The App Store export re-signs it.
+- **The Mac and Apple TV builds, both ways:** archived unsigned, then signed ad hoc with `App-macOS.entitlements` / `App-tvOS.entitlements` (`scripts/codesign-app.sh`), because a development profile only covers registered Macs and Apple TVs (CI's tvOS archive failed with "Your team has no devices"). The App Store export re-signs them; its profile needs no device.
 
 **The CloudKit schema ritual.** Do this before any build that adds a household entity or attribute. Production never creates record types on its own, so a build shipped without it saves locally and never syncs.
 

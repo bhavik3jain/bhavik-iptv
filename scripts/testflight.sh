@@ -149,7 +149,7 @@ explain_failure() {
         hint "The team is at its certificate limit. Revoke an unused Apple Development certificate in Certificates, Identifiers & Profiles → Certificates, then run again."
     fi
     if says "your team has no devices"; then
-        hint "The iOS and Apple TV archives are development-signed first, and a development profile needs at least one registered device of that kind. Register an iPhone or iPad, or an Apple TV for the tv archive (Xcode → Window → Devices and Simulators, or the developer site)."
+        hint "The iOS archive is development-signed first, and a development profile needs at least one registered device. Register an iPhone or iPad (Xcode → Window → Devices and Simulators, or the developer site)."
     fi
     if says "redundant binary upload|bundle version must be higher|must contain a higher version|has already been (used|uploaded)"; then
         hint "App Store Connect already has build $BUILD_NUMBER, or a higher one, for this version. Run again with a higher BUILD_NUMBER, or raise MARKETING_VERSION in project.yml."
@@ -303,9 +303,11 @@ release_mac() {
 
 release_tv() {
     local archive="$OUT/Hearth-tvOS.xcarchive"
-    echo "Archiving the Apple TV app (Release, build $BUILD_NUMBER)…"
-    # Signed the way the iOS archive is, and re-signed by the export the same
-    # way; the same bundle id, so it joins the iOS and Mac app's TestFlight.
+    echo "Archiving the Apple TV app (Release, build $BUILD_NUMBER, unsigned)…"
+    # Built unsigned and signed ad hoc below, as the workflow's tv job does:
+    # a development-signed archive needs a tvOS development profile, which
+    # Apple makes only for a team with an Apple TV registered. The export
+    # re-signs it for the App Store, whose profile needs no device.
     xcb "$OUT/tv-archive.log" archive \
         -project Hearth.xcodeproj \
         -scheme Hearth-tvOS \
@@ -313,10 +315,19 @@ release_tv() {
         -destination 'generic/platform=tvOS' \
         -archivePath "$archive" \
         -derivedDataPath "$DERIVED_DATA" \
-        -allowProvisioningUpdates \
-        ${AUTH[@]+"${AUTH[@]}"} \
+        CODE_SIGNING_ALLOWED=NO \
         CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
     check_archive_build_number "$archive"
+
+    local app="$archive/Products/Applications/Hearth.app"
+    [[ -d $app ]] || die "no app at ${app#"$ROOT"/}"
+    local bundle_id
+    bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+    [[ $bundle_id == "$BUNDLE_ID" ]] || die "the Release archive's bundle id is $bundle_id, not $BUNDLE_ID"
+    TEAM=$TEAM "$ROOT/scripts/codesign-app.sh" "$app" App/Resources/App-tvOS.entitlements \
+        2>> "$OUT/tv-sign.log" \
+        || die "ad hoc signing failed; see ${OUT#"$ROOT"/}/tv-sign.log"
+
     export_archive "$archive" "$OUT/tv-export" tv
     if [[ $UPLOAD == YES ]]; then
         echo "Uploaded Apple TV build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
