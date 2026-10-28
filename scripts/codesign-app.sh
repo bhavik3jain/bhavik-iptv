@@ -1,9 +1,11 @@
 #!/bin/bash
-# Signs a built Mac app by hand: every piece of nested code first, deepest
-# first, then the app with its entitlements. Used wherever the Mac app is built
-# with CODE_SIGNING_ALLOWED=NO and signed afterwards: the TestFlight
+# Signs a built app by hand: every piece of nested code first, deepest first,
+# then the app with its entitlements. Used wherever an app is built with
+# CODE_SIGNING_ALLOWED=NO and signed afterwards: the Mac app in the TestFlight
 # workflow's mac job, scripts/testflight.sh mac, scripts/run-mac-local.sh and
-# scripts/cloudkit/init-schema.sh.
+# scripts/cloudkit/init-schema.sh; the Apple TV app in the workflow's tv job
+# and scripts/testflight.sh tv. A Mac bundle keeps everything under Contents/;
+# an iOS or tvOS bundle is flat, and both are handled.
 #
 #   scripts/codesign-app.sh [--identity "<identity>"] [--hardened-runtime] <App.app> <entitlements>
 #
@@ -46,10 +48,16 @@ app=${1%/}
 entitlements_in=$2
 team=${TEAM:-Y4M3S6H4NK}
 
-[[ -d $app/Contents ]] || die "$app is not a Mac app bundle"
+if [[ -d $app/Contents ]]; then
+    contents=$app/Contents
+elif [[ -f $app/Info.plist ]]; then
+    contents=$app
+else
+    die "$app is not an app bundle"
+fi
 [[ -f $entitlements_in ]] || die "no entitlements file at $entitlements_in"
-bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist" 2>/dev/null) \
-    || die "can't read CFBundleIdentifier from $app/Contents/Info.plist"
+bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$contents/Info.plist" 2>/dev/null) \
+    || die "can't read CFBundleIdentifier from $contents/Info.plist"
 
 entitlements=$(mktemp -t hearth-entitlements)
 trap 'rm -f "$entitlements"' EXIT
@@ -61,11 +69,17 @@ if grep -q '\$(' "$entitlements"; then
     die "$(basename "$entitlements_in") has a \$(…) variable this script doesn't fill in: $(grep -o '\$([A-Za-z_]*)' "$entitlements" | sort -u | tr '\n' ' ')"
 fi
 
+# Extended attributes first: codesign refuses a bundle carrying any
+# ("resource fork, Finder information, or similar detritus not allowed"), and
+# iCloud Drive adds Finder info to everything built under ~/Documents, where
+# this repo lives (build/testflight/…). A runner's checkout has none.
+xattr -cr "$app"
+
 # Bundles that hold code (frameworks, XPC services, extensions, helper apps)
 # and loose dylibs; symlinks are skipped, so a framework's Versions/Current
 # is not signed twice. Resource bundles (SwiftPM's *.bundle) hold no code and
 # are sealed by the app's own signature.
-nested=$(find "$app/Contents" -mindepth 1 \
+nested=$(find "$contents" -mindepth 1 \
     \( -type d \( -name '*.framework' -o -name '*.xpc' -o -name '*.appex' -o -name '*.app' \) \) \
     -o \( -type f -name '*.dylib' \) \
     | awk -F/ '{ print NF "\t" $0 }' | sort -rn -k1,1 | cut -f2-)

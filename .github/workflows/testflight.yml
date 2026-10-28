@@ -5,6 +5,7 @@ name: TestFlight
 # runs for a version tag or by hand:
 #
 #   gh workflow run TestFlight --ref main
+#   gh workflow run TestFlight --ref main -f platform=tv   # one app only
 #   git tag v0.1.1 && git push --tags
 #
 # A tag does not run the Tests workflow and this one has no test gate of its
@@ -20,6 +21,13 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
+      platform:
+        description: >-
+          Which apps to upload. A tag push uploads all three. One platform
+          retries a failed upload without sending the others again.
+        type: choice
+        options: [all, ios, mac, tv]
+        default: all
       build_number:
         description: >-
           Build number to use instead of run number + BUILD_OFFSET. Leave empty
@@ -46,23 +54,10 @@ env:
   BUILD_OFFSET: 100
 
 jobs:
-  device:
-    # The iPhone and iPad app and the Apple TV app sign the same way: a
-    # development-signed archive, re-signed for distribution by the export.
-    # One job each, side by side; a failure in one never holds the other back.
-    name: Archive and upload the ${{ matrix.name }} app
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: iOS
-            scheme: Hearth
-            platform: iOS
-          # Needs tvOS on the App Store Connect record (the app's page → +
-          # Platform); until then this job fails at the upload.
-          - name: Apple TV
-            scheme: Hearth-tvOS
-            platform: tvOS
+  ios:
+    name: Archive and upload the iOS app
+    # A tag push has no inputs: every job runs.
+    if: ${{ !inputs.platform || inputs.platform == 'all' || inputs.platform == 'ios' }}
     runs-on: xcode-27
     timeout-minutes: 60
 
@@ -165,15 +160,13 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          SCHEME: ${{ matrix.scheme }}
-          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           xcodebuild archive \
             -project Hearth.xcodeproj \
-            -scheme "$SCHEME" \
+            -scheme Hearth \
             -configuration Release \
-            -destination "generic/platform=$PLATFORM" \
+            -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/Hearth.xcarchive" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$ASC_KEY_PATH" \
@@ -185,7 +178,6 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          NAME: ${{ matrix.name }}
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
@@ -216,7 +208,7 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" | xcbeautify --renderer github-actions
 
-          echo "Uploaded $NAME build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
+          echo "Uploaded iOS build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
 
       - name: Clean up the API key and signing keychain
         # Runs even on failure, so a failed archive never leaves the API key or
@@ -230,6 +222,7 @@ jobs:
 
   mac:
     name: Archive and upload the Mac app
+    if: ${{ !inputs.platform || inputs.platform == 'all' || inputs.platform == 'mac' }}
     # The Mac build of the same App Store Connect app (Universal Purchase: one
     # bundle id, com.bhavikjain.hearth, on every platform), so it lands in the
     # same TestFlight. Its own job, alongside the others, so a failure here
@@ -257,7 +250,7 @@ jobs:
           fi
 
       - name: Choose the build number
-        # Same rule as the iOS job, so one run's two builds share a number.
+        # Same rule as the iOS job, so one run's builds share a number.
         env:
           REQUESTED: ${{ inputs.build_number }}
         run: |
@@ -358,6 +351,138 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" | xcbeautify --renderer github-actions
 
           echo "Uploaded Mac build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
+
+      - name: Clean up the API key
+        if: always()
+        run: rm -f "${ASC_KEY_PATH:-}" || true
+
+  tv:
+    name: Archive and upload the Apple TV app
+    if: ${{ !inputs.platform || inputs.platform == 'all' || inputs.platform == 'tv' }}
+    # The Apple TV build of the same App Store Connect app, so it lands in the
+    # same TestFlight; it needs tvOS on the App Store Connect record (the app's
+    # page → + Platform), or the upload fails. Signed the Mac's way, not the
+    # iOS app's: a development-signed archive needs a development profile,
+    # and Apple makes a tvOS one only for a team with an Apple TV registered
+    # ("Your team has no devices from which to generate a provisioning
+    # profile"). An App Store profile needs no device, so the archive is built
+    # unsigned, signed ad hoc with its entitlements, and the export signs it
+    # for the App Store.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    environment: testflight
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          missing=""
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing from the testflight environment's secrets:$missing (docs/RELEASE.md §2)"
+            exit 1
+          fi
+
+      - name: Choose the build number
+        # Same rule as the iOS job, so one run's builds share a number.
+        env:
+          REQUESTED: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+          build_number=${REQUESTED:-$(( GITHUB_RUN_NUMBER + BUILD_OFFSET ))}
+          if ! [[ "$build_number" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "::error::Build number '$build_number' must be digits, at most three dot-separated numbers"
+            exit 1
+          fi
+          echo "Building $build_number"
+          echo "BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup
+
+      - name: Write the App Store Connect API key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          path="$RUNNER_TEMP/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_PRIVATE_KEY" | base64 --decode > "$path"
+          chmod 600 "$path"
+          echo "ASC_KEY_PATH=$path" >> "$GITHUB_ENV"
+
+      - name: Archive, signed ad hoc with the app's entitlements
+        # Left unsigned, the archive would carry no entitlements and the
+        # export would sign the app without CloudKit. The export replaces this
+        # signature with the App Store one (cloud-managed, through the API key)
+        # and takes aps-environment from the App Store profile.
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/Hearth-tvOS.xcarchive"
+
+          xcodebuild archive \
+            -project Hearth.xcodeproj \
+            -scheme Hearth-tvOS \
+            -configuration Release \
+            -destination 'generic/platform=tvOS' \
+            -archivePath "$archive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" | xcbeautify --renderer github-actions
+
+          app="$archive/Products/Applications/Hearth.app"
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+          if [ "$bundle_id" != com.bhavikjain.hearth ]; then
+            echo "::error::The Release archive's bundle id is $bundle_id, not com.bhavikjain.hearth"
+            exit 1
+          fi
+
+          # The same helper as the Mac job's: VLCKit's framework first, then
+          # the app. No hardened runtime; tvOS has none.
+          TEAM=Y4M3S6H4NK scripts/codesign-app.sh "$app" App/Resources/App-tvOS.entitlements
+          codesign -d --entitlements - "$app"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions-tvOS.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>teamID</key>
+              <string>Y4M3S6H4NK</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>destination</key>
+              <string>upload</string>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Hearth-tvOS.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions-tvOS.plist" \
+            -exportPath "$RUNNER_TEMP/export-tvOS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" | xcbeautify --renderer github-actions
+
+          echo "Uploaded Apple TV build $BUILD_NUMBER. It appears in TestFlight once App Store Connect finishes processing it."
 
       - name: Clean up the API key
         if: always()
