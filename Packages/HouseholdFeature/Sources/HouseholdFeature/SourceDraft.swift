@@ -162,6 +162,24 @@ struct SourceDraft: Hashable {
     }
 }
 
+/// The streams-allowed field: typed or stepped, 0 meaning no limit.
+enum StreamCountField {
+    static let range = 0...99
+
+    /// What the field shows: blank (its placeholder says "No limit") for 0.
+    static func text(for count: Int) -> String {
+        count == 0 ? "" : String(count)
+    }
+
+    /// What was typed, as a count: digits only, blank for no limit, at most
+    /// the range's top.
+    static func count(from text: String) -> Int {
+        let digits = text.filter { $0.isASCII && $0.isNumber }.prefix(3)
+        guard let value = Int(digits) else { return 0 }
+        return min(max(value, range.lowerBound), range.upperBound)
+    }
+}
+
 /// Loose checks on what people type as addresses: enough to catch a typo
 /// before Test, not to second-guess the provider.
 enum SourceURLCheck {

@@ -32,6 +32,7 @@ public struct SourceEditorView: View {
     @Environment(ProfileSession.self) private var session
     @Environment(CatalogService.self) private var catalog
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.unsavedChanges) private var unsavedChanges
 
     @State private var isLoaded = false
     @State private var original: SourceRecord?
@@ -49,6 +50,9 @@ public struct SourceEditorView: View {
     @State private var isConfirmingRemove = false
     @State private var isConfirmingDiscard = false
     @State private var saveError: String?
+    /// Who this editor is to `unsavedChanges`, which asks before a tab
+    /// switch drops the typing.
+    @State private var editorID = UUID()
 
     public init(sourceID: UUID?) {
         self.init(sourceID: sourceID, presentation: .pushed)
@@ -143,7 +147,13 @@ public struct SourceEditorView: View {
             Text(isNew ? String(localized: "This source hasn't been saved.") : String(localized: "Your edits to this source haven't been saved."))
         }
         .task { load() }
-        .onDisappear { testTask?.cancel() }
+        .onChange(of: showsForm && isDirty, initial: true) { _, hasChanges in
+            unsavedChanges?.mark(editorID, hasChanges: hasChanges)
+        }
+        .onDisappear {
+            testTask?.cancel()
+            unsavedChanges?.mark(editorID, hasChanges: false)
+        }
     }
 
     private var title: Text {
@@ -362,17 +372,24 @@ public struct SourceEditorView: View {
                 }
                 .frame(minHeight: HearthMetrics.minimumHitTarget)
             } else {
-                HearthStepper(value: $draft.maxStreams, in: 0...20) {
-                    HStack {
-                        Text("Streams allowed at once")
-                        Spacer(minLength: 8)
-                        Text(draft.maxStreams == 0 ? String(localized: "No limit") : "\(draft.maxStreams)")
+                // Typed, or stepped one at a time.
+                LabeledContent {
+                    HStack(spacing: 10) {
+                        TextField(String(localized: "No limit"), text: streamCountText)
+                            .numberPadKeyboard()
+                            .multilineTextAlignment(.trailing)
                             .font(.hearthMono(15, relativeTo: .body))
-                            .foregroundStyle(HearthColor.textSecondary)
+                            .frame(width: 80)
+                            .accessibilityLabel(Text("Streams allowed at once"))
+                        HearthStepper(value: $draft.maxStreams, in: StreamCountField.range) { EmptyView() }
+                            .labelsHidden()
+                            .accessibilityLabel(Text("Streams allowed at once"))
+                            .accessibilityValue(Text(draft.maxStreams == 0 ? String(localized: "No limit") : "\(draft.maxStreams)"))
                     }
+                } label: {
+                    Text("Streams allowed at once")
                 }
                 .frame(minHeight: HearthMetrics.minimumHitTarget)
-                .accessibilityValue(Text(draft.maxStreams == 0 ? String(localized: "No limit") : "\(draft.maxStreams)"))
             }
         } footer: {
             Text(streamsFootnote)
@@ -550,6 +567,13 @@ public struct SourceEditorView: View {
         store.removeSource(id: original.id)
         initialDraft = draft
         dismiss()
+    }
+
+    private var streamCountText: Binding<String> {
+        Binding(
+            get: { StreamCountField.text(for: draft.maxStreams) },
+            set: { draft.maxStreams = StreamCountField.count(from: $0) }
+        )
     }
 
     private func cancel() {

@@ -37,6 +37,17 @@ import Testing
         #expect(SourceDraft(kind: .m3u).maxStreams == 0)
     }
 
+    @Test func theStreamsFieldTakesTypedNumbers() {
+        #expect(StreamCountField.count(from: "3") == 3)
+        #expect(StreamCountField.count(from: " 12 ") == 12)
+        #expect(StreamCountField.count(from: "") == 0)
+        #expect(StreamCountField.count(from: "abc") == 0)
+        #expect(StreamCountField.count(from: "4a") == 4)
+        #expect(StreamCountField.count(from: "250") == 99)
+        #expect(StreamCountField.text(for: 0) == "")
+        #expect(StreamCountField.text(for: 5) == "5")
+    }
+
     @Test func switchingKindTakesThatKindsLimitButReselectingKeepsAnEdit() {
         var draft = SourceDraft(kind: .stalker)
         draft.maxStreams = 3

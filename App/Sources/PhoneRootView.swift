@@ -66,7 +66,7 @@ struct PhoneRootView: View {
 
     private var tabs: some View {
         @Bindable var navigation = navigation
-        return TabView(selection: $navigation.selection) {
+        return TabView(selection: navigation.tabSelection) {
             ForEach(AppTab.primary, id: \.self) { tab in
                 Tab(tab.title, systemImage: tab.systemImage, value: tab) {
                     TabStack(tab: tab, navigation: navigation)
