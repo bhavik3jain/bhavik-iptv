@@ -1,4 +1,5 @@
 import CloudKit
+import DownloadKit
 import Foundation
 
 // Tapping a household invitation (Messages, Mail) has to land somewhere
@@ -47,6 +48,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         application.registerForRemoteNotifications()
         return true
     }
+
+    #if os(iOS)
+    /// iOS relaunches the app in the background to hand over finished
+    /// downloads (DL-1); DownloadKit calls the handler once they're in.
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        nonisolated(unsafe) let completion = completionHandler
+        DownloadCenter.handleEvents(forBackgroundSession: identifier) { completion() }
+    }
+    #endif
 
     /// The only way to name a custom UIWindowSceneDelegate; without it
     /// `windowScene(_:userDidAcceptCloudKitShareWith:)` is never called.

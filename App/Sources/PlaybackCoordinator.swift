@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import DownloadKit
 import Foundation
 import HouseholdKit
 import Observation
@@ -99,6 +100,10 @@ final class PlaybackCoordinator {
     private let catalog: CatalogService
     private let store: HouseholdStore
     private let session: ProfileSession
+    private let downloads: DownloadCenter
+    /// The who's-watching row of each running download (DL-2), by item key.
+    @ObservationIgnored private var downloadRows: [String: UUID] = [:]
+    @ObservationIgnored private var downloadHeartbeat: Task<Void, Never>?
     @ObservationIgnored private let logger = Logger(subsystem: "com.bhavikjain.hearth", category: "playback")
 
     /// Who's-watching rows are refreshed every 10 minutes (HH-5).
@@ -106,10 +111,14 @@ final class PlaybackCoordinator {
     /// A Stalker session is kept alive every 5 minutes while playing.
     static let keepAliveInterval: Duration = .seconds(5 * 60)
 
-    init(catalog: CatalogService, store: HouseholdStore, session: ProfileSession) {
+    init(catalog: CatalogService, store: HouseholdStore, session: ProfileSession, downloads: DownloadCenter) {
         self.catalog = catalog
         self.store = store
         self.session = session
+        self.downloads = downloads
+        downloads.onChange = { [weak self] record, isRemoved in
+            self?.downloadChanged(record, isRemoved: isRemoved)
+        }
     }
 
     /// Whether something addressed to `target` belongs to this window: its
@@ -136,7 +145,7 @@ final class PlaybackCoordinator {
     }
 
     private func begin(_ intent: PlayIntent, profile: ProfileRecord, sceneID: UUID?, layout: HearthLayout, checkingLimit: Bool) async {
-        let factory = PlayerItemFactory(catalog: catalog, store: store, profileID: profile.id)
+        let factory = PlayerItemFactory(catalog: catalog, store: store, profileID: profile.id, downloads: downloads)
         guard let prepared = factory.prepare(intent) else {
             notice = PlaybackNotice(
                 sceneID: sceneID,
@@ -145,7 +154,9 @@ final class PlaybackCoordinator {
             )
             return
         }
-        if checkingLimit, let prompt = await limitPrompt(for: prepared, factory: factory, intent: intent, sceneID: sceneID, layout: layout) {
+        // A download plays from its file and takes no stream.
+        let isLocal = downloads.localFile(for: intent.itemKey) != nil
+        if checkingLimit, !isLocal, let prompt = await limitPrompt(for: prepared, factory: factory, intent: intent, sceneID: sceneID, layout: layout) {
             limitPrompt = prompt
             return
         }
@@ -337,6 +348,8 @@ final class PlaybackCoordinator {
             guard let context = playerSession.items.context(for: itemID) else { return }
             if playerSession.playbackID != nil { endPlayback(playerSession) }
             playerSession.playing = context
+            // From this device's own file: no stream, so no who's-watching row.
+            if downloads.localFile(for: context.itemKey.rawValue) != nil { return }
             // Guests write a row too: they still use one of the streams.
             playerSession.playbackID = store.startPlayback(
                 profileID: playerSession.profileID,
@@ -402,6 +415,83 @@ final class PlaybackCoordinator {
                 try? await Task.sleep(for: Self.keepAliveInterval)
                 guard !Task.isCancelled, let self else { return }
                 await self.catalog.keepAlive(sourceID: sourceID)
+            }
+        }
+    }
+
+    // MARK: Downloads (DL-1, DL-2)
+
+    /// `\.download`: resumes a paused download that can, else checks the
+    /// stream limit (a running download takes a stream), asks the provider
+    /// for a fresh link and starts it.
+    func download(_ request: DownloadRequest, sceneID: UUID?) {
+        if downloads.record(for: request.itemKey)?.state == .paused, downloads.resume(request.itemKey) { return }
+        Task { await beginDownload(request, sceneID: sceneID ?? lastSceneID) }
+    }
+
+    private func beginDownload(_ request: DownloadRequest, sceneID: UUID?) async {
+        if let check = await checkLimit(sourceID: request.sourceID), case .atLimit(let limit, _) = check.verdict {
+            let name = store.sources.first { $0.id == request.sourceID }?.name ?? String(localized: "This source")
+            notice = PlaybackNotice(
+                sceneID: sceneID,
+                title: String(localized: "No stream free for a download"),
+                message: String(localized: "\(name) allows \(limit) at once and they're all in use. A download takes one while it runs, so try again when one is free.")
+            )
+            return
+        }
+        do {
+            let link = try await catalog.streamLink(for: ItemKey(rawValue: request.itemKey))
+            let isHLS = link.formatHint == .hls || link.url.pathExtension.lowercased() == "m3u8"
+            downloads.start(request, link: DownloadLink(url: link.url, headers: link.headers, isHLS: isHLS), profileID: session.currentProfile?.id)
+        } catch {
+            notice = PlaybackNotice(
+                sceneID: sceneID,
+                title: String(localized: "Couldn't start the download"),
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+        }
+    }
+
+    /// After launch: downloads the system lost are paused, and the ones it
+    /// kept get their who's-watching rows back.
+    func downloadsLaunched() async {
+        await downloads.reconcile()
+        for record in downloads.running { downloadChanged(record, isRemoved: false) }
+    }
+
+    /// Keeps one who's-watching row per running download, so the household's
+    /// stream count includes it (DL-2); a paused, finished or removed one
+    /// frees its stream.
+    private func downloadChanged(_ record: DownloadRecord, isRemoved: Bool) {
+        if record.state == .running, !isRemoved {
+            guard downloadRows[record.id] == nil,
+                  let profileID = record.profileID ?? session.currentProfile?.id else { return }
+            downloadRows[record.id] = store.startPlayback(
+                profileID: profileID,
+                sourceID: record.sourceID,
+                itemKey: record.id,
+                title: String(localized: "Downloading \(record.title)"),
+                deviceName: DeviceName.current
+            )
+        } else if let row = downloadRows.removeValue(forKey: record.id) {
+            store.stopPlayback(playbackID: row)
+        }
+        updateDownloadHeartbeat()
+    }
+
+    /// Who's-watching rows are refreshed every 10 minutes, downloads' too.
+    private func updateDownloadHeartbeat() {
+        if downloadRows.isEmpty {
+            downloadHeartbeat?.cancel()
+            downloadHeartbeat = nil
+            return
+        }
+        guard downloadHeartbeat == nil else { return }
+        downloadHeartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.heartbeatInterval)
+                guard !Task.isCancelled, let self else { return }
+                for row in self.downloadRows.values { self.store.heartbeat(playbackID: row) }
             }
         }
     }

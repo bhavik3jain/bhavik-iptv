@@ -18,6 +18,9 @@ public enum HearthRoute: Hashable, Sendable {
     case profileEditor(profileID: UUID?)
     case sourceEditor(sourceID: UUID?)
     case settings
+    /// What's saved on this device (DL-1): a tab on the Mac and in the
+    /// iPad's sidebar, a page from My List on the phone.
+    case downloads
 }
 
 /// A request to play something, made by any feature and carried out by the

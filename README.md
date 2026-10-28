@@ -14,6 +14,7 @@ Packages/
   CatalogKit/     The per-device catalog store, imports from SourceKit, stable keys, search
   HouseholdKit/   The household store (Core Data + CloudKit), sharing, roles, profiles, who's watching
   PlayerKit/      The engine protocol, the AVPlayer and VLCKit engines, picture in picture, the player screen
+  DownloadKit/    Downloads kept on this device: records, HLS packages and files, background sessions
   HomeFeature/ LiveTVFeature/ LibraryFeature/ ProfilesFeature/ HouseholdFeature/ SearchFeature/ SettingsFeature/
 scripts/          Run, release and CloudKit schema scripts (below)
 .github/          tests.yml on push and pull request, testflight.yml for releases
@@ -23,8 +24,8 @@ docs/             TRACKING.md and the handoff specs and mockups
 
 The rules that hold it together:
 
-- **Dependencies:** Core and SourceKit depend on nothing; CatalogKit on Core and SourceKit; HouseholdKit and PlayerKit on Core. Features depend on Core plus the kits they need, **never on each other**: they reach other screens through `HearthRoute` and start playback with `@Environment(\.play)`.
-- **Boundaries:** SourceKit and CatalogKit never touch iCloud; HouseholdKit never talks to a provider. VLCKit is the only remote dependency, and only PlayerKit imports it.
+- **Dependencies:** Core and SourceKit depend on nothing; CatalogKit on Core and SourceKit; HouseholdKit and PlayerKit on Core; DownloadKit on nothing. Features depend on Core plus the kits they need, **never on each other**: they reach other screens through `HearthRoute` and start playback with `@Environment(\.play)`.
+- **Boundaries:** SourceKit and CatalogKit never touch iCloud; HouseholdKit and DownloadKit never talk to a provider. VLCKit is the only remote dependency, and only PlayerKit imports it.
 - **Contracts:** public APIs marked CONTRACT are additive-only; features and the app compile against them.
 - **Platforms:** feature packages contain no `#if os(...)`. They read `@Environment(\.hearthLayout)` (`.compact`, `.sidebar` or `.tv`) and use Core's shims for platform-only modifiers (tvOS has no file picker, share sheet, stepper or keyboard shortcuts, for instance).
 

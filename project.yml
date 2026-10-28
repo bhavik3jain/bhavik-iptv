@@ -19,6 +19,8 @@ packages:
     path: Packages/HouseholdKit
   PlayerKit:
     path: Packages/PlayerKit
+  DownloadKit:
+    path: Packages/DownloadKit
   HomeFeature:
     path: Packages/HomeFeature
   LiveTVFeature:
@@ -88,6 +90,7 @@ targets:
       - package: CatalogKit
       - package: HouseholdKit
       - package: PlayerKit
+      - package: DownloadKit
       - package: HomeFeature
       - package: LiveTVFeature
       - package: LibraryFeature
@@ -292,6 +295,8 @@ schemes:
         - package: HouseholdKit/HouseholdKitTests
           parallelizable: true
         - package: PlayerKit/PlayerKitTests
+          parallelizable: true
+        - package: DownloadKit/DownloadKitTests
           parallelizable: true
         - package: HomeFeature/HomeFeatureTests
           parallelizable: true

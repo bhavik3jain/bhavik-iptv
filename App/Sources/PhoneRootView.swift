@@ -61,7 +61,7 @@ struct PhoneRootView: View {
 
     private var availableTabs: Set<AppTab> {
         guard hasSidebar else { return Set(AppTab.primary) }
-        return Set(AppTab.primary + [.search] + [AppTab.household, .settings].filter { RouteAccess.allows($0, session: session) })
+        return Set(AppTab.primary + [.downloads, .search] + [AppTab.household, .settings].filter { RouteAccess.allows($0, session: session) })
     }
 
     private var tabs: some View {
@@ -75,6 +75,11 @@ struct PhoneRootView: View {
             // The sidebar's own rows: never in the phone's tab bar.
             if hasSidebar {
                 TabSection(String(localized: "More")) {
+                    Tab(AppTab.downloads.title, systemImage: AppTab.downloads.systemImage, value: AppTab.downloads) {
+                        TabStack(tab: .downloads, navigation: navigation)
+                    }
+                    .tabPlacement(.sidebarOnly)
+
                     Tab(AppTab.search.title, systemImage: AppTab.search.systemImage, value: AppTab.search) {
                         TabStack(tab: .search, navigation: navigation)
                     }

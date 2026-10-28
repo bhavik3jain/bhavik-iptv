@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import DownloadKit
 import HouseholdKit
 import SwiftUI
 
@@ -137,6 +138,7 @@ struct MovieDetailScreen: View {
                     }
                 }
                 MyListHeartButton(itemKey: movie.key, kind: .movie)
+                DownloadSquareButton(request: DownloadRequest(movie: movie))
             }
             if let fraction = state.fraction {
                 HStack(spacing: 10) {

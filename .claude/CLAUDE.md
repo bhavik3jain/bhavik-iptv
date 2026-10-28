@@ -13,7 +13,7 @@ Hearth (working title) — an IPTV player for Stalker portals, Xtream logins and
 
 ## Packages and the rules that hold them together
 
-- `Core` (nothing) · `SourceKit` (nothing) · `CatalogKit` (Core, SourceKit) · `HouseholdKit` (Core) · `PlayerKit` (Core, VLCKit) · features `HomeFeature`, `LiveTVFeature`, `LibraryFeature`, `ProfilesFeature`, `HouseholdFeature`, `SearchFeature`, `SettingsFeature` (Core plus the kits they need, **never each other**). SourceKit and CatalogKit never touch iCloud; HouseholdKit never talks to a provider; VLCKit (4.0.0-a25 from code.videolan.org, ≈900 MB first download, pinned exactly) is the only remote dependency and only PlayerKit imports it, behind `#if canImport(VLCKit)`.
+- `Core` (nothing) · `SourceKit` (nothing) · `CatalogKit` (Core, SourceKit) · `HouseholdKit` (Core) · `PlayerKit` (Core, VLCKit) · `DownloadKit` (nothing) · features `HomeFeature`, `LiveTVFeature`, `LibraryFeature`, `ProfilesFeature`, `HouseholdFeature`, `SearchFeature`, `SettingsFeature` (Core plus the kits they need, **never each other**). SourceKit and CatalogKit never touch iCloud; HouseholdKit and DownloadKit never talk to a provider (the app hands DownloadKit a fresh link); VLCKit (4.0.0-a25 from code.videolan.org, ≈900 MB first download, pinned exactly) is the only remote dependency and only PlayerKit imports it, behind `#if canImport(VLCKit)`.
 - Public APIs marked **CONTRACT** are additive-only: change what they do, never their signatures.
 - Navigation between features: Core's `HearthRoute` with `NavigationLink(value:)` / `@Environment(\.openRoute)`, mapped to views by `RouteDestination` in `App/Sources/AppNavigation.swift`. Playback: `@Environment(\.play)` with a `PlayIntent`; `App/Sources/PlaybackCoordinator.swift` resolves a fresh link, checks stream limits, opens `PlayerView`, writes progress and who's-watching rows.
 - Services reach views as environment objects: `CatalogService`, `HouseholdStore`, `ProfileSession`.
@@ -48,6 +48,12 @@ Learned against the owner's real portal (iSTB worked, Hearth didn't):
 - Never call the sharing API on the main thread; members leave a share (purge the zone), never delete its root.
 - Don't write what changes every second: progress on pause/stop/finish/background and every 5 minutes; who's-watching rows at play, stop and every 10 minutes.
 - Adding an entity or attribute needs the schema ritual (`docs/RELEASE.md` §3: `scripts/cloudkit/init-schema.sh`, then Deploy Schema Changes in the CloudKit Console) before the TestFlight build that ships it. A raw-string enum case is not a schema change.
+
+## Downloads (DL-1, DL-2)
+
+- `DownloadKit`'s `DownloadCenter` (an environment object) keeps the records in Application Support/Downloads/downloads.json and runs two background sessions: HLS through `AVAssetDownloadURLSession` (a `.movpkg` the system places; its path is kept relative to the home directory) and anything else as one file. No HLS downloads on tvOS: the TV offers none.
+- Screens ask with `@Environment(\.download)`; the app's `PlaybackCoordinator` checks the stream limit (a running download takes a stream), resolves a fresh link and starts it, and keeps a who's-watching row per running download. `PlayerItemFactory` plays a finished download's file instead of asking the provider, and such a play takes no stream and writes no row.
+- The simulator downloads HLS fine; its audio device can refuse to start (`-66681`), which stops AVPlayer on any stream there, downloaded or not.
 
 ## Signing and running
 
