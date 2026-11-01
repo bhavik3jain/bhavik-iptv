@@ -8,29 +8,30 @@ Specs live in [docs/handoff](handoff/README.md): the [handoff](handoff/docs/1-Ha
 
 | | |
 | --- | --- |
-| Goal | An IPTV player for Stalker portals with Netflix-style profiles, on iPhone (including iPhone Duo), iPad and Mac, installed through TestFlight |
-| Version | 0.1 (build numbers come from CI run number + offset) |
-| Branch | `main` on GitHub; work lands through pull requests with the Tests workflow (packages + iOS, Mac, Apple TV builds) |
-| Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 |
+| Goal | An IPTV player for Stalker portals, Xtream logins and M3U playlists, with Netflix-style profiles shared through iCloud, on iPhone (including iPhone Duo), iPad, Mac and Apple TV, installed through TestFlight |
+| Version | 0.1. A TestFlight build's number is its workflow run number + 100 |
+| Branch | `main` on GitHub. Work lands through pull requests with the Tests workflow (packages + iOS, Mac, Apple TV builds). `main` isn't protected, so nothing holds a merge for Tests |
+| Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 / tvOS 18 |
 | Bundle ids | `com.bhavikjain.hearth` (release), `com.bhavikjain.hearth.dev` (Debug) · iCloud `iCloud.com.bhavikjain.hearth` · team Y4M3S6H4NK |
-| Builds | The whole app builds clean for iOS Simulator and macOS; runs on iPhone 18 Pro, iPhone Duo (iOS 27.1) and the Mac with the demo provider |
-| Apple TV | `Hearth-tvOS` (tvOS 18, same bundle ids and iCloud container) builds and runs on the Apple TV 4K simulator (tvOS 27.0) with the demo provider: gate, Home, Live TV guide, Movies, Shows, My List, Search, Settings, details and the remote-driven player. Merged (PR #2). TestFlight: the `tv` job and `scripts/testflight.sh tv` archive it unsigned and sign it ad hoc (no registered Apple TV needed); build 103 uploaded to TestFlight |
-| TestFlight | Not yet uploaded — local `scripts/testflight.sh` with Xcode's Apple ID (owner signing in, creating the app record) |
+| TestFlight | **Latest upload: build 107** of iOS, Mac and Apple TV (run `40711467291`, from `1a98acc`, 2026-10-28). Uploads go through the `TestFlight` workflow; the iCloud schema is deployed to Production |
+| Real portal | The owner's Stalker portal works in the iPhone simulator and on TestFlight: live, movies, shows and provider search |
+| Apple TV | On TestFlight and on the owner's Apple TV. Build 106 failed there with "The catalog couldn't be opened: The file couldn't be saved"; build 107 keeps its stores in Caches, **not yet confirmed on the device** |
 
 ## Blocked on the owner
 
-These need you; nothing else waits on them until the upload step.
+- [ ] **Install build 107 on the Apple TV** and confirm the portal's channels and movies load.
+- [ ] **Movie posters' "New" badge**: "Remove the new in movies" removed Home's New in Movies shelf. Should the poster badge go too?
+- [ ] **Should CI run the Apple TV checks?** `scripts/tv-remote/remote.sh check` needs a tvOS runtime on the runner, which costs download time and macOS minutes, so it's local for now.
+- [ ] **Branch rules on the `testflight` environment** (`main`, `v*`): it has none yet.
+- [ ] **Still open from the handoff's questions:** keep the name Hearth? How many streams does the subscription allow? Who's in the household, with which roles? Does the provider allow downloads?
 
-- [x] **App Store Connect app record** (created by the owner, 2026-10-27): bundle id `com.bhavikjain.hearth`, iOS and macOS (Universal Purchase). Add tvOS from the app's page (**+ Platform**) before the first Apple TV upload.
-- [x] **Xcode signed in** (team Y4M3S6H4NK). Upload path: **local, `scripts/testflight.sh`**, signed by that account. Signed builds with `-allowProvisioningUpdates` registered `com.bhavikjain.hearth` and `com.bhavikjain.hearth.dev` for iOS and macOS, with the iCloud container `iCloud.com.bhavikjain.hearth` and push (team provisioning profiles made by Xcode). The GitHub TestFlight workflow stays in the repo but needs the `testflight` environment secrets before it can run.
-- [ ] **A real portal to probe.** Portal URL + MAC (never committed) for `-SourceProbe` — the protocol rows marked "unverified" must be checked against your provider.
-- [ ] **Open questions 2–8** in the handoff (stream limit per MAC, name, roles, downloads, Apple TV, Multitrack code sharing).
+Done: the App Store Connect record with tvOS, Xcode signed in, the `testflight` environment's five secrets, the iCloud schema deployed to Production, and the real portal added by the owner (never committed).
 
 ## Decisions made this build
 
 | Decision | Choice | Why |
 | --- | --- | --- |
-| Package layout | Core · SourceKit · CatalogKit · HouseholdKit · PlayerKit, plus one package per feature (Home, LiveTV, Library, Profiles, Household, Search, Settings) | Technical spec; separate packages let agents build in parallel without sharing a `.build` |
+| Package layout | Core · SourceKit · CatalogKit · HouseholdKit · PlayerKit · DownloadKit, plus one package per feature (Home, LiveTV, Library, Profiles, Household, Search, Settings) | Technical spec; separate packages let agents build in parallel without sharing a `.build` |
 | Cross-feature navigation | Core's `HearthRoute` + `navigationDestination` in the app; `@Environment(\.play)` with a `PlayIntent` | Features never import each other; the app's playback coordinator owns links, limits, progress |
 | Services to views | `CatalogService`, `HouseholdStore`, `ProfileSession` as `@Observable` environment objects | One instance each, value snapshots out |
 | Contracts first | Public types and service APIs written before implementation; changes additive only | Lets 6+ agents work at once |
@@ -38,7 +39,11 @@ These need you; nothing else waits on them until the upload step.
 | Orientation | iPhone portrait + landscape (tent mode, player); iPad all four | Duo's outer display honours these; the inner display ignores them |
 | Sources in v0.1 | Stalker first and fully; Xtream and M3U clients too, since the protocol work is shared | The owner's provider is a Stalker portal |
 | Profiles in v0.1 | Pulled forward from Phase 3: profiles, PIN, Kids, Guest, per-profile favorites/progress | Asked for in this build |
-| Tests | Deferred: build the app first, write tests later (owner, 2026-10-25). Phase A's kit tests stay; Phase B adds none | Get a working app on TestFlight sooner |
+| Mac player | Plays in the main window, not MAC-3's own windows | Owner's choice, 2026-10-28 |
+| Search | Asks the provider too, for a source kept only in part | Owner's choice over SRCH-2 ("nothing leaves the device"), 2026-10-28: a page per category can't find most of 162,000 titles |
+| Mac and Apple TV signing | Archive unsigned, sign ad hoc, let the App Store export re-sign | Owner's choice: a development profile needs a registered device of that kind |
+| Apple TV storage and editing | Stores in Caches; Household read-only; sources arrive through iCloud | tvOS only keeps purgeable data; a remote is no way to type logins |
+| Tests | Fixes and features come with regression tests | Owner, 2026-11-01. "Tests later" (2026-10-25) got the app onto TestFlight first; suites for every package followed on 2026-10-26 |
 
 ## Workstreams
 
@@ -47,11 +52,11 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | # | Workstream | Owns | Requirements | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Scaffold and contracts | `project.yml`, all `Package.swift`, contract files | — | ☑ |
-| 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ☑ merged (128 tests) |
-| 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ☑ merged (33 tests) |
-| 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ☑ merged (93 tests in its worktree; hangs on the merged branch — see log) |
+| 1 | SourceKit | `Packages/SourceKit` | SRC-1, SRC-2, SRC-3, SRC-4, PRIV-2 | ☑ merged |
+| 2 | CatalogKit | `Packages/CatalogKit` | SRC-6, SRC-7, LIV-1/2/6, VOD-1, SER-1, SRCH-1/2, FAV-2 | ☑ merged |
+| 3 | HouseholdKit | `Packages/HouseholdKit` | HH-1…7, PRF-1…9, FAV-1/3/4, VOD-3, SER-2/3, PAR-1…4, PRIV-3 | ☑ merged |
 | 4 | PlayerKit | `Packages/PlayerKit` | PLY-1…7 (8, 9 later) | ☑ merged (VLCKit 4.0.0-a25) |
-| 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ☑ merged (34 tests, icon) |
+| 5 | Design system | `Packages/Core`, `App/Resources/Assets.xcassets` | mockups, accessibility bar | ☑ merged |
 | 6 | CI and release | `.github/`, `scripts/`, `README.md` | Build, release | ☑ merged |
 | 7 | Profiles feature | `Packages/ProfilesFeature` | PRF-1…5, PRF-8 | ☑ merged |
 | 8 | Home feature | `Packages/HomeFeature` | HOME-1 | ☑ merged |
@@ -60,16 +65,19 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | 11 | Household feature | `Packages/HouseholdFeature` | HH-2…6, SRC-1…5, SRC-8/9 | ☑ merged |
 | 12 | Search and Settings | `Packages/SearchFeature`, `Packages/SettingsFeature` | SRCH-1…3, MAC-4 | ☑ merged |
 | 13 | App shell | `App/Sources`, `project.yml` | MAC-1/2/4/6, navigation, playback coordinator, launch args | ☑ merged |
-| 14 | Integration | whole tree | both platforms build, tests pass, runs on iPhone / Duo / Mac | ◐ runs on iPhone, Duo, Mac |
-| 15 | TestFlight | signing, upload | Distribution | ⚠ owner |
-| 16 | Apple TV | `Hearth-tvOS`, `App/Sources/TVRootView.swift`, each feature's `.tv` variant, Core's TV components and shims | TV app (handoff: "later", pulled forward) | ☑ merged (PR #2); runs in the simulator, not yet on a device or TestFlight |
+| 14 | Integration | whole tree | all three apps build, tests pass | ☑ runs on iPhone, Duo, Mac and Apple TV |
+| 15 | TestFlight | signing, upload | Distribution | ☑ through the workflow; build 107 is the latest |
+| 16 | Apple TV | `Hearth-tvOS`, `App/Sources/TVRootView.swift`, each feature's `.tv` variant, Core's TV components and shims, `scripts/tv-remote` | TV app (handoff: "later", pulled forward) | ◐ on TestFlight; catalog fix unconfirmed on the device, multi-view in PR #10, no picture in picture yet |
+| 17 | Downloads | `Packages/DownloadKit`, Library's download buttons and screen | DL-1, DL-2 | ☑ merged (PR #6); unverified on hardware |
+| 18 | iOS Home: just Live TV | `Packages/HomeFeature`, `App/Sources/PhoneRootView.swift` | Owner's request, 2026-11-01 | ◐ PR #9 |
 
 ## Next up
 
-1. Owner: add the real Stalker portal in the simulator again with the fixed build (Household → Add a portal; portal URL, MAC, and the serial under Advanced; Test, then Save). Run it with `REAL=YES scripts/run-sim.sh "iPhone 18 Pro"` (no demo, store kept on disk).
-2. TestFlight: the iOS Release archive builds and carries the right build number (`scripts/testflight.sh all --no-upload`), but the App Store export fails with "No Accounts" from Claude's shell, sandboxed or not — Xcode's Apple ID session there is expired or unreadable. Owner (app record done): check Xcode → Settings → Accounts (sign in again if asked), then run `scripts/testflight.sh all` from your own Terminal (or archive and Distribute from Xcode's Organizer). iCloud schema: `scripts/cloudkit/init-schema.sh` sent it to Development on 2026-10-27 (Mac mode, `.dev` profile); the owner checked it and deployed it to Production the same day. Next: the `testflight` environment's secrets, then the first upload.
-3. Tune AVPlayer's 6 s start timeout against the real provider (Apple's 4K demo stream fell back to VLCKit in the simulator before playing).
-4. CI is green on `main`; PRs #1–#4 are merged, and the `testflight` environment has its five secrets. **TestFlight run `40620506023` uploaded iOS, Mac and Apple TV build 104 from `main` (`8bb98cd`)** — the first run with all three green. The TestFlight workflow and `scripts/testflight.sh` archive tvOS too (PR #3, then ad hoc signing on branch `testflight-tv-adhoc`). Owner: add tvOS to the App Store Connect record (**+ Platform**) if not done yet; add branch rules (`main`, `v*`) to the `testflight` environment, which has none yet.
+1. **Owner:** see Blocked, above all build 107 on the Apple TV. If the catalog still won't open, the message on the source says why.
+2. **In flight (2026-11-01):** PR #9, iOS Home as just Live TV, without Continue watching or Up next; PR #10, multi-view on the Apple TV.
+3. **Never checked on real hardware or the real portal:** downloads and playing them, including a download from the portal (tokenised HLS); Mac background download sessions; live latency side by side with iSTB; the Mac's in-window player; catch-up links (`StalkerClient.catchupLink`, marked unverified), and the other protocol rows marked unverified in [Source protocols](handoff/docs/4-Source-protocols.md).
+4. **Small things on the TV, seen with the remote and not fixed:** at the first channel, down opens the controls, and while the stream buffers the play button is a spinner, so focus has nowhere to land until Menu; closing the player puts focus back on the guide's first row rather than the channel just watched; Menu back from the gate lands on Home rather than the tab you came from; down from the Movies and Shows tabs lands on the nearest category chip rather than the first poster; the tab bar stays on pushed pages.
+5. Tune AVPlayer's 6 s start timeout against the real provider.
 
 ## Session log
 
@@ -140,9 +148,18 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 
 - Owner: the TV app "doesn't sync the portal from iCloud", has "no back button support" and is "wonky all around". The Claude simulator tool can't press Menu, so a throwaway tvOS UI-test bundle (outside the repo) drove the simulator with `XCUIRemote` — arrows, select, Menu — printing what held focus and saving a screenshot per press. Back works through tab → page → player on the demo; what didn't:
   - **Switch profile, then Menu, quit the app**: the gate had nowhere to go back to. `ProfileSession.previousProfileID` (additive) remembers the profile Switch Profile left, and Menu on the TV gate goes back to it — through its PIN if it has one.
-  - **The player needed two Menu presses after a channel change**: focus fell off the picture, so the first press only brought it back. The player now takes focus back whenever it drops.
+  - ~~The player needed two Menu presses after a channel change~~ **Wrong, corrected 2026-11-01.** This was blamed on focus falling off the picture, and PR #8 made the player take focus back. Putting the bug back later changed nothing: at the first channel, down has no previous channel so it opens the controls, and Menu there goes back to the picture first, by design. The one-press "proof" had only waited for the controls to fade. The change was taken out again.
   - **Household from the gate was a narrow sheet** (tvOS sheets are a card in the middle) showing the iPad layout. The TV presents route sheets full screen, without the Done button Menu replaces. The TV's Household is read-only now: no Invite (which made an iCloud share tvOS can't send), rename, Add profile, Add a source, Leave, or adult-category switches.
   - **A movie's page had grey bars down both sides**: its scroll view was only as wide as the text, so the backdrop stopped there. Full width now.
   - **Down from the tab bar** landed on the profile menu in Home's corner and on the guide's "Later" arrow; it now lands on Resume and on what's on now (`defaultFocus` with `.userInitiated`).
 - **iCloud**: not reproducible without the owner's Apple TV (the simulator has no iCloud account). Two changes: the TV keeps the household and catalog stores in Caches (Apple's tvOS rule: beyond 500 KB of defaults, local data must be purgeable; the catalog was in Application Support, which a real Apple TV may refuse), and TV Home says when iCloud is why nothing arrived — "This Apple TV isn't signed in to iCloud" with where to sign in, or the sync error — instead of "Add a source… it appears here on its own". Checked on the TV simulator with a real store: both stores open from Caches, and Home shows the not-signed-in notice. Waiting on the owner: what the TV's Home and Settings › Household › iCloud say.
-- All three apps build; HouseholdKit, HouseholdFeature, HomeFeature, ProfilesFeature, LiveTVFeature, LibraryFeature and CatalogKit tests pass. Not committed.
+- All three apps build; HouseholdKit, HouseholdFeature, HomeFeature, ProfilesFeature, LiveTVFeature, LibraryFeature and CatalogKit tests pass.
+- The owner then reported what the TV showed: "The catalog couldn't be opened: The file couldn't be saved". So the portal had synced, and the catalog store couldn't be written. Merged (PR #8, `1a98acc`); Tests passed on `main`, and TestFlight run `40711467291` uploaded iOS, Mac and Apple TV build 107. Build 106 (run `40698837673`, from `b99380f`) carried the wrong-show fix (PR #7).
+
+### 2026-11-01 — Handoff docs, regression tests, the TV remote in the repo
+
+- Owner asked whether a new session could jump right in. `.claude/CLAUDE.md` was accurate but had no Apple TV section and missed the portal's file rows, and this file's top sections dated from about build 104. Both refreshed.
+- Owner asked for the tests these fixes went without. **Wrong show:** an episode with no `cmd` links its own file; no file, season rows or a failed lookup give an error rather than another title; an episode with a `cmd` skips the lookup; the whole path on a portal shaped like the owner's; the season's id survives the catalog store. **Apple TV:** `ProfileSession.previousProfileID`, `GateBack` and its PIN, `HouseholdEditing`, `TVNoSourcesNotice`, the catalog's store location. With the wrong-show fix switched off, the new client tests fail by linking `another-title`.
+- `scripts/tv-remote` (was a throwaway): `press` works the simulator's remote, Menu included, and `check` runs the flows through back, focus and layout, then checks that the stores land in Caches. It's a separate project using XCUITest, because only `XCUIRemote` can press Menu. Not in CI, which has no tvOS runtime.
+- Each Apple TV bug was put back to see its check fail. That exposed the player mistake above and two checks that couldn't fail: "the guide shows" (its buttons stay in the tree under the player, so it now checks focus) and "Household fills the screen" (a line-height check, now where the page starts). One flow failed once after 140 s in `exists`, on a Mac busy with other sessions' builds; focus is now read from a snapshot, and it then passed six runs in a row. That cause is likely, not proven.
+- `swift test` on the Mac can't run the TV's `#if os(tvOS)` store path. The catalog's location test was also run on a tvOS simulator (`xcodebuild test -scheme CatalogKit`), and `check` confirms both stores land in Caches. The Household store's location has no unit test: testing it would touch iCloud.

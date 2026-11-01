@@ -222,6 +222,28 @@ import Testing
         let episodes = StalkerParse.numberedEpisodes(row, seriesID: "9001", season: 1)
         #expect(episodes.map(\.number) == [1, 2, 3])
         #expect(episodes.allSatisfy { $0.command == "/media/9001_s1.mpg" })
+        // They play as the season's cmd plus a number: no file to look up.
+        #expect(episodes.allSatisfy { $0.seasonID == nil })
+    }
+
+    @Test func episodesCarryTheirSeasonsID() throws {
+        let own = try #require(JSONValue(data: Data(#"[{"id":"170880","name":"Episode 3","season_id":"7066","series_number":"3"}]"#.utf8))?.array)
+        // The row's own `season_id`, over the season it was asked under.
+        #expect(StalkerParse.episodes(own, seriesID: "99200", season: 1, seasonID: "other", api: api).first?.seasonID == "7066")
+
+        let bare = StalkerParse.listPage(Fixture.json("stalker/episodes_s2.json")["js"]!).items
+        #expect(StalkerParse.episodes(bare, seriesID: "9001", season: 2, seasonID: "9001:2", api: api).allSatisfy { $0.seasonID == "9001:2" })
+        #expect(StalkerParse.episodes(bare, seriesID: "9001", season: 2, api: api).allSatisfy { $0.seasonID == nil })
+    }
+
+    @Test func anEpisodesFileIsFoundByItsFlagNotItsVideoID() throws {
+        // A file row names the show as `video_id`, so the episode's id can
+        // only match it through `is_file`.
+        let files = try #require(JSONValue(data: Data(#"[{"id":"237948","video_id":"99200","series_id":"170880","is_file":"1"}]"#.utf8))?.array)
+        #expect(StalkerParse.movieFileCommand(files, movieID: "170880") == "/media/file_237948.mpg")
+        // A season row names the show the same way, and isn't a file.
+        let seasons = try #require(JSONValue(data: Data(#"[{"id":"7066","is_season":"1","video_id":"99200"}]"#.utf8))?.array)
+        #expect(StalkerParse.movieFileCommand(seasons, movieID: "170880") == nil)
     }
 
     @Test func seriesStyleCategoryNames() {

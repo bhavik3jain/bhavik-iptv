@@ -427,6 +427,140 @@ import Testing
         #expect(request.query["series"] == "4")
     }
 
+    // MARK: Episodes kept in file rows (Ministra 5)
+
+    /// One episode's file row, as the owner's portal answers: it names the
+    /// show as `video_id` and the episode as `series_id`.
+    static let episodeFileRow = #"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"237948","video_id":"99200","series_id":"170880","is_file":"1","quality":"6"}]}}"#
+    /// What `create_link` answers for the right file...
+    static let rightTitle = #"{"js":{"id":"99200","cmd":"http://vod.portal.test:8080/right-show/video.m3u8?token=Tk1"}}"#
+    /// ...and for anything else: it never refuses, it links another title.
+    static let wrongTitle = #"{"js":{"id":"56275","cmd":"http://vod.portal.test:8080/another-title/video.m3u8?token=No"}}"#
+
+    static let fileEpisode = RemoteEpisode(id: "170880", seriesID: "99200", season: 1, number: 3, title: "Episode 3", seasonID: "7066")
+
+    // The owner's "wrong show": an episode row has no cmd and its id is no
+    // file id, yet `/media/file_<episode id>.mpg` answers with another title.
+    @Test func episodeWithoutACommandLinksItsOwnFile() async throws {
+        let portal = Portal { action, request, _ in
+            switch action {
+            case "get_ordered_list" where request.query["episode_id"] == "170880":
+                return .json(Self.episodeFileRow)
+            case "create_link" where request.query["cmd"] == "/media/file_237948.mpg":
+                return .json(Self.rightTitle)
+            case "create_link":
+                return .json(Self.wrongTitle)
+            default:
+                return nil
+            }
+        }
+        let link = try await portal.client().streamLink(for: .episode(Self.fileEpisode, series: nil))
+        #expect(link.url.absoluteString == "http://vod.portal.test:8080/right-show/video.m3u8?token=Tk1")
+        #expect(link.formatHint == .hls)
+
+        let lookup = try #require(portal.requests("get_ordered_list").first)
+        #expect(lookup.query["type"] == "vod")
+        #expect(lookup.query["movie_id"] == "99200")
+        #expect(lookup.query["season_id"] == "7066") // season_id=0 answers nothing
+        #expect(lookup.query["episode_id"] == "170880")
+        let links = portal.requests("create_link")
+        #expect(links.map { $0.query["cmd"] } == ["/media/file_237948.mpg"])
+        #expect(links.first?.query["series"] == nil)
+    }
+
+    @Test func episodeWithNoFileHasNoLinkRatherThanAnotherTitle() async throws {
+        let portal = Portal { action, _, _ in
+            action == "create_link" ? .json(Self.wrongTitle) : nil
+        }
+        let error = await #expect(throws: SourceError.self) {
+            try await portal.client().streamLink(for: .episode(Self.fileEpisode, series: nil))
+        }
+        #expect(error?.code == .noLink)
+        #expect(portal.count("create_link") == 0)
+    }
+
+    // Season rows carry the show's id as `video_id` too; one must never be
+    // taken for a file.
+    @Test func aPortalAnsweringWithSeasonRowsGivesNoFile() async throws {
+        let portal = Portal { action, _, _ in
+            switch action {
+            case "get_ordered_list":
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"7066","name":"Season 1","is_season":"1","season_number":"1","video_id":"99200"}]}}"#)
+            case "create_link":
+                return .json(Self.wrongTitle)
+            default:
+                return nil
+            }
+        }
+        let error = await #expect(throws: SourceError.self) {
+            try await portal.client().streamLink(for: .episode(Self.fileEpisode, series: nil))
+        }
+        #expect(error?.code == .noLink)
+        #expect(portal.count("create_link") == 0)
+    }
+
+    // A failed lookup must not fall back to guessing: that's the wrong show.
+    @Test func aFailedFileLookupIsReportedNotGuessedAround() async throws {
+        let portal = Portal { action, _, _ in
+            switch action {
+            case "get_ordered_list": return .text("<html>Bad Gateway</html>", status: 502)
+            case "create_link": return .json(Self.wrongTitle)
+            default: return nil
+            }
+        }
+        await #expect(throws: SourceError.self) {
+            try await portal.client().streamLink(for: .episode(Self.fileEpisode, series: nil))
+        }
+        #expect(portal.count("create_link") == 0)
+    }
+
+    @Test func episodeWithACommandPlaysThatWithoutALookup() async throws {
+        let portal = Portal { action, _, _ in
+            action == "create_link" ? .json(Self.rightTitle) : nil
+        }
+        let episode = RemoteEpisode(id: "9001:2:4", seriesID: "9001", season: 2, number: 4, title: "Fog Bell", command: "/media/9001_s2.mpg", seasonID: "9001:2")
+        _ = try await portal.client().streamLink(for: .episode(episode, series: nil))
+        #expect(portal.count("get_ordered_list") == 0)
+        let request = try #require(portal.requests("create_link").first)
+        #expect(request.query["cmd"] == "/media/9001_s2.mpg")
+        #expect(request.query["series"] == "4")
+    }
+
+    // The whole path on a portal shaped like the owner's: no series module,
+    // the show in VOD, episodes with no cmd, video in file rows.
+    @Test func aShowInVODPlaysItsOwnEpisodeFilesEndToEnd() async throws {
+        let portal = Portal { action, request, _ in
+            switch action {
+            case "get_ordered_list":
+                guard request.query["type"] == "vod", request.query["movie_id"] == "99200" else { return nil }
+                switch (request.query["season_id"], request.query["episode_id"]) {
+                case ("0", "0"):
+                    return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"7066","name":"Season 1","is_season":"1","season_number":"1","video_id":"99200"}]}}"#)
+                case ("7066", "0"):
+                    return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"170880","name":"Episode 3. All American","is_episode":"1","season_id":"7066","series_number":"3"}]}}"#)
+                case ("7066", "170880"):
+                    return .json(Self.episodeFileRow)
+                default:
+                    return nil
+                }
+            case "create_link" where request.query["cmd"] == "/media/file_237948.mpg":
+                return .json(Self.rightTitle)
+            case "create_link":
+                return .json(Self.wrongTitle)
+            default:
+                return nil
+            }
+        }
+        let client = portal.client()
+        let show = RemoteSeries(id: "99200", name: "All American")
+        let detail = try await client.seriesDetail(show)
+        let episode = try #require(detail.episodes.first)
+        #expect(episode.command == nil)
+        #expect(episode.seasonID == "7066")
+        let link = try await client.streamLink(for: .episode(episode, series: show))
+        #expect(link.url.path().contains("right-show"))
+    }
+
     @Test func catchupFindsTheProgrammeAndAsksTheArchive() async throws {
         let portal = Portal { action, request, _ in
             switch (request.query["type"], action) {

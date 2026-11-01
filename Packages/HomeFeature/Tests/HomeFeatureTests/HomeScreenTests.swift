@@ -5,6 +5,30 @@ import HouseholdKit
 import Testing
 @testable import HomeFeature
 
+/// A TV's sources only arrive through iCloud, so when iCloud is why nothing
+/// has, Home says that rather than "add a source".
+@Suite struct TVNoSourcesNoticeTests {
+    @Test func notSignedInSaysWhereToSignIn() {
+        let notice = TVNoSourcesNotice(syncStatus: .noAccount)
+        #expect(notice.systemName == "icloud.slash")
+        #expect(notice.title.contains("isn't signed in to iCloud"))
+        #expect(notice.message.contains("Users and Accounts"))
+    }
+
+    @Test func aFailingSyncSaysWhy() {
+        let notice = TVNoSourcesNotice(syncStatus: .failed("The iCloud account is out of storage."))
+        #expect(notice.title.contains("can't reach your household"))
+        #expect(notice.message.contains("The iCloud account is out of storage."))
+    }
+
+    @Test(arguments: [HouseholdSyncStatus.local, .syncing, .upToDate(Date(timeIntervalSince1970: 0))])
+    func otherwiseItAsksForASource(status: HouseholdSyncStatus) {
+        let notice = TVNoSourcesNotice(syncStatus: status)
+        #expect(notice.title == "Add a source to start watching")
+        #expect(!notice.message.contains("isn't signed in"))
+    }
+}
+
 @Suite struct HomeStatusTests {
     let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
     let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!

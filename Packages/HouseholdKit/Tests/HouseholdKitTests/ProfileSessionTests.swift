@@ -136,6 +136,38 @@ import Testing
         #expect(session.currentProfile == nil, "Switch Profile shows the gate even with one profile")
     }
 
+    // The TV's Menu button on the gate goes back to the profile just left.
+    @Test func switchProfileRemembersTheProfileItLeft() throws {
+        let store = try makeStore()
+        let session = ProfileSession(store: store, defaults: makeDefaults())
+        session.restore()
+        #expect(session.previousProfileID == nil, "A launch has nothing to go back to")
+
+        session.signOut()
+        #expect(session.currentProfile == nil)
+        #expect(session.previousProfileID == store.firstProfile.id)
+        session.refresh()
+        #expect(session.previousProfileID == store.firstProfile.id, "A sync while the gate is up doesn't lose it")
+    }
+
+    @Test func choosingAProfileForgetsTheOneLeft() throws {
+        let store = try makeStore()
+        let session = ProfileSession(store: store, defaults: makeDefaults())
+        session.restore()
+        session.signOut()
+        session.select(store.firstProfile)
+        #expect(session.previousProfileID == nil)
+    }
+
+    @Test func aRelaunchForgetsTheOneLeft() throws {
+        let store = try makeStore()
+        let session = ProfileSession(store: store, defaults: makeDefaults())
+        session.restore()
+        session.signOut()
+        session.restore()
+        #expect(session.previousProfileID == nil)
+    }
+
     // SRC-8
     @Test func theOwnerOnAStandardProfileCanManage() throws {
         let store = try makeStore()

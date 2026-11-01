@@ -7,6 +7,15 @@ import SwiftUI
 // The grouped sections under Household's first card (mockup 05). Each reads
 // the services itself so the screen's body stays a list of sections.
 
+/// Whether Household offers a change here. The TV only shows the household:
+/// forms of logins and names are no job for a remote, tvOS can't send an
+/// invitation, and whatever changes elsewhere arrives through iCloud.
+enum HouseholdEditing {
+    static func isOffered(canManage: Bool, layout: HearthLayout) -> Bool {
+        canManage && layout != .tv
+    }
+}
+
 // MARK: - Profiles
 
 /// "PROFILES": each profile with what it may see, into its editor; Add
@@ -17,8 +26,7 @@ struct ProfilesSection: View {
     @Environment(\.hearthLayout) private var layout
 
     var body: some View {
-        // The TV shows profiles; they're edited on an iPhone, iPad or Mac.
-        let canManage = session.canManageHousehold && layout != .tv
+        let canManage = HouseholdEditing.isOffered(canManage: session.canManageHousehold, layout: layout)
         let atLimit = store.profiles.count >= HouseholdStore.maxProfiles
         GroupedCard(
             title: String(localized: "Profiles"),
@@ -71,10 +79,8 @@ struct SourcesSection: View {
     @State private var sourceToRemove: SourceRecord?
 
     var body: some View {
-        // The TV shows sources and refreshes them; logins are typed on an
-        // iPhone, iPad or Mac.
         let isTV = layout == .tv
-        let canManage = session.canManageHousehold && !isTV
+        let canManage = HouseholdEditing.isOffered(canManage: session.canManageHousehold, layout: layout)
         let removed = canManage ? removedSources : []
         VStack(alignment: .leading, spacing: 10) {
             header
@@ -320,8 +326,7 @@ struct SyncSection: View {
         let sync = SyncStatusText.text(store.syncStatus)
         let marked = store.household.adultCategoryKeys.count
         GroupedCard(title: String(localized: "Sync"), footer: footnote) {
-            // The TV shows the setting; it's changed on an iPhone, iPad or Mac.
-            if session.canManageHousehold && layout != .tv {
+            if HouseholdEditing.isOffered(canManage: session.canManageHousehold, layout: layout) {
                 CardToggleRow(
                     String(localized: "Hide adult categories on every profile"),
                     subtitle: String(localized: "Categories named adult, XXX or 18+, and any marked by hand"),
