@@ -289,6 +289,29 @@ struct GuideMetrics: Hashable, Sendable {
     }
 }
 
+/// What moves the guide's rows out from under its scroll offset: the
+/// timeline's origin and scale (the guide grew a day at the front, the window
+/// changed width) and the chip.
+struct GuideScrollKey: Equatable {
+    var origin: Date
+    var pointsPerMinute: CGFloat
+    var listID: String
+
+    init(timeline: GuideTimeline, listID: String) {
+        origin = timeline.origin
+        pointsPerMinute = timeline.pointsPerMinute
+        self.listID = listID
+    }
+
+    /// Where to scroll after a change from `old`: the same moment at the left
+    /// edge, and back to the first channel on a new chip.
+    func offset(after old: GuideScrollKey, from offset: CGPoint) -> CGPoint {
+        let moment = old.origin.addingTimeInterval(TimeInterval(max(offset.x, 0) / old.pointsPerMinute) * 60)
+        let x = CGFloat(moment.timeIntervalSince(origin) / 60) * pointsPerMinute
+        return CGPoint(x: max(x, 0), y: listID == old.listID ? offset.y : 0)
+    }
+}
+
 /// Where a programme sits in time relative to now.
 enum ProgrammePhase: Hashable, Sendable {
     case aired

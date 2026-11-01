@@ -59,6 +59,7 @@ struct GuideGridView: View {
 
     @State private var position = ScrollPosition(point: .zero)
     @State private var snapshot: GuideScrollSnapshot?
+    @State private var liveOffset = GuideLiveOffset()
     @State private var hasOpenedAtNow = false
 
     var body: some View {
@@ -114,15 +115,15 @@ struct GuideGridView: View {
                 scroll(toShow: now, animated: false)
             }
         }
-        .onChange(of: TimelineAnchor(timeline)) { _, _ in
-            // The guide grew a day at the front, or the scale changed with
-            // the window's width: keep the same moment at the left edge.
-            if let leading = snapshot?.leadingDate {
-                position.scrollTo(x: max(0, timeline.x(for: leading)))
-            }
+        .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
+            liveOffset.point = new
         }
-        .onChange(of: listID) { _, _ in
-            position.scrollTo(y: 0)
+        // One change at a time would race: a launch can bring the guide's
+        // range and a new chip in the same update, and either alone would
+        // undo the other. Both axes are always named, because `scrollTo(y:)`
+        // alone also sends x to the timeline's start, a week back.
+        .onChange(of: GuideScrollKey(timeline: timeline, listID: listID)) { old, new in
+            position.scrollTo(point: new.offset(after: old, from: liveOffset.point))
         }
         .onDisappear { shortGuides.cancel() }
     }
@@ -178,20 +179,28 @@ struct GuideGridView: View {
     private func scroll(toShow date: Date, animated: Bool) {
         let viewport = (snapshot?.viewportWidth ?? 0) - metrics.channelColumnWidth
         let x = timeline.scrollX(toShow: date, viewportWidth: max(viewport, 0))
+        let y = liveOffset.point.y
+        // What's been asked for, in case the rows change before it lands.
+        liveOffset.point.x = x
         if animated {
-            withAnimation(.snappy(duration: 0.35)) { position.scrollTo(x: x) }
+            withAnimation(.snappy(duration: 0.35)) { position.scrollTo(x: x, y: y) }
         } else {
-            position.scrollTo(x: x)
+            position.scrollTo(x: x, y: y)
         }
     }
+}
+
+/// The guide's scroll offset as of the last frame. A plain reference, so
+/// following it redraws nothing.
+@MainActor
+private final class GuideLiveOffset {
+    var point = CGPoint.zero
 }
 
 /// What the guide keeps from its scroll geometry, coarse enough that it
 /// changes a few times an hour of scrolling rather than every frame.
 struct GuideScrollSnapshot: Equatable {
     var window: GuideWindow
-    /// The moment at the left edge of the timeline, to the quarter hour.
-    var leadingDate: Date
     /// The moment in the middle of the screen, to the quarter hour: the day
     /// the header names, so opening at 00:10 with 23:30 at the edge still
     /// says "Today".
@@ -206,23 +215,10 @@ struct GuideScrollSnapshot: Equatable {
         let offsetX = geometry.contentOffset.x
         window = .at(offsetX: offsetX, timelineViewport: timelineViewport, in: timeline)
         nowSide = timeline.side(of: now, offsetX: offsetX, viewportWidth: max(timelineViewport, 0))
-        let leading = timeline.date(atX: offsetX)
-        leadingDate = Date(timeIntervalSince1970: (leading.timeIntervalSince1970 / 900).rounded(.down) * 900)
         let centre = timeline.date(atX: offsetX + max(timelineViewport, 0) / 2)
         centreDate = Date(timeIntervalSince1970: (centre.timeIntervalSince1970 / 900).rounded(.down) * 900)
         viewportWidth = geometry.containerSize.width.rounded()
         isLaidOut = geometry.contentSize.width > geometry.containerSize.width && geometry.containerSize.width > 0
-    }
-}
-
-/// The parts of a timeline whose change moves every x.
-private struct TimelineAnchor: Equatable {
-    var origin: Date
-    var pointsPerMinute: CGFloat
-
-    init(_ timeline: GuideTimeline) {
-        origin = timeline.origin
-        pointsPerMinute = timeline.pointsPerMinute
     }
 }
 
