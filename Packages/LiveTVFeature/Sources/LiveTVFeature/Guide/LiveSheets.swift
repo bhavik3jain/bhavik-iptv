@@ -192,7 +192,7 @@ struct FavoritesOrderSheet: View {
                         }
                     }
                 } footer: {
-                    Text("Drag to set the order Favorites shows in Live TV and on Home.")
+                    Text("Drag to set the order your favorite channels show in.")
                         .font(.hearthFootnote)
                         .foregroundStyle(HearthColor.textSecondary)
                 }

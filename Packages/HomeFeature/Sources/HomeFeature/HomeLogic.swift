@@ -326,6 +326,19 @@ enum HomeStatus: Equatable, Sendable {
         return .firstRefresh(sourceName: nil, progress: nil, message: nil)
     }
 
+    /// The household's live sources: the catalog's (what the app handed it)
+    /// plus any the store has that the app hasn't passed on yet, so a launch
+    /// never flashes "Add a source" at a household that has one.
+    static func make(catalogSourceIDs: [UUID], records: [SourceRecord], refreshStates: [UUID: SourceRefreshState]) -> HomeStatus {
+        let records = records.filter { !$0.isRemoved }
+        var ids = catalogSourceIDs
+        for record in records where !ids.contains(record.id) {
+            ids.append(record.id)
+        }
+        let names = Dictionary(records.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        return make(sourceIDs: ids, names: names, refreshStates: refreshStates)
+    }
+
     static func hasCatalog(_ state: SourceRefreshState) -> Bool {
         state.catalogRefreshedAt != nil || state.channelCount > 0 || state.movieCount > 0 || state.seriesCount > 0
     }

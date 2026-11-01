@@ -32,8 +32,8 @@ struct AirPlayButton: View {
     }
 }
 
-/// The AirPlay route button for screens outside the player (Home's header,
-/// mockup 02): the same system picker on the raised circle the other header
+/// The AirPlay route button for screens outside the player (the phone's Live
+/// TV header, mockup 02's Home): the same system picker on the raised circle the other header
 /// buttons use. With no player it routes the audio session, so the next
 /// stream starts on the chosen Apple TV.
 public struct AirPlayRouteButton: View {

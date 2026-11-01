@@ -389,6 +389,18 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
         #expect(service.search("star", limitPerGroup: 1).movies.map(\.name) == ["Star Wars"])
     }
 
+    /// On the phone this is the only search, so it has to find a channel by
+    /// its number as well as `findChannels` does (LIV-6).
+    @Test func searchFindsAChannelByItsNumber() async throws {
+        let (service, _) = await importedService()
+        #expect(service.search("1").channels.map(\.name) == ["BBC One", "Sky Sports"])
+        #expect(service.search("10").channels.map(\.name) == ["Sky Sports"])
+        #expect(service.search(" 10 ").channels.map(\.name) == ["Sky Sports"])
+        #expect(service.search("999").channels.isEmpty)
+        // A word is still a name, never a number.
+        #expect(service.search("sky").channels.map(\.name) == ["Sky Sports"])
+    }
+
     @Test func findChannelByNameOrNumber() async throws {
         let (service, _) = await importedService()
         #expect(service.findChannels("1").map(\.name) == ["BBC One", "Sky Sports"])

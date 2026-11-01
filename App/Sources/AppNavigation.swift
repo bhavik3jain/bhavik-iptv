@@ -50,7 +50,10 @@ final class AppNavigation {
         var path: [HearthRoute] = []
     }
 
-    var selection: AppTab = .home
+    /// Where this window opens, and where a profile switch lands: Home on the
+    /// Mac and the TV, Live TV on iOS (`AppTab.phoneStart`).
+    let startTab: AppTab
+    var selection: AppTab
     var paths: [AppTab: [HearthRoute]] = [:]
     var sheet: Sheet?
     /// The Mac sidebar's search, once submitted.
@@ -63,6 +66,11 @@ final class AppNavigation {
     /// The Mac opens Settings in its own window (MAC-4) rather than a sheet;
     /// its root sets this to SwiftUI's `openSettings`.
     @ObservationIgnored var showSettings: (() -> Void)?
+
+    init(startTab: AppTab = .home) {
+        self.startTab = startTab
+        selection = startTab
+    }
 
     func path(for tab: AppTab) -> Binding<[HearthRoute]> {
         Binding(
@@ -170,14 +178,19 @@ final class AppNavigation {
         }
     }
 
-    /// After a profile switch: back to Home with empty stacks, so nothing of
-    /// the previous profile's browsing shows (and a Kids profile doesn't land
-    /// on a tab it can't have).
+    /// After a profile switch: back to the start tab with empty stacks, so
+    /// nothing of the previous profile's browsing shows (and a Kids profile
+    /// doesn't land on a tab it can't have).
     func reset() {
         paths = [:]
         sheet = nil
-        selection = .home
+        selection = startTab
         submittedSearch = ""
+    }
+
+    /// A tab this window doesn't have falls back to the start tab.
+    func keepSelection(in available: Set<AppTab>) {
+        if !available.contains(selection) { selection = startTab }
     }
 }
 

@@ -163,6 +163,65 @@ import Testing
     }
 }
 
+@Suite struct GuideScrollKeyTests {
+    let today = Fixture.date(2026, 10, 28)
+    let aWeekBack = Fixture.date(2026, 10, 21)
+    /// Today at 20:00 on a timeline from today's midnight, at 2.5 points a minute.
+    let eightPM: CGFloat = 20 * 60 * 2.5
+    /// From a week back to today. Read off the dates: the fixture's London
+    /// clocks go back on 25 October, so this week has an extra hour.
+    var aWeeksWidth: CGFloat { CGFloat(today.timeIntervalSince(aWeekBack) / 60) * 2.5 }
+
+    private func key(origin: Date, pointsPerMinute: CGFloat = 2.5, listID: String = "all") -> GuideScrollKey {
+        let timeline = GuideTimeline(origin: origin, end: Fixture.date(2026, 10, 29), pointsPerMinute: pointsPerMinute)
+        return GuideScrollKey(timeline: timeline, listID: listID)
+    }
+
+    /// A chip used to send the guide to the timeline's start, a week back,
+    /// and a launch changes chip as favorites arrive.
+    @Test func aNewChipKeepsTheTimeOfDayAndGoesToTheFirstChannel() {
+        let target = key(origin: today, listID: "favorites").offset(after: key(origin: today), from: CGPoint(x: eightPM, y: 600))
+        #expect(target == CGPoint(x: eightPM, y: 0))
+    }
+
+    /// The guide's data arrives after the grid opens at now: the same offset
+    /// on the longer timeline would be a week ago.
+    @Test func aGuideGrowingAtTheFrontKeepsTheMomentAndTheChannel() {
+        let target = key(origin: aWeekBack).offset(after: key(origin: today), from: CGPoint(x: eightPM, y: 600))
+        #expect(target == CGPoint(x: eightPM + aWeeksWidth, y: 600))
+    }
+
+    /// Both in one update, as a launch can bring them.
+    @Test func aNewChipAndALongerGuideTogether() {
+        let target = key(origin: aWeekBack, listID: "favorites").offset(after: key(origin: today), from: CGPoint(x: eightPM, y: 600))
+        #expect(target == CGPoint(x: eightPM + aWeeksWidth, y: 0))
+    }
+
+    /// The window changed width (a rotation, iPhone Duo opening).
+    @Test func aNewScaleKeepsTheMoment() {
+        let target = key(origin: today, pointsPerMinute: 5).offset(after: key(origin: today), from: CGPoint(x: eightPM, y: 600))
+        #expect(target == CGPoint(x: 20 * 60 * 5, y: 600))
+    }
+
+    @Test func aMomentBeforeANewOriginStopsAtTheStart() {
+        let target = key(origin: today).offset(after: key(origin: aWeekBack), from: CGPoint(x: 100, y: 0))
+        #expect(target.x == 0)
+    }
+
+    @Test func aBounceAtTheStartIsTheStart() {
+        let target = key(origin: today).offset(after: key(origin: today), from: CGPoint(x: -40, y: 0))
+        #expect(target.x == 0)
+    }
+
+    @Test func theKeyChangesWithEachOfItsParts() {
+        let base = key(origin: today)
+        #expect(base == key(origin: today))
+        #expect(base != key(origin: aWeekBack))
+        #expect(base != key(origin: today, pointsPerMinute: 5))
+        #expect(base != key(origin: today, listID: "news"))
+    }
+}
+
 @Suite struct ProgrammePhaseTests {
     let start = Fixture.date(2026, 10, 28, 20)
     var end: Date { start.adding(hours: 1) }
