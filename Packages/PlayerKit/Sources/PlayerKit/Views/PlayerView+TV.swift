@@ -57,10 +57,15 @@ struct TVPlayerScreen: View {
             model.showControls()
         }
         .onExitCommand {
-            if controlsActive, failureMessage == nil {
-                leaveControls()
-            } else {
-                model.close()
+            switch TVPlayerBack.onMenu(
+                controlsActive: controlsActive,
+                hasFailed: failureMessage != nil,
+                voiceOverEnabled: voiceOverEnabled,
+                returnsToMultiView: model.backReturnsToMultiView
+            ) {
+            case .leaveControls: leaveControls()
+            case .returnToMultiView: model.onShowMultiView?()
+            case .close: model.close()
             }
         }
         .onChange(of: focus) { _, newValue in
@@ -232,10 +237,11 @@ enum TVPlayerFocus: Hashable {
 }
 
 /// The channel's logo, its name and programme (or the title and episode),
-/// and the tracks menu.
+/// multi-view, and the tracks menu.
 private struct TVPlayerTopBar: View {
     let model: PlayerModel
     let isInteractive: Bool
+    @FocusState private var isMultiViewFocused: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 24) {
@@ -257,11 +263,25 @@ private struct TVPlayerTopBar: View {
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
 
+            if let showMultiView = model.onShowMultiView {
+                TVPlayerCircleButton(systemName: "rectangle.grid.2x2", label: "Multi-view", diameter: 88, iconSize: 30, action: showMultiView)
+                    .focused($isMultiViewFocused)
+                    .disabled(!isInteractive)
+                    // Landing here restarts the controls' fade, so the button
+                    // doesn't vanish while it is being read across the room.
+                    .onChange(of: isMultiViewFocused) { _, focused in
+                        if focused { model.showControls() }
+                    }
+            }
+
             if hasTracks {
                 TVPlayerTracksMenu(model: model)
                     .disabled(!isInteractive)
             }
         }
+        // The buttons sit at the far right: as one wide section, up from the
+        // play button still reaches them.
+        .hearthFocusSection()
     }
 
     private var logoName: String? {

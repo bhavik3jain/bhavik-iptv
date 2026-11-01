@@ -18,6 +18,15 @@ typealias PlatformView = NSView
 @MainActor
 struct EngineVideoSurface {
     let content: PlatformView
+
+    /// A new surface always takes the view; an existing one only when nobody
+    /// holds it. SwiftUI can update the outgoing surface once more after the
+    /// incoming one was made (a tile going full screen on the TV): taking the
+    /// view back then lost it when the outgoing surface was dismantled, and
+    /// the picture went black.
+    static func takesContentOnUpdate(currentOwner: PlatformView?) -> Bool {
+        currentOwner == nil
+    }
 }
 
 #if os(iOS) || os(tvOS)
@@ -31,7 +40,7 @@ extension EngineVideoSurface: UIViewRepresentable {
     }
 
     func updateUIView(_ container: UIView, context: Context) {
-        if content.superview !== container { adopt(into: container) }
+        if Self.takesContentOnUpdate(currentOwner: content.superview) { adopt(into: container) }
     }
 
     static func dismantleUIView(_ container: UIView, coordinator: ()) {
@@ -61,7 +70,7 @@ extension EngineVideoSurface: NSViewRepresentable {
     }
 
     func updateNSView(_ container: NSView, context: Context) {
-        if content.superview !== container { adopt(into: container) }
+        if Self.takesContentOnUpdate(currentOwner: content.superview) { adopt(into: container) }
     }
 
     static func dismantleNSView(_ container: NSView, coordinator: ()) {

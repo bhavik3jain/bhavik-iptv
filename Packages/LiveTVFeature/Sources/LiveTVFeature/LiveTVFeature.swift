@@ -43,20 +43,36 @@ public struct ChannelDetailView: View {
 /// On its own it draws its "Live TV  Guide | Multi-view" title bar, and
 /// Guide dismisses it; inside Live TV's sidebar layout the toolbar has that
 /// control, and Guide switches back in place.
+///
+/// On the Apple TV it is the remote's own screen (`TVMultiViewContent`),
+/// opened full screen from the guide or the player; `startingChannelKey` is
+/// the channel to bring along, and Menu calls `onClose` as it leaves.
 public struct MultiViewScreen: View {
     let showsModePicker: Bool
     let onShowGuide: (() -> Void)?
+    let startingChannelKey: String?
+
+    @Environment(\.hearthLayout) private var layout
 
     public init() {
         self.init(showsModePicker: true, onShowGuide: nil)
     }
 
-    init(showsModePicker: Bool, onShowGuide: (() -> Void)?) {
+    public init(startingChannelKey: String?, onClose: @escaping () -> Void) {
+        self.init(showsModePicker: true, onShowGuide: onClose, startingChannelKey: startingChannelKey)
+    }
+
+    init(showsModePicker: Bool, onShowGuide: (() -> Void)?, startingChannelKey: String? = nil) {
         self.showsModePicker = showsModePicker
         self.onShowGuide = onShowGuide
+        self.startingChannelKey = startingChannelKey
     }
 
     public var body: some View {
-        MultiViewContent(showsModePicker: showsModePicker, onShowGuide: onShowGuide)
+        if layout == .tv {
+            TVMultiViewContent(startingChannelKey: startingChannelKey, onClose: onShowGuide)
+        } else {
+            MultiViewContent(showsModePicker: showsModePicker, onShowGuide: onShowGuide)
+        }
     }
 }

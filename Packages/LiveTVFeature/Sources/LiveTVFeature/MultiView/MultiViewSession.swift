@@ -44,6 +44,13 @@ final class MultiViewSession {
     private(set) var occupants: [Int: Occupant] = [:]
     private(set) var expanded: Expanded?
     @ObservationIgnored private var lastHeartbeat = Date.now
+    @ObservationIgnored private var suspended: Suspended?
+
+    /// The tiles closed when the app went to the background.
+    private struct Suspended {
+        var channels: [Int: CatalogChannel]
+        var audibleTileID: Int?
+    }
 
     /// The tiles drawn now: one in the one-tile arrangement, else all.
     var visibleTiles: [MultiViewModel.Tile] {
@@ -74,6 +81,31 @@ final class MultiViewSession {
     }
 
     func occupant(ofTile id: Int) -> Occupant? { occupants[id] }
+
+    /// Each source the profile can see, with its streams in use: other
+    /// devices' who's-watching rows plus this screen's tiles, optionally
+    /// leaving one tile out.
+    func streamStates(catalog: CatalogService, store: HouseholdStore, excludingTile excluded: Int? = nil) -> [SourceStreamState] {
+        let own = ownPlaybackIDs
+        let visible = catalog.filter.visibleSourceIDs
+        return catalog.sources
+            .filter { visible?.contains($0.id) ?? true }
+            .map { source in
+                let record = store.sources.first { $0.id == source.id }
+                let limit = SourceLimits.limit(
+                    kindRaw: source.kind.rawValue,
+                    maxStreams: record?.maxStreams ?? SourceLimits.defaultMaxStreams(kindRaw: source.kind.rawValue),
+                    accountMaxConnections: catalog.account(sourceID: source.id)?.maxConnections
+                )
+                let others = store.streamUsage(sourceID: source.id, limit: limit).inUse.filter { !own.contains($0.id) }.count
+                return SourceStreamState(
+                    sourceID: source.id,
+                    name: source.name,
+                    inUse: others + tileCount(onSource: source.id, excludingTile: excluded),
+                    limit: limit
+                )
+            }
+    }
 
     // MARK: Playing
 
@@ -108,6 +140,31 @@ final class MultiViewSession {
             stopRow(ofTile: id, store: store)
         }
         model.closeAll()
+        suspended = nil
+    }
+
+    /// The app went to the background: every stream goes back, as nobody can
+    /// see them, and `resume` reopens the channels on its return.
+    func suspend(store: HouseholdStore) {
+        guard !occupants.isEmpty else { return }
+        let saved = Suspended(channels: occupants.mapValues(\.channel), audibleTileID: audibleTileID)
+        closeAll(store: store)
+        suspended = saved
+    }
+
+    /// Back from the background: the tiles their sources still have room for.
+    func resume(catalog: CatalogService, store: HouseholdStore, profileID: UUID?) {
+        guard let saved = suspended else { return }
+        suspended = nil
+        let tiles = MultiViewResume.tilesToReopen(
+            saved.channels.map { .init(tileID: $0.key, sourceID: $0.value.sourceID) },
+            states: streamStates(catalog: catalog, store: store)
+        )
+        for id in tiles {
+            guard let channel = saved.channels[id] else { continue }
+            play(channel, programme: catalog.nowAndNext(for: channel).now, inTile: id, catalog: catalog, store: store, profileID: profileID)
+        }
+        if let audible = saved.audibleTileID { giveSound(toTile: audible) }
     }
 
     func giveSound(toTile id: Int) {
@@ -172,6 +229,7 @@ final class MultiViewSession {
         guard model.tiles.indices.contains(id), let player = model.tiles[id].player else { return }
         model.giveSound(toTile: id)
         player.onShowMultiView = { [weak self] in self?.collapse() }
+        player.backReturnsToMultiView = true
         player.onClose = { [weak self] in self?.expandedPlayerClosed(tile: id) }
         expanded = Expanded(tileID: id, player: player)
     }
@@ -180,6 +238,7 @@ final class MultiViewSession {
     func collapse() {
         expanded?.player.onClose = nil
         expanded?.player.onShowMultiView = nil
+        expanded?.player.backReturnsToMultiView = false
         expanded = nil
     }
 

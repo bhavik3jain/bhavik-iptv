@@ -352,6 +352,25 @@ public enum LiveSeekPlan: Sendable, Equatable {
     }
 }
 
+// MARK: - The TV's Menu
+
+/// What Menu does in the TV's player, so it always does something and never
+/// more than one thing.
+public enum TVPlayerBack: Hashable, Sendable {
+    /// Back to the picture, the player still open.
+    case leaveControls
+    /// A multi-view tile shown full screen: back to the tiles, still playing.
+    case returnToMultiView
+    case close
+
+    /// The controls come first, unless they are all there is: a failure's
+    /// panel, or VoiceOver, where they never leave and Menu would do nothing.
+    public static func onMenu(controlsActive: Bool, hasFailed: Bool, voiceOverEnabled: Bool, returnsToMultiView: Bool) -> TVPlayerBack {
+        if controlsActive, !hasFailed, !voiceOverEnabled { return .leaveControls }
+        return returnsToMultiView ? .returnToMultiView : .close
+    }
+}
+
 // MARK: - Engine plan
 
 /// Which engine each attempt uses (PLY-1, PLY-4): the chooser's pick when it

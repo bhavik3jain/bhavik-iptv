@@ -160,26 +160,8 @@ struct MultiViewChannelPicker: View {
 
     // MARK: Logic
 
-    private enum Availability: Equatable {
-        case available
-        case onScreen
-        case sourceFull(String)
-
-        var note: String? {
-            switch self {
-            case .available: nil
-            case .onScreen: String(localized: "On screen")
-            case .sourceFull(let note): note
-            }
-        }
-    }
-
-    private func availability(of channel: CatalogChannel) -> Availability {
-        if onScreen.contains(channel.key) { return .onScreen }
-        if let state = statesByID[channel.sourceID], let note = StreamLimitAdvice.channelNote(state) {
-            return .sourceFull(note)
-        }
-        return .available
+    private func availability(of channel: CatalogChannel) -> MultiViewChannelAvailability {
+        MultiViewChannelAvailability.of(isOnScreen: onScreen.contains(channel.key), source: statesByID[channel.sourceID])
     }
 
     private func pick(_ channel: CatalogChannel) {

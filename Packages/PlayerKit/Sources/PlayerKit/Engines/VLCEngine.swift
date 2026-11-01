@@ -47,7 +47,7 @@ final class VLCEngine: PlaybackEngine {
         videoView.backColor = .black
         drawable = videoView
         #else
-        let view = UIView()
+        let view = VLCDrawableView()
         view.backgroundColor = .black
         view.clipsToBounds = true
         drawable = view
@@ -281,6 +281,23 @@ final class VLCEngine: PlaybackEngine {
         return options
     }
 }
+
+#if !os(macOS)
+/// What libvlc draws into. libvlc adds its own view at whatever size this has
+/// at that moment and leaves autoresizing to keep it there, but a view added at
+/// zero size stays at zero, and the picture then draws at the stream's native
+/// size in the corner. Whether a surface has laid this out by then is a race
+/// (one multi-view tile won it and the next three lost), so its subviews are
+/// simply kept filling it.
+final class VLCDrawableView: UIView {
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        for view in subviews where view.frame != bounds {
+            view.frame = bounds
+        }
+    }
+}
+#endif
 
 /// VLCKit's delegate. Nonisolated because libvlc calls it on its own
 /// threads; it only ever forwards to the main actor. Sendable as it stands:

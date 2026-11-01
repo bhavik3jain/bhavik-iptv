@@ -41,6 +41,12 @@ private struct LiveContentKey: Hashable {
     var isGuest: Bool
 }
 
+/// Multi-view opening over the TV's guide, with the channel it was asked for.
+private struct TVMultiViewRequest: Identifiable {
+    let id = UUID()
+    var channelKey: String?
+}
+
 /// Live TV (mockup 03): the title, the category chips, then the timeline
 /// guide or the channel list, and the programme card over them. In the
 /// sidebar layout the toolbar carries the title, Guide | Multi-view, the
@@ -66,6 +72,7 @@ struct LiveTVScreen: View {
     @State private var selection: GuideSelection?
     @State private var showsSearch = false
     @State private var showsFavoritesOrder = false
+    @State private var tvMultiView: TVMultiViewRequest?
     @State private var cache = GuideProgrammeCache()
     @State private var shortGuides = ShortGuideRequests()
     @ScaledMetric(relativeTo: .footnote) private var scaledRowHeight: CGFloat = 60
@@ -131,11 +138,19 @@ struct LiveTVScreen: View {
                 emptyMessage: tvEmptyMessage,
                 onSelectChip: select,
                 onToggleFavorite: toggleFavorite,
-                onPlay: { action, channel, programme in perform(action, channel: channel, programme: programme, now: now) }
+                onPlay: { action, channel, programme in perform(action, channel: channel, programme: programme, now: now) },
+                onOpenMultiView: catalog.sources.isEmpty ? nil : { channel in
+                    tvMultiView = TVMultiViewRequest(channelKey: channel?.key.rawValue)
+                }
             )
         }
         .hearthScreenBackground()
         .toolbar(.hidden, for: .automatic)
+        // A tvOS sheet is a narrow card; multi-view needs the whole screen.
+        .hearthFullScreenCover(item: $tvMultiView) { request in
+            MultiViewScreen(startingChannelKey: request.channelKey) { tvMultiView = nil }
+                .environment(\.hearthLayout, layout)
+        }
         .task(id: contentKey) {
             reload()
         }
