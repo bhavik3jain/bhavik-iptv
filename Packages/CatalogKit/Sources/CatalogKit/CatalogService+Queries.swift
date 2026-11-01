@@ -363,7 +363,13 @@ extension CatalogService {
         // Fetched past the limit so prefix matches further down the
         // alphabet can still rank first.
         let overfetch = limitPerGroup * 3
-        let channels = fetch(CatalogModel.Entity.channel, itemPredicate(applyingFilter: true, match), sort: Self.channelOrder, limit: overfetch)
+        // LIV-6: on the phone this is the only search, so a number finds
+        // channels by their number here too, as in `queryFindChannels`.
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let channelMatch: NSPredicate = trimmed.allSatisfy(\.isASCIIDigitCharacter)
+            ? NSCompoundPredicate(orPredicateWithSubpredicates: [NSPredicate(format: "numberText BEGINSWITH %@", trimmed), match])
+            : match
+        let channels = fetch(CatalogModel.Entity.channel, itemPredicate(applyingFilter: true, channelMatch), sort: Self.channelOrder, limit: overfetch)
         let movies = fetch(CatalogModel.Entity.movie, itemPredicate(applyingFilter: true, match), sort: Self.order(.name), limit: overfetch)
         let series = fetch(CatalogModel.Entity.series, itemPredicate(applyingFilter: true, match), sort: Self.order(.name), limit: overfetch)
 
