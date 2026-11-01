@@ -87,13 +87,20 @@ let allRoutes: [HearthRoute] = [
 }
 
 @Suite struct AppTabTests {
-    @Test func thePhonesFiveTabsInOrder() {
-        #expect(AppTab.primary == [.home, .live, .movies, .shows, .myList])
+    /// Home on iOS is Live TV, so no second tab shows the same screen.
+    @Test func thePhonesTabsInOrderWithLiveTVFirst() {
+        #expect(AppTab.primary == [.live, .movies, .shows, .myList])
+        #expect(AppTab.primary.first == AppTab.phoneStart)
     }
 
-    /// ⌘1–⌘6: the phone's five, then Downloads.
+    /// ⌘1–⌘6: the Mac keeps Home ahead of the phone's tabs, then Downloads.
     @Test func theMacSectionsInShortcutOrder() {
-        #expect(AppTab.macSections == AppTab.primary + [.downloads])
+        #expect(AppTab.macSections == [.home] + AppTab.primary + [.downloads])
+    }
+
+    /// The change to iOS's tabs leaves the TV's alone.
+    @Test func theTVKeepsHomeBesideLiveTV() {
+        #expect(AppTab.tv == [.search, .home, .live, .movies, .shows, .myList, .settings])
     }
 
     @Test func everyTabInSidebarOrder() {
@@ -122,6 +129,45 @@ let allRoutes: [HearthRoute] = [
         #expect(navigation.selection == .home)
         #expect(navigation.paths.isEmpty)
         #expect(navigation.sheet == nil)
+    }
+
+    @Test func aWindowCanStartOnAnotherTab() {
+        let navigation = AppNavigation(startTab: .live)
+        #expect(navigation.startTab == .live)
+        #expect(navigation.selection == .live)
+        #expect(navigation.paths.isEmpty)
+    }
+
+    /// A profile switch on iOS lands on Live TV, the first and only "home".
+    @Test func resetReturnsToTheStartTab() {
+        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.select(.shows)
+        navigation.open(show, gateShowing: false)
+        navigation.reset()
+        #expect(navigation.selection == .live)
+        #expect(navigation.paths.isEmpty)
+    }
+
+    /// `-OpenTab home` on iOS, where there's no Home tab, opens Live TV.
+    @Test func aTabTheWindowDoesntHaveFallsBackToTheStartTab() {
+        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.select(.home)
+        navigation.keepSelection(in: Set(AppTab.primary))
+        #expect(navigation.selection == .live)
+    }
+
+    @Test func aTabTheWindowHasStaysSelected() {
+        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.select(.myList)
+        navigation.keepSelection(in: Set(AppTab.primary))
+        #expect(navigation.selection == .myList)
+    }
+
+    @Test func theLiveGuideRouteOpensTheFirstTabOnIOS() {
+        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.select(.movies)
+        navigation.open(.liveGuide, gateShowing: false)
+        #expect(navigation.selection == AppTab.phoneStart)
     }
 
     @Test func openPushesOntoTheSelectedTabsStack() {

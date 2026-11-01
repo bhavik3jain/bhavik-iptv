@@ -1,6 +1,7 @@
 import CatalogKit
 import Core
 import HouseholdKit
+import PlayerKit
 import SwiftUI
 
 /// Timeline guide or plain list, remembered per device.
@@ -46,6 +47,13 @@ private struct LiveContentKey: Hashable {
 /// sidebar layout the toolbar carries the title, Guide | Multi-view, the
 /// list toggle and search; multi-view replaces the guide in place.
 struct LiveTVScreen: View {
+    /// In the phone's header, for Live TV as the first screen (`LiveTVView`).
+    let profileSwitcher: AnyView?
+
+    init(profileSwitcher: AnyView? = nil) {
+        self.profileSwitcher = profileSwitcher
+    }
+
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
@@ -242,27 +250,47 @@ struct LiveTVScreen: View {
     }
 
     /// The phone's header: the large title, and round buttons for the list
-    /// toggle and search, as in the mockup.
+    /// toggle and search, as in the mockup. As the first screen the profile
+    /// switcher takes the title's place, as on Home's header, and search looks
+    /// through everything: channels by name or number (LIV-6), and the movies
+    /// and shows nothing else on the phone searches together.
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
-            Text("Live TV")
-                .font(.hearthLargeTitle)
-                .tracking(HearthMetrics.titleTracking)
-                .foregroundStyle(HearthColor.textPrimary)
-                .accessibilityAddTraits(.isHeader)
+            if let profileSwitcher {
+                profileSwitcher
+            } else {
+                Text("Live TV")
+                    .font(.hearthLargeTitle)
+                    .tracking(HearthMetrics.titleTracking)
+                    .foregroundStyle(HearthColor.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+            }
             Spacer(minLength: 8)
             IconCircleButton(
                 systemName: presentation == .guide ? "list.bullet" : "calendar.day.timeline.left",
-                label: presentation == .guide ? String(localized: "Show channel list") : String(localized: "Show guide")
+                label: presentation == .guide ? String(localized: "Show channel list") : String(localized: "Show guide"),
+                style: headerButtonStyle
             ) {
                 togglePresentation()
             }
-            IconCircleButton(systemName: "magnifyingglass", label: String(localized: "Search channels")) {
-                showsSearch = true
+            if profileSwitcher != nil {
+                AirPlayRouteButton()
+                IconCircleButton(systemName: "magnifyingglass", label: String(localized: "Search"), style: headerButtonStyle) {
+                    openRoute(.search(query: ""))
+                }
+            } else {
+                IconCircleButton(systemName: "magnifyingglass", label: String(localized: "Search channels"), style: headerButtonStyle) {
+                    showsSearch = true
+                }
             }
         }
         .padding(.horizontal, HearthMetrics.screenPadding)
         .padding(.top, 8)
+    }
+
+    /// Beside AirPlay's raised circle the header's buttons match it.
+    private var headerButtonStyle: IconCircleButton.Style {
+        profileSwitcher == nil ? .surface : .raised
     }
 
     private var presentationToggle: some View {

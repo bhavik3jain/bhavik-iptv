@@ -14,10 +14,22 @@ import SwiftUI
 /// and From the start (LIV-3, LIV-4), channel search (LIV-6). In the sidebar
 /// layout the toolbar also offers Multi-view.
 public struct LiveTVView: View {
-    public init() {}
+    let profileSwitcher: AnyView?
+
+    public init() {
+        profileSwitcher = nil
+    }
+
+    /// Live TV as the first screen, on iOS: in the phone layout the header
+    /// holds the switcher the app passes in, so this never imports
+    /// ProfilesFeature, then AirPlay and a search of everything, which are
+    /// otherwise out of reach there. The sidebar layouts ignore it.
+    public init<ProfileSwitcher: View>(@ViewBuilder profileSwitcher: () -> ProfileSwitcher) {
+        self.profileSwitcher = AnyView(profileSwitcher())
+    }
 
     public var body: some View {
-        LiveTVScreen()
+        LiveTVScreen(profileSwitcher: profileSwitcher)
     }
 }
 

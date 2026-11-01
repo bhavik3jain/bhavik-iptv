@@ -6,6 +6,26 @@ import SwiftUI
 // running, or the first import failed. Each replaces the sections under the
 // header and sits in the middle of the remaining screen.
 
+/// What stands in for the screen while `HomeStatus` isn't `.ready`, on Home
+/// (the Mac) and in front of Live TV (iOS).
+struct HomeStartState: View {
+    let status: HomeStatus
+    let canManageHousehold: Bool
+
+    var body: some View {
+        switch status {
+        case .noSources:
+            NoSourcesState(canManageHousehold: canManageHousehold)
+        case .firstRefresh(let sourceName, let progress, let message):
+            FirstRefreshState(sourceName: sourceName, progress: progress, message: message)
+        case .failed(let sourceID, let sourceName, let message):
+            RefreshFailedState(sourceID: sourceID, sourceName: sourceName, message: message, canManageHousehold: canManageHousehold)
+        case .ready:
+            EmptyView()
+        }
+    }
+}
+
 /// The household has no source (HOME-1 empty state). Only someone who can
 /// manage the household can add one; everyone else is told who can.
 struct NoSourcesState: View {

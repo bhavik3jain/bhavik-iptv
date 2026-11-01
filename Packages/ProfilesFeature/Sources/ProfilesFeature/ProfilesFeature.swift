@@ -28,7 +28,7 @@ public struct WhoIsWatchingView: View {
 }
 
 /// The current profile's avatar, name and a chevron; a menu of the other
-/// profiles, Manage household and Settings (PRF-8). Home's header on the
+/// profiles, Manage household and Settings (PRF-8). Live TV's header on the
 /// phone, the top of the Mac sidebar (`style: .sidebar`).
 public struct ProfileSwitcherMenu: View {
     public enum Style: Sendable { case header, sidebar }

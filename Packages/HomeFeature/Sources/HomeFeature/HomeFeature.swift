@@ -8,10 +8,11 @@ import SwiftUI
 // Services come from the environment: CatalogService, HouseholdStore and
 // ProfileSession (injected by the app), plus Core's \.play and \.openRoute.
 
-/// Home for the current profile (mockup 02, HOME-1): Continue watching,
-/// favorite channels with what's on, up next in shows, new movies. The header
-/// holds the profile switcher, AirPlay and search; the app passes the
-/// switcher in so Home never imports ProfilesFeature.
+/// Home for the current profile on the Mac and the Apple TV (mockup 02,
+/// HOME-1): Continue watching, favorite channels with what's on, up next in
+/// shows, new movies. The header holds the profile switcher, AirPlay and
+/// search; the app passes the switcher in so Home never imports
+/// ProfilesFeature. iOS has `LiveHomeView` instead.
 ///
 /// Pass `EmptyView` where the switcher lives elsewhere (the Mac sidebar,
 /// PRF-8): the header then shows a "Home" title in its place.
@@ -90,21 +91,12 @@ public struct HomeView<ProfileSwitcher: View>: View {
 
     @ViewBuilder
     private var content: some View {
-        switch status {
-        case .noSources:
-            NoSourcesState(canManageHousehold: session.canManageHousehold)
-                .padding(.horizontal, gutter)
-                .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length * 0.7 }
-        case .firstRefresh(let sourceName, let progress, let message):
-            FirstRefreshState(sourceName: sourceName, progress: progress, message: message)
-                .padding(.horizontal, gutter)
-                .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length * 0.7 }
-        case .failed(let sourceID, let sourceName, let message):
-            RefreshFailedState(sourceID: sourceID, sourceName: sourceName, message: message, canManageHousehold: session.canManageHousehold)
-                .padding(.horizontal, gutter)
-                .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length * 0.7 }
-        case .ready:
+        if status == .ready {
             if hasLoaded { sections }
+        } else {
+            HomeStartState(status: status, canManageHousehold: session.canManageHousehold)
+                .padding(.horizontal, gutter)
+                .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length * 0.7 }
         }
     }
 
@@ -149,17 +141,8 @@ public struct HomeView<ProfileSwitcher: View>: View {
 
     // MARK: State
 
-    /// The household's live sources: the catalog's (what the app handed it)
-    /// plus any the store has that the app hasn't passed on yet, so a launch
-    /// never flashes "Add a source" at a household that has one.
     private var status: HomeStatus {
-        let records = store.sources.filter { !$0.isRemoved }
-        var ids = catalog.sources.map(\.id)
-        for record in records where !ids.contains(record.id) {
-            ids.append(record.id)
-        }
-        let names = Dictionary(records.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        return HomeStatus.make(sourceIDs: ids, names: names, refreshStates: catalog.refreshStates)
+        HomeStatus.make(catalogSourceIDs: catalog.sources.map(\.id), records: store.sources, refreshStates: catalog.refreshStates)
     }
 
     /// Read in `body`, so a catalog import, a guide load, a synced favorite or

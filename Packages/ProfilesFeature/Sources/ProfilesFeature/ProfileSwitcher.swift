@@ -2,7 +2,7 @@ import Core
 import HouseholdKit
 import SwiftUI
 
-/// The profile switcher (PRF-8): Home's header on the phone (mockup 02: the
+/// The profile switcher (PRF-8): Live TV's header on the phone (mockup 02: the
 /// avatar, the name in Sora and a chevron) and the card at the top of the Mac
 /// sidebar (mockup 07: avatar, name, household, up/down chevrons).
 ///
