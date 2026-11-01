@@ -1,0 +1,27 @@
+# The Apple TV's scripted remote and its back-and-focus checks: a tvOS UI-test
+# bundle aimed at the Hearth Dev app already installed on a simulator, because
+# only XCUIRemote can press Menu there. Its own project, so nothing here ships
+# in the app. Run it with scripts/tv-remote/remote.sh, which generates this
+# project outside the repo.
+name: HearthTVRemote
+options:
+  bundleIdPrefix: com.bhavikjain.hearth.tvremote
+targets:
+  TVRemoteTests:
+    type: bundle.ui-testing
+    platform: tvOS
+    deploymentTarget: "18.0"
+    sources: [Sources]
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGN_IDENTITY: "-"
+      DEVELOPMENT_TEAM: ""
+      SWIFT_VERSION: "5.0"
+schemes:
+  TVRemote:
+    build:
+      targets:
+        TVRemoteTests: [test]
+    test:
+      targets: [TVRemoteTests]

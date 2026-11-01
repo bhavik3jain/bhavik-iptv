@@ -25,10 +25,10 @@ struct HouseholdCard: View {
     /// The owner's controls (rename, invite, roles, remove) need the owner's
     /// device on a profile that may manage: not a Guest handed the iPad. The
     /// TV only shows the household (tvOS can't send an invitation).
-    private var canAdminister: Bool { isOwner && session.canManageHousehold && layout != .tv }
+    private var canAdminister: Bool { isOwner && HouseholdEditing.isOffered(canManage: session.canManageHousehold, layout: layout) }
     /// Leaving takes the household off every one of this person's devices,
     /// so a Guest profile doesn't get the button, nor does the TV.
-    private var canLeave: Bool { !isOwner && !session.isGuest && layout != .tv }
+    private var canLeave: Bool { !isOwner && HouseholdEditing.isOffered(canManage: !session.isGuest, layout: layout) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

@@ -24,6 +24,23 @@ struct Household {
         #expect(PINSteps.adultsWithPIN(in: [home.gran, home.kid, home.lockedKid, home.guest]).isEmpty)
     }
 
+    // Menu on the TV's gate goes back to the profile just left...
+    @Test func goingBackFromTheGateFindsTheProfileLeft() {
+        #expect(GateBack.profile(previousID: home.gran.id, profiles: home.all)?.id == home.gran.id)
+        #expect(GateBack.profile(previousID: nil, profiles: home.all) == nil)
+        // Deleted on another device while the gate was up: Menu just leaves.
+        #expect(GateBack.profile(previousID: home.gran.id, profiles: [home.mum, home.dad]) == nil)
+    }
+
+    // ...and can't be used to walk past a PIN: the gate has no current profile.
+    @Test func goingBackFromTheGateStillAsksForThePIN() throws {
+        let back = try #require(GateBack.profile(previousID: home.mum.id, profiles: home.all))
+        let steps = PINSteps.forSwitch(from: nil, to: back, profiles: home.all)
+        #expect(steps.map(\.purpose) == [.profile])
+        #expect(steps.first?.profileIDs == [home.mum.id])
+        #expect(PINSteps.forSwitch(from: nil, to: home.gran, profiles: home.all).isEmpty)
+    }
+
     @Test func anUnlockedProfileNeedsNothing() {
         #expect(PINSteps.forSwitch(from: home.mum, to: home.gran, profiles: home.all).isEmpty)
         #expect(PINSteps.forSwitch(from: nil, to: home.kid, profiles: home.all).isEmpty)

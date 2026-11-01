@@ -7,6 +7,18 @@ import HouseholdKit
 // switch needs, what a tile's caption says, how the household card reads, and
 // the source-visibility arithmetic of the editor.
 
+// MARK: - Back from the gate
+
+/// Where the TV's Menu button goes on "Who's watching?".
+enum GateBack {
+    /// The profile Switch Profile left, if the household still has it. Nil
+    /// means Menu leaves the app, as it does at launch. Going back is a
+    /// switch like any other, so `PINSteps` still guards it.
+    static func profile(previousID: UUID?, profiles: [ProfileRecord]) -> ProfileRecord? {
+        previousID.flatMap { id in profiles.first { $0.id == id } }
+    }
+}
+
 // MARK: - PINs a switch needs (PRF-3, PRF-4)
 
 /// One PIN to type before a switch goes ahead: a profile's own PIN, or any

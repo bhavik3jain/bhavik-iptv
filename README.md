@@ -76,6 +76,7 @@ xcodebuild build -project Hearth.xcodeproj -scheme Hearth-tvOS \
 | `scripts/run-sim.sh "<simulator>" [args…]` | Generates the project, builds Debug for that simulator, boots it, opens Device Hub, installs and launches Hearth Dev with `-StubProvider YES -InMemoryStores YES` plus your arguments |
 | `scripts/run-mac-local.sh [--no-launch] [args…]` | Builds Debug `Hearth-macOS` unsigned, signs it ad hoc, and runs it the same way in the foreground |
 | `scripts/run-tv.sh ["<Apple TV>"] [args…]` | Builds Debug `Hearth-tvOS` for an Apple TV simulator (Apple TV 4K (3rd generation) by default), boots it and launches Hearth Dev with `-StubProvider YES -InMemoryStores YES` plus your arguments |
+| `scripts/tv-remote/remote.sh press "<steps>" [folder]` · `check` | Presses the Apple TV simulator's remote, Menu included, printing what holds focus; `check` runs the back, focus and layout flows and checks where the stores land. Install the app with `scripts/run-tv.sh` first |
 | `scripts/testflight.sh ios\|mac\|tv\|all [--no-upload]` | Archives Release and uploads to TestFlight from this Mac (see Release) |
 | `scripts/cloudkit/init-schema.sh [--simulator ["<name>"]]` | Sends the household model's schema to CloudKit Development (see Release) |
 | `scripts/pick-simulator.sh ["<name>"]` | Prints a simulator's UDID: that name, else iPhone Duo, else the newest runtime's iPhone. CI and the scripts above use it |

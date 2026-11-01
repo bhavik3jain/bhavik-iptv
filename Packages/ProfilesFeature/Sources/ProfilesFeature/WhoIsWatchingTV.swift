@@ -65,9 +65,8 @@ struct WhoIsWatchingTVScreen: View {
         .hearthOnExitCommand(previousProfile.map { profile in { choose(profile) } })
     }
 
-    /// The profile Switch Profile left, if the household still has it.
     private var previousProfile: ProfileRecord? {
-        session.previousProfileID.flatMap { id in store.profiles.first { $0.id == id } }
+        GateBack.profile(previousID: session.previousProfileID, profiles: store.profiles)
     }
 
     // MARK: Profiles

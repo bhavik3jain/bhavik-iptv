@@ -433,6 +433,41 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
         #expect(link.url.absoluteString == "https://fake.test/episode/s1/new-e12")
     }
 
+    // Playing rebuilds the episode from its stored row, and Stalker finds an
+    // episode's file by its season's id.
+    @Test func anEpisodesSeasonIDReachesTheProviderAtPlay() async throws {
+        let (service, fake) = await importedService()
+        let sourceID = fake.configuration.id
+        let anatomy = try #require(service.seriesItem(.series(source: sourceID, id: "s1")))
+        _ = try await service.episodes(for: anatomy)
+
+        // An episode that doesn't say gets its season's.
+        _ = try await service.streamLink(for: .episode(source: sourceID, seriesID: "s1", season: 2, number: 1))
+        guard case .episode(let episode, _)? = fake.streamRequests.last else {
+            Issue.record("Expected an episode request")
+            return
+        }
+        #expect(episode.seasonID == "s1-season-2")
+    }
+
+    @Test func anEpisodesOwnSeasonIDWinsOverItsSeasons() async throws {
+        var fixture = Fixtures.catalog()
+        var detail = try #require(fixture.details["s1"])
+        detail.episodes = detail.episodes.map { var episode = $0; episode.seasonID = "own-\($0.season)"; return episode }
+        fixture.details["s1"] = detail
+        let (service, fake) = await importedService(fixture)
+        let sourceID = fake.configuration.id
+        let anatomy = try #require(service.seriesItem(.series(source: sourceID, id: "s1")))
+        _ = try await service.episodes(for: anatomy)
+
+        _ = try await service.streamLink(for: .episode(source: sourceID, seriesID: "s1", season: 1, number: 2))
+        guard case .episode(let episode, _)? = fake.streamRequests.last else {
+            Issue.record("Expected an episode request")
+            return
+        }
+        #expect(episode.seasonID == "own-1")
+    }
+
     @Test func replacementKeysFollowRenumberingAndNewIDs() async throws {
         var fixture = Fixtures.catalog()
         fixture.channels.append(RemoteChannel(id: "201", number: 20, name: "News 24", command: "x"))
