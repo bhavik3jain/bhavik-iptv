@@ -141,7 +141,7 @@ struct WindowPresentations: ViewModifier {
             }
             #endif
             .hearthFullScreenCover(isPresented: multiViewShowing) {
-                MultiViewSheet { playback.multiViewSceneID = nil }
+                MultiViewSheet(startingChannelKey: playback.multiViewStartingChannelKey) { playback.multiViewSceneID = nil }
                     .environment(services.catalog)
                     .environment(services.store)
                     .environment(services.session)
@@ -251,11 +251,16 @@ extension View {
 }
 
 /// Multi-view opened from the player's top bar (PLY-9): Live TV's screen
-/// with a way back.
+/// with a way back. On the TV the way back is the remote's Menu, and the
+/// screen draws its own bar.
 private struct MultiViewSheet: View {
+    let startingChannelKey: String?
     let onDone: () -> Void
 
     var body: some View {
+        #if os(tvOS)
+        MultiViewScreen(startingChannelKey: startingChannelKey, onClose: onDone)
+        #else
         NavigationStack {
             MultiViewScreen()
                 .navigationTitle(Text("Multi-view"))
@@ -269,6 +274,7 @@ private struct MultiViewSheet: View {
                 }
         }
         .hearthScreenBackground()
+        #endif
     }
 }
 

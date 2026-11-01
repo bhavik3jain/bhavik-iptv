@@ -316,3 +316,65 @@ struct VLCKitInfoTests {
         #expect(LiveEdgeOffset.target(recommended: .infinity) == nil)
     }
 }
+
+@Suite struct TVPlayerBackTests {
+    @Test func theControlsGoFirst() {
+        #expect(TVPlayerBack.onMenu(controlsActive: true, hasFailed: false, voiceOverEnabled: false, returnsToMultiView: false) == .leaveControls)
+        #expect(TVPlayerBack.onMenu(controlsActive: true, hasFailed: false, voiceOverEnabled: false, returnsToMultiView: true) == .leaveControls)
+    }
+
+    @Test func fromThePictureItCloses() {
+        #expect(TVPlayerBack.onMenu(controlsActive: false, hasFailed: false, voiceOverEnabled: false, returnsToMultiView: false) == .close)
+    }
+
+    @Test func aFullScreenTileGoesBackToTheTilesInstead() {
+        #expect(TVPlayerBack.onMenu(controlsActive: false, hasFailed: false, voiceOverEnabled: false, returnsToMultiView: true) == .returnToMultiView)
+    }
+
+    @Test func aFailureHasNoPictureToGoBackTo() {
+        #expect(TVPlayerBack.onMenu(controlsActive: true, hasFailed: true, voiceOverEnabled: false, returnsToMultiView: false) == .close)
+        #expect(TVPlayerBack.onMenu(controlsActive: true, hasFailed: true, voiceOverEnabled: false, returnsToMultiView: true) == .returnToMultiView)
+    }
+
+    @Test func voiceOverKeepsTheControlsSoMenuMustStillLeave() {
+        #expect(TVPlayerBack.onMenu(controlsActive: true, hasFailed: false, voiceOverEnabled: true, returnsToMultiView: false) == .close)
+        #expect(TVPlayerBack.onMenu(controlsActive: true, hasFailed: false, voiceOverEnabled: true, returnsToMultiView: true) == .returnToMultiView)
+    }
+}
+
+@Suite @MainActor struct EngineVideoSurfaceTests {
+    @Test func anUnheldViewIsTaken() {
+        #expect(EngineVideoSurface.takesContentOnUpdate(currentOwner: nil))
+    }
+
+    @Test func aViewAnotherSurfaceHoldsIsLeftThere() {
+        // The outgoing surface's last update, after the incoming one was
+        // made: taking it back turned a full-screen tile's picture black.
+        #expect(!EngineVideoSurface.takesContentOnUpdate(currentOwner: PlatformView()))
+    }
+}
+
+#if canImport(VLCKit) && !os(macOS)
+import UIKit
+
+@Suite @MainActor struct VLCDrawableViewTests {
+    @Test func libvlcsViewAddedAtZeroSizeFillsTheDrawableOnceItHasOne() {
+        // The picture drew at native size in a tile's corner without this.
+        let drawable = VLCDrawableView()
+        let libvlcsView = UIView()
+        drawable.addSubview(libvlcsView)
+        drawable.frame = CGRect(x: 0, y: 0, width: 745, height: 419)
+        drawable.layoutIfNeeded()
+        #expect(libvlcsView.frame == drawable.bounds)
+    }
+
+    @Test func itFollowsTheDrawableFromATileToFullScreen() {
+        let drawable = VLCDrawableView(frame: CGRect(x: 0, y: 0, width: 745, height: 419))
+        let libvlcsView = UIView(frame: drawable.bounds)
+        drawable.addSubview(libvlcsView)
+        drawable.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        drawable.layoutIfNeeded()
+        #expect(libvlcsView.frame == drawable.bounds)
+    }
+}
+#endif

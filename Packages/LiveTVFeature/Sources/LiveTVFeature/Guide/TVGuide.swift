@@ -11,13 +11,14 @@ import SwiftUI
 /// programme cell is a button sized by its duration — select watches it:
 /// live when it is on, from the archive when it aired and the archive has it
 /// (LIV-4), the channel live when it is still to come. Press and hold for
-/// From the start, the channel's page and favorites.
+/// From the start, the channel's page, favorites and multi-view.
 ///
 /// Time moves in pages rather than by scrolling: each row ends in an
 /// invisible focus target on either side, and moving onto one (a swipe or a
 /// click past the first or last cell) shifts the three hours back or on and
 /// puts focus on the programme before or after. "Now" in the ruler comes
-/// back to the present.
+/// back to the present. Multi-view opens from the start of the categories'
+/// row, or with a channel from a programme's press-and-hold menu.
 struct TVLiveGuide: View {
     let chips: [LiveChip]
     let chip: LiveChip
@@ -34,6 +35,9 @@ struct TVLiveGuide: View {
     let onSelectChip: (LiveChip) -> Void
     let onToggleFavorite: (CatalogChannel) -> Void
     let onPlay: (ProgrammeAction, CatalogChannel, CatalogProgramme?) -> Void
+    /// Opens multi-view, with a channel if one was chosen; nil hides the way
+    /// in (no sources yet).
+    let onOpenMultiView: ((CatalogChannel?) -> Void)?
 
     @Environment(CatalogService.self) private var catalog
     @Environment(\.openRoute) private var openRoute
@@ -93,23 +97,34 @@ struct TVLiveGuide: View {
     // MARK: Categories
 
     private var chipRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 20) {
-                ForEach(chips) { item in
-                    Button(item.title) {
-                        onSelectChip(item)
-                    }
-                    .buttonStyle(.hearthTV(isSelected: item == chip))
-                    .accessibilityAddTraits(item == chip ? .isSelected : [])
+        HStack(spacing: 20) {
+            if let onOpenMultiView {
+                Button {
+                    onOpenMultiView(nil)
+                } label: {
+                    Label(String(localized: "Multi-view"), systemImage: "rectangle.grid.2x2")
                 }
+                .buttonStyle(.hearthTV)
+                .accessibilityHint(Text("Watch up to four channels at once"))
             }
-            .padding(.vertical, 18)
+            ScrollView(.horizontal) {
+                HStack(spacing: 20) {
+                    ForEach(chips) { item in
+                        Button(item.title) {
+                            onSelectChip(item)
+                        }
+                        .buttonStyle(.hearthTV(isSelected: item == chip))
+                        .accessibilityAddTraits(item == chip ? .isSelected : [])
+                    }
+                }
+                .padding(.vertical, 18)
+            }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text("Categories"))
         }
-        .scrollIndicators(.hidden)
-        .scrollClipDisabled()
         .hearthFocusSection()
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Categories"))
     }
 
     // MARK: Ruler
@@ -188,7 +203,8 @@ struct TVLiveGuide: View {
                         focus: $focus,
                         onPlay: { action, programme in onPlay(action, channel, programme) },
                         onToggleFavorite: { onToggleFavorite(channel) },
-                        onOpenChannel: { openRoute(.channel(itemKey: channel.key.rawValue)) }
+                        onOpenChannel: { openRoute(.channel(itemKey: channel.key.rawValue)) },
+                        onOpenMultiView: onOpenMultiView.map { open in { open(channel) } }
                     )
                     .onAppear { shortGuides.request(channel, catalog: catalog) }
                     .id(channel.key)
@@ -411,6 +427,7 @@ private struct TVGuideRow: View {
     let onPlay: (ProgrammeAction, CatalogProgramme?) -> Void
     let onToggleFavorite: () -> Void
     let onOpenChannel: () -> Void
+    let onOpenMultiView: (() -> Void)?
 
     private static let gap: CGFloat = 8
 
@@ -534,6 +551,11 @@ private struct TVGuideRow: View {
             }
             Button(action: onOpenChannel) {
                 Label(String(localized: "Open channel"), systemImage: "tv")
+            }
+            if let onOpenMultiView {
+                Button(action: onOpenMultiView) {
+                    Label(String(localized: "Watch in multi-view"), systemImage: "rectangle.grid.2x2")
+                }
             }
             if keepsFavorites {
                 Button(action: onToggleFavorite) {

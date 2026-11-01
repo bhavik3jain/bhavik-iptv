@@ -78,6 +78,10 @@ public final class PlayerModel: Identifiable {
     public var onClose: (() -> Void)?
     /// Shows the multi-view button in the top bar; the owner opens it.
     public var onShowMultiView: (() -> Void)?
+    /// A multi-view tile shown full screen: the TV's Menu goes back to it
+    /// through `onShowMultiView` with the stream still running, rather than
+    /// closing the player and reopening the channel in the tile.
+    public var backReturnsToMultiView = false
     /// After a final failure, offers the same channel from another source
     /// (PLY-4's last step). The owner knows whether one exists; nil hides it.
     public var onTryAnotherSource: (() -> Void)?

@@ -16,7 +16,7 @@ final class PlayerSession: Identifiable {
     /// prompt. Nil when a launch argument started it.
     let sceneID: UUID?
     /// The window's layout when it asked: the multi-view button is offered
-    /// only in the sidebar layout.
+    /// only in the wide layouts (the sidebar, the TV).
     let layout: HearthLayout
     let profileID: UUID
     let isGuest: Bool
@@ -93,6 +93,9 @@ final class PlaybackCoordinator {
     var notice: PlaybackNotice?
     /// The window that asked for multi-view from the player.
     var multiViewSceneID: UUID?
+    /// The live channel the TV's player was showing, which multi-view opens
+    /// with. Nil from anything but a channel.
+    var multiViewStartingChannelKey: String?
 
     /// The window most recently used, for plays a launch argument starts.
     @ObservationIgnored var lastSceneID: UUID?
@@ -287,10 +290,16 @@ final class PlaybackCoordinator {
             guard let self, let playerSession else { return }
             self.closed(playerSession)
         }
-        if layout == .sidebar {
+        if layout.isWide {
             model.onShowMultiView = { [weak self, weak playerSession] in
                 guard let self else { return }
                 let scene = playerSession?.sceneID ?? self.lastSceneID
+                // On the TV the channel comes along: picking it again with a
+                // remote is the long way round. Its stream is given back
+                // first, so it counts against its source only once.
+                self.multiViewStartingChannelKey = layout == .tv
+                    ? playerSession.flatMap { $0.items.context(for: $0.model.item.id)?.channel?.key.rawValue }
+                    : nil
                 self.closeCurrent()
                 self.multiViewSceneID = scene
             }

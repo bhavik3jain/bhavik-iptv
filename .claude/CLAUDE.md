@@ -25,7 +25,7 @@ Hearth (working title) — an IPTV player for Stalker portals, Xtream logins and
 - Features ask `@Environment(\.hearthLayout)` — `.compact`, `.sidebar` or `.tv` — never the platform, the idiom, the orientation or `UIScreen.main`. `.sidebar` is the Mac, iPad and iPhone Duo's inner display, `.tv` the Apple TV; the app sets it once with `.hearthLayoutFromSizeClass()`.
 - `App/Sources` is the composition root and may use `#if os(...)` directly. Kits may too (PlayerKit's engine views, HouseholdKit's one nudge).
 - `if #available(iOS 26, *)` doesn't gate macOS: write `#available(iOS 26, macOS 26, *)`.
-- iPhone tab bar: five tabs. Sidebar-only tabs (Search, Household, Settings) are added only at regular width — `.tabPlacement(.sidebarOnly)` alone still folds them into a "More" tab on the phone and hides My List.
+- iOS has no Home tab: it opens on Live TV, with Live TV, Movies, Shows and My List (`AppTab.primary`, the owner's call on 2026-11-01). The Mac and Apple TV keep Home. Sidebar-only tabs (Search, Household, Settings) are added only at regular width — `.tabPlacement(.sidebarOnly)` alone still folds them into a "More" tab on the phone once there are more than five.
 
 ## iPhone Duo
 
@@ -39,6 +39,7 @@ Folded it's a compact iPhone; opened it's regular × regular (≈466×678 pt, st
 - The TV adds nothing itself: sources and profiles arrive through iCloud from an iPhone, iPad or Mac, and its Household is read-only (`HouseholdEditing`). The simulator has no iCloud account, so a `REAL=YES` run saying "This Apple TV isn't signed in to iCloud" is correct.
 - A tvOS `.sheet` is a narrow card in the middle of the screen: a page goes full screen (`WindowPresentations` in `App/Sources/AppRootView.swift`).
 - **Menu:** with the player's controls in focus, it goes back to the picture and a second press closes the player, by design (`TVPlayerScreen`). At the tab bar it quits to the TV's home screen, which is normal tvOS. A screen that must not quit, such as the gate after Switch Profile, handles it with `hearthOnExitCommand`.
+- **Don't stack full-screen covers:** a dismissing one hands focus to the screen behind the one still showing, so the next press acts on something nobody can see. Multi-view draws its picker and full-screen tile inside its one presentation for this reason.
 - The focus engine goes by geometry, so down from the tab bar can land in a far corner. Name the landing spot with `.defaultFocus(_:_:priority: .userInitiated)`.
 - **Pressing the remote:** the Claude simulator tool has arrows and Return but no Menu, and Device Hub may show no window to send keys to. `scripts/tv-remote/remote.sh press "down,select,wait,menu" [screenshot folder]` presses anything and prints what holds focus. `scripts/tv-remote/remote.sh check` runs the back, focus and layout flows and checks where the stores land. CI has no tvOS runtime, so run `check` yourself after changing anything on the TV. Elements under a full-screen cover stay in the accessibility tree, so `exists` can't show that a screen closed: check what holds focus.
 

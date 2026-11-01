@@ -75,6 +75,13 @@ struct MultiViewGridGeometry: Hashable, Sendable {
         }
         return best
     }
+
+    /// The tiles in rows of `columns`, in reading order.
+    static func rows<Tile>(of tiles: [Tile], columns: Int) -> [[Tile]] {
+        stride(from: 0, to: tiles.count, by: max(columns, 1)).map { start in
+            Array(tiles[start..<min(start + max(columns, 1), tiles.count)])
+        }
+    }
 }
 
 /// A source's streams right now, as multi-view counts them: other devices'

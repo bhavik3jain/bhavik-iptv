@@ -157,7 +157,7 @@ extension MediaTrack {
 
 extension PlaybackState {
     /// The message of a failed state, nil otherwise.
-    var failureMessage: String? {
+    public var failureMessage: String? {
         if case .failed(let message) = self { return message }
         return nil
     }

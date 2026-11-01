@@ -63,7 +63,7 @@ struct MultiViewContent: View {
         .sheet(item: $picker) { request in
             MultiViewChannelPicker(
                 title: request.isSwap ? String(localized: "Change channel") : String(localized: "Add a channel"),
-                states: streamStates(excludingTile: request.isSwap ? request.tileID : nil),
+                states: multiView.streamStates(catalog: catalog, store: store, excludingTile: request.isSwap ? request.tileID : nil),
                 onScreen: multiView.channelKeysOnScreen
             ) { channel in
                 play(channel, inTile: request.tileID)
@@ -209,9 +209,7 @@ struct MultiViewContent: View {
         GeometryReader { proxy in
             let tiles = multiView.visibleTiles
             let geometry = MultiViewGridGeometry.make(tileCount: tiles.count, available: proxy.size, spacing: Self.spacing)
-            let rows = stride(from: 0, to: tiles.count, by: max(geometry.columns, 1)).map { start in
-                Array(tiles[start..<min(start + geometry.columns, tiles.count)])
-            }
+            let rows = MultiViewGridGeometry.rows(of: tiles, columns: geometry.columns)
             VStack(spacing: Self.spacing) {
                 ForEach(rows.indices, id: \.self) { index in
                     HStack(spacing: Self.spacing) {
@@ -348,32 +346,8 @@ struct MultiViewContent: View {
 
     // MARK: Stream limits
 
-    /// Each source the profile can see, with its streams in use: other
-    /// devices' who's-watching rows plus this screen's tiles.
-    private func streamStates(excludingTile excluded: Int? = nil) -> [SourceStreamState] {
-        let own = multiView.ownPlaybackIDs
-        let visible = catalog.filter.visibleSourceIDs
-        return catalog.sources
-            .filter { visible?.contains($0.id) ?? true }
-            .map { source in
-                let record = store.sources.first { $0.id == source.id }
-                let limit = SourceLimits.limit(
-                    kindRaw: source.kind.rawValue,
-                    maxStreams: record?.maxStreams ?? SourceLimits.defaultMaxStreams(kindRaw: source.kind.rawValue),
-                    accountMaxConnections: catalog.account(sourceID: source.id)?.maxConnections
-                )
-                let others = store.streamUsage(sourceID: source.id, limit: limit).inUse.filter { !own.contains($0.id) }.count
-                return SourceStreamState(
-                    sourceID: source.id,
-                    name: source.name,
-                    inUse: others + multiView.tileCount(onSource: source.id, excludingTile: excluded),
-                    limit: limit
-                )
-            }
-    }
-
     private var emptyTileReason: String? {
-        StreamLimitAdvice.emptyTileReason(streamStates())
+        StreamLimitAdvice.emptyTileReason(multiView.streamStates(catalog: catalog, store: store))
     }
 }
 
