@@ -73,19 +73,9 @@ struct ChannelListView: View {
             .accessibilityHint(Text("Plays the channel live"))
 
             if showsFavorites {
-                Button {
+                ChannelHeartButton(channelName: channel.name, isFavorite: isFavorite) {
                     onToggleFavorite(channel)
-                } label: {
-                    Image(systemName: isFavorite ? "heart.fill" : "heart")
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(isFavorite ? HearthColor.accent : HearthColor.textTertiary)
-                        .contentTransition(.symbolEffect(.replace))
-                        .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(isFavorite ? "Remove \(channel.name) from favorites" : "Add \(channel.name) to favorites"))
-                .sensoryFeedback(.selection, trigger: isFavorite)
             }
 
             NavigationLink(value: HearthRoute.channel(itemKey: channel.key.rawValue)) {

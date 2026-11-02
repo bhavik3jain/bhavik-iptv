@@ -1,7 +1,82 @@
 import Core
 import Foundation
+import Observation
 import Testing
 @testable import HouseholdKit
+
+/// Fired by `withObservationTracking`, which wants a sendable closure.
+private final class ChangeFlag: @unchecked Sendable {
+    var fired = false
+}
+
+/// The hearts on Search's channel rows and on Find a channel.
+@MainActor
+@Suite struct ChannelFavoritesTests {
+    // FAV-1: favorited from the list, without opening the channel's page.
+    @Test func aHeartWritesWhereHomeAndTheGuideReadFavorites() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile
+        let key = TestKeys.channel("1")
+
+        let before = ChannelFavorites(store: store, profile: profile)
+        #expect(before.canChange)
+        #expect(!before.contains(key))
+
+        before.toggle(key)
+        #expect(store.favorites(profileID: profile.id, kind: .channel).map(\.itemKey) == [key])
+        let after = ChannelFavorites(store: store, profile: profile)
+        #expect(after.contains(key))
+
+        after.toggle(key)
+        #expect(store.favorites(profileID: profile.id, kind: .channel).isEmpty)
+        #expect(!ChannelFavorites(store: store, profile: profile).contains(key))
+    }
+
+    /// A view that builds one in its `body` must redraw after a toggle, or
+    /// the heart stays an outline until the screen is next opened.
+    @Test func aToggleRedrawsWhoeverBuiltIt() throws {
+        let store = try makeStore()
+        let flag = ChangeFlag()
+        let favorites = withObservationTracking {
+            ChannelFavorites(store: store, profile: store.firstProfile)
+        } onChange: {
+            flag.fired = true
+        }
+        favorites.toggle(TestKeys.channel("1"))
+        #expect(flag.fired)
+    }
+
+    // PRF-7
+    @Test func heartsAreTheCurrentProfiles() throws {
+        let store = try makeStore()
+        let other = try #require(store.addProfile(name: "Anya", kind: .standard, avatarColor: .teal))
+        let key = TestKeys.channel("1")
+        ChannelFavorites(store: store, profile: store.firstProfile).toggle(key)
+        #expect(!ChannelFavorites(store: store, profile: other).contains(key))
+    }
+
+    // PRF-5
+    @Test func aGuestGetsNoHeartsAndWritesNothing() throws {
+        let store = try makeStore()
+        let guest = try #require(store.addProfile(name: "Guest", kind: .guest, avatarColor: .slate))
+        let before = store.count(HouseholdModel.Entity.favorite)
+
+        let favorites = ChannelFavorites(store: store, profile: guest)
+        #expect(!favorites.canChange)
+        favorites.toggle(TestKeys.channel("1"))
+        #expect(store.count(HouseholdModel.Entity.favorite) == before)
+    }
+
+    @Test func noHeartsBeforeAProfileIsChosen() throws {
+        let store = try makeStore()
+        let before = store.count(HouseholdModel.Entity.favorite)
+
+        let favorites = ChannelFavorites(store: store, profile: nil)
+        #expect(!favorites.canChange)
+        favorites.toggle(TestKeys.channel("1"))
+        #expect(store.count(HouseholdModel.Entity.favorite) == before)
+    }
+}
 
 @MainActor
 @Suite struct FavoriteTests {

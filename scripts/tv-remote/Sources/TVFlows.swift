@@ -173,6 +173,41 @@ final class TVFlows: XCTestCase {
         XCTAssertTrue(waitForGate(toBeShowing: true), "Menu should go back to the gate")
     }
 
+    // MARK: Search
+
+    /// A channel search finds is favorited from its hold menu, with no trip
+    /// through the channel's guide. The menu then offers the opposite, which
+    /// shows the first press reached the store and the card was redrawn.
+    func testAChannelFoundBySearchIsFavoritedFromItsHoldMenu() throws {
+        press(.left)
+        expectFocus("Search")
+        // The tab takes focus before its keyboard has loaded, and until then
+        // down has nowhere to go.
+        var presses = 0
+        while !app.focusDescription.contains("Keyboard"), presses < 8 {
+            press(.down)
+            presses += 1
+        }
+        expectFocus("Keyboard")
+        // Types whichever letter has focus; most of them find the demo's channels.
+        press(.select)
+        XCTAssertTrue(app.staticTexts["Channels"].waitForExistence(timeout: 5), "The letter should find channels")
+        press(.down)
+
+        // tvOS draws a hold menu's items as plain elements, not buttons.
+        let everything = app.descendants(matching: .any)
+        let add = everything.matching(NSPredicate(format: "label == 'Add to favorites'")).firstMatch
+        let remove = everything.matching(NSPredicate(format: "label == 'Remove from favorites'")).firstMatch
+        hold()
+        XCTAssertTrue(remove.waitForExistence(timeout: 5) || add.exists, "The hold menu should offer the heart")
+        let wasFavorite = remove.exists
+        press(.select)
+        Thread.sleep(forTimeInterval: 1)
+        hold()
+        XCTAssertTrue((wasFavorite ? add : remove).waitForExistence(timeout: 5), "The menu should now offer the opposite")
+        press(.menu)
+    }
+
     // MARK: Layout
 
     /// The backdrop sits behind the scroll view, which used to be only as
@@ -196,6 +231,11 @@ final class TVFlows: XCTestCase {
             remote.press(button)
             Thread.sleep(forTimeInterval: 0.6)
         }
+    }
+
+    private func hold() {
+        remote.press(.select, forDuration: 1.5)
+        Thread.sleep(forTimeInterval: 0.6)
     }
 
     private func openGateFromSettings() {

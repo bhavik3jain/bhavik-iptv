@@ -5,14 +5,16 @@ import SwiftUI
 
 /// Find a channel by name or number (LIV-6). Results come from the catalog
 /// as you type (it matches the number's start and every word of the name);
-/// a tap plays the channel live with the results as the queue, the info
-/// button opens its page, and Return plays the first result — type "101",
-/// press Return, watch.
+/// a tap plays the channel live with the results as the queue, the heart
+/// favorites it where it stands, the info button opens its page, and Return
+/// plays the first result — type "101", press Return, watch.
 struct ChannelSearchSheet: View {
     let onPlay: (CatalogChannel, [CatalogChannel]) -> Void
     let onOpenChannel: (CatalogChannel) -> Void
 
     @Environment(CatalogService.self) private var catalog
+    @Environment(HouseholdStore.self) private var store
+    @Environment(ProfileSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var results: [CatalogChannel] = []
@@ -20,6 +22,7 @@ struct ChannelSearchSheet: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
+        let favorites = ChannelFavorites(store: store, profile: session.currentProfile)
         NavigationStack {
             VStack(spacing: 12) {
                 SearchField(String(localized: "Channel name or number"), text: $query, focus: $isFocused) {
@@ -30,7 +33,7 @@ struct ChannelSearchSheet: View {
                 .padding(.top, 8)
 
                 TimelineView(.everyMinute) { context in
-                    resultsList(now: context.date)
+                    resultsList(now: context.date, favorites: favorites)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -61,7 +64,7 @@ struct ChannelSearchSheet: View {
     }
 
     @ViewBuilder
-    private func resultsList(now: Date) -> some View {
+    private func resultsList(now: Date, favorites: ChannelFavorites) -> some View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             EmptyStateView(
@@ -90,6 +93,12 @@ struct ChannelSearchSheet: View {
                             }
                             .buttonStyle(.hearthTile)
                             .accessibilityHint(Text("Plays the channel live"))
+
+                            if favorites.canChange {
+                                ChannelHeartButton(channelName: channel.name, isFavorite: favorites.contains(channel.key.rawValue)) {
+                                    favorites.toggle(channel.key.rawValue)
+                                }
+                            }
 
                             Button {
                                 dismiss()
