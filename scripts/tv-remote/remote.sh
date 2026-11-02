@@ -6,7 +6,7 @@
 #   scripts/tv-remote/remote.sh check [one flow, like testAMoviesPageSpansTheScreen]
 #
 # press drives whatever is on screen, one comma-separated step at a time: up,
-# down, left, right, select, menu, playpause, wait (1 s), shot. It prints what
+# down, left, right, select, hold, menu, playpause, wait (1 s), shot. It prints what
 # holds focus after each, and stops if the app leaves the foreground: Menu at
 # the tab bar quits to the TV's home screen, as on any tvOS app. Screenshots are
 # 3840x2160; shrink them with `sips -Z 1280` before reading them.

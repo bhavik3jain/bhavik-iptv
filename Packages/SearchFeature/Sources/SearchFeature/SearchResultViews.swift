@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import HouseholdKit
 import SwiftUI
 
 // The results: four groups (SRCH-2) drawn with Core's components. On the phone
@@ -18,8 +19,11 @@ struct SearchResultsList: View {
     let onActivate: () -> Void
 
     @Environment(\.hearthLayout) private var layout
+    @Environment(HouseholdStore.self) private var store
+    @Environment(ProfileSession.self) private var session
 
     var body: some View {
+        let favorites = ChannelFavorites(store: store, profile: session.currentProfile)
         VStack(alignment: .leading, spacing: HearthMetrics.sectionSpacing + 6) {
             let listSections = groups.sections.filter { $0 == .channels || $0 == .onTV }
             if !listSections.isEmpty {
@@ -32,12 +36,12 @@ struct SearchResultsList: View {
                         spacing: HearthMetrics.sectionSpacing + 6
                     ) {
                         ForEach(listSections) { section in
-                            listSection(section)
+                            listSection(section, favorites: favorites)
                         }
                     }
                 } else {
                     ForEach(listSections) { section in
-                        listSection(section)
+                        listSection(section, favorites: favorites)
                     }
                 }
             }
@@ -52,7 +56,7 @@ struct SearchResultsList: View {
 
     // MARK: Sections
 
-    @ViewBuilder private func listSection(_ section: SearchSection) -> some View {
+    @ViewBuilder private func listSection(_ section: SearchSection, favorites: ChannelFavorites) -> some View {
         let total = groups.count(of: section)
         let isExpanded = expanded.contains(section)
         let visible = SearchResultLimits.visibleCount(total: total, section: section, layout: layout, expanded: isExpanded)
@@ -62,7 +66,7 @@ struct SearchResultsList: View {
                 case .channels:
                     let queue = groups.channels.map(\.key.rawValue)
                     ForEach(groups.channels.prefix(visible)) { channel in
-                        ChannelResultButton(channel: channel, queue: queue, showsSourceName: showsSourceNames, onActivate: onActivate)
+                        ChannelResultButton(channel: channel, queue: queue, favorites: favorites, showsSourceName: showsSourceNames, onActivate: onActivate)
                     }
                 case .onTV:
                     ForEach(groups.programmes.prefix(visible)) { hit in
@@ -242,10 +246,12 @@ private struct ShowAllRow: View {
 // MARK: - Channels
 
 /// A channel hit: logo, number, name and what's on now. A tap plays it live;
-/// channel up and down then walk the channels this search found.
+/// channel up and down then walk the channels this search found. The heart
+/// favorites it from here, without going through its guide.
 private struct ChannelResultButton: View {
     let channel: CatalogChannel
     let queue: [String]
+    let favorites: ChannelFavorites
     let showsSourceName: Bool
     let onActivate: () -> Void
 
@@ -259,22 +265,35 @@ private struct ChannelResultButton: View {
         let _ = catalog.revision
         TimelineView(.everyMinute) { context in
             let now = catalog.nowAndNext(for: channel, at: context.date).now
-            Button {
-                onActivate()
-                play(PlayIntent(
-                    itemKey: channel.key.rawValue,
-                    kind: .live,
-                    title: channel.name,
-                    subtitle: now?.title,
-                    artworkURL: channel.logoURL,
-                    queue: queue
-                ))
-            } label: {
-                ChannelResultRow(channel: channel, programme: now, showsSourceName: showsSourceName, date: context.date)
+            let isFavorite = favorites.contains(channel.key.rawValue)
+            HStack(spacing: 4) {
+                Button {
+                    onActivate()
+                    play(PlayIntent(
+                        itemKey: channel.key.rawValue,
+                        kind: .live,
+                        title: channel.name,
+                        subtitle: now?.title,
+                        artworkURL: channel.logoURL,
+                        queue: queue
+                    ))
+                } label: {
+                    ChannelResultRow(channel: channel, programme: now, showsSourceName: showsSourceName, date: context.date)
+                }
+                .buttonStyle(.hearthTile)
+                .accessibilityHint(Text("Plays the channel live", bundle: .module))
+
+                if favorites.canChange {
+                    ChannelHeartButton(channelName: channel.name, isFavorite: isFavorite, action: toggleFavorite)
+                        // The glyph, not its touch area, lines up with the
+                        // card's edge.
+                        .padding(.trailing, -10)
+                }
             }
-            .buttonStyle(.hearthTile)
-            .accessibilityHint(Text("Plays the channel live", bundle: .module))
             .contextMenu {
+                if favorites.canChange {
+                    ChannelFavoriteMenuButton(isFavorite: isFavorite, action: toggleFavorite)
+                }
                 Button {
                     onActivate()
                     openRoute(.channel(itemKey: channel.key.rawValue))
@@ -282,6 +301,26 @@ private struct ChannelResultButton: View {
                     Label(String(localized: "Open channel guide", bundle: .module), systemImage: "list.bullet.rectangle")
                 }
             }
+        }
+    }
+
+    private func toggleFavorite() {
+        onActivate()
+        favorites.toggle(channel.key.rawValue)
+    }
+}
+
+/// "Add to favorites" in a channel result's hold menu.
+struct ChannelFavoriteMenuButton: View {
+    let isFavorite: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(
+                isFavorite ? String(localized: "Remove from favorites", bundle: .module) : String(localized: "Add to favorites", bundle: .module),
+                systemImage: isFavorite ? "heart.slash" : "heart"
+            )
         }
     }
 }

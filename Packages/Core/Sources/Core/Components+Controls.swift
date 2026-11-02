@@ -1,7 +1,38 @@
 import SwiftUI
 
 // Controls from the mockups: the season picker, the amber switch, the dark
-// search field and the dashed "add" tiles.
+// search field, a channel row's heart and the dashed "add" tiles.
+
+/// The bare heart at the end of a channel's row (FAV-1): an outline, then
+/// filled amber once the channel is a favorite. The glyph is small and the
+/// touch area is still 44 pt.
+public struct ChannelHeartButton: View {
+    private let channelName: String
+    private let isFavorite: Bool
+    private let action: () -> Void
+
+    public init(channelName: String, isFavorite: Bool, action: @escaping () -> Void) {
+        self.channelName = channelName
+        self.isFavorite = isFavorite
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: isFavorite ? "heart.fill" : "heart")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(isFavorite ? HearthColor.accent : HearthColor.textTertiary)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(isFavorite
+            ? String(localized: "Remove \(channelName) from favorites", bundle: .module)
+            : String(localized: "Add \(channelName) to favorites", bundle: .module)))
+        .sensoryFeedback(.selection, trigger: isFavorite)
+    }
+}
 
 /// A row of segments on a dark track, the selected one raised: "Season 1 /
 /// Season 2 / Season 3" on a show, "Guide / Multi-view" in the Mac toolbar.

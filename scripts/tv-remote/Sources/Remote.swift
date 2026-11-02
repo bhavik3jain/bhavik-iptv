@@ -1,8 +1,8 @@
 import XCTest
 
 /// A scripted Siri Remote for the app already running on the Apple TV
-/// simulator. `STEPS` is a comma list: up, down, left, right, select, menu,
-/// playpause, wait (1 s), shot. After each it prints what holds focus; with
+/// simulator. `STEPS` is a comma list: up, down, left, right, select, hold,
+/// menu, playpause, wait (1 s), shot. After each it prints what holds focus; with
 /// `OUT` set it saves a screenshot per step there. It stops when the app
 /// leaves the foreground, so later presses can't land on the TV's own home
 /// screen and open something else.
@@ -23,6 +23,7 @@ final class Remote: XCTestCase {
             case "left": remote.press(.left)
             case "right": remote.press(.right)
             case "select": remote.press(.select)
+            case "hold": remote.press(.select, forDuration: 1.5)
             case "menu": remote.press(.menu)
             case "playpause": remote.press(.playPause)
             case "wait": Thread.sleep(forTimeInterval: 1)

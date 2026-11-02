@@ -1,25 +1,29 @@
 import CatalogKit
 import Core
+import HouseholdKit
 import SwiftUI
 
 /// Search's results on the Apple TV, under tvOS's own search keyboard
-/// (`.searchable`): one shelf per kind — channels (select plays live), on TV
-/// in the next 24 hours (live, from the archive, or the channel's page),
+/// (`.searchable`): one shelf per kind — channels (select plays live, hold to
+/// favorite or open the guide), on TV in the next 24 hours (live, from the archive, or the channel's page),
 /// movies and shows (select opens them).
 struct SearchTVResults: View {
     let groups: SearchResultGroups
     let onActivate: () -> Void
 
     @Environment(CatalogService.self) private var catalog
+    @Environment(HouseholdStore.self) private var store
+    @Environment(ProfileSession.self) private var session
     @Environment(\.play) private var play
     @Environment(\.openRoute) private var openRoute
 
     var body: some View {
         let _ = catalog.revision
+        let favorites = ChannelFavorites(store: store, profile: session.currentProfile)
         TimelineView(.everyMinute) { context in
             VStack(alignment: .leading, spacing: HearthTVMetrics.shelfSpacing) {
                 if !groups.channels.isEmpty {
-                    channels(at: context.date)
+                    channels(at: context.date, favorites: favorites)
                 }
                 if !groups.programmes.isEmpty {
                     programmes(at: context.date)
@@ -46,7 +50,7 @@ struct SearchTVResults: View {
         }
     }
 
-    private func channels(at date: Date) -> some View {
+    private func channels(at date: Date, favorites: ChannelFavorites) -> some View {
         let queue = groups.channels.map(\.key.rawValue)
         return TVShelf(String(localized: "Channels", bundle: .module)) {
             ForEach(groups.channels) { channel in
@@ -65,6 +69,12 @@ struct SearchTVResults: View {
                     )
                 }
                 .contextMenu {
+                    if favorites.canChange {
+                        ChannelFavoriteMenuButton(isFavorite: favorites.contains(channel.key.rawValue)) {
+                            onActivate()
+                            favorites.toggle(channel.key.rawValue)
+                        }
+                    }
                     Button {
                         onActivate()
                         openRoute(.channel(itemKey: channel.key.rawValue))
