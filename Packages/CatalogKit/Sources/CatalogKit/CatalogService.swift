@@ -197,6 +197,12 @@ public final class CatalogService {
         queryFindChannels(query)
     }
 
+    /// `findChannels`, followed by the channels showing a matching programme
+    /// at `now`, for someone looking for an event rather than a channel.
+    public func findChannels(_ query: String, includingWhatsOnAt now: Date) -> [CatalogChannel] {
+        queryFindChannelsIncludingWhatsOn(query, now: now)
+    }
+
     /// A channel's programmes overlapping `from..<to`, by start.
     public func programmes(for channel: CatalogChannel, from: Date, to: Date) -> [CatalogProgramme] {
         queryProgrammes(for: channel, from: from, to: to)
@@ -266,6 +272,16 @@ public final class CatalogService {
     /// provider now. For catch-up pass the programme start and duration.
     public func streamLink(for key: ItemKey, catchupStart: Date? = nil, catchupDuration: TimeInterval? = nil) async throws -> StreamLink {
         try await resolveStreamLink(for: key, catchupStart: catchupStart, catchupDuration: catchupDuration)
+    }
+
+    /// Signs in to each source ahead of the first play, so a channel doesn't
+    /// wait for it (1.6–2 s on the owner's portal, before its link is even
+    /// asked for). After any import running, which signs in by itself.
+    public func warmUp() async {
+        await waitForBackgroundRefreshes()
+        for configuration in sources {
+            _ = try? await readyClient(for: configuration)
+        }
     }
 
     /// Keeps a Stalker session alive while something plays from it.

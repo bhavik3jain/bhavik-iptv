@@ -412,6 +412,51 @@ func importedService(_ fixture: FakeSourceClient.Fixture = Fixtures.catalog(), c
 }
 
 @MainActor
+@Suite struct FindByWhatsOnTests {
+    // "redzone" on channels whose names don't say so.
+    @Test func aChannelShowingTheProgrammeIsFoundAfterTheNamedOnes() async throws {
+        var fixture = Fixtures.catalog()
+        let now = Date()
+        fixture.guide = [
+            RemoteProgramme(guideChannelID: "bbc1.uk", start: now.addingTimeInterval(-600), end: now.addingTimeInterval(600), title: "NFL RedZone"),
+            RemoteProgramme(guideChannelID: "sky.sports", start: now.addingTimeInterval(-600), end: now.addingTimeInterval(600), title: "NFL RedZone"),
+            RemoteProgramme(guideChannelID: "102", start: now.addingTimeInterval(3_600), end: now.addingTimeInterval(7_200), title: "NFL RedZone"),
+        ]
+        let (service, _) = await importedService(fixture)
+
+        #expect(service.findChannels("redzone").isEmpty, "The plain search is names and numbers")
+        let found = service.findChannels("redzone", includingWhatsOnAt: now)
+        // Café TV (guide "102") shows it in an hour, not now.
+        #expect(Set(found.map(\.name)) == ["BBC One", "Sky Sports"])
+        #expect(service.findChannels("sky", includingWhatsOnAt: now).map(\.name) == ["Sky Sports"])
+    }
+
+    @Test func aChannelMatchingByNameAndByProgrammeComesOnce() async throws {
+        var fixture = Fixtures.catalog()
+        let now = Date()
+        fixture.guide = [
+            RemoteProgramme(guideChannelID: "sky.sports", start: now.addingTimeInterval(-600), end: now.addingTimeInterval(600), title: "Sky Sports News"),
+            RemoteProgramme(guideChannelID: "bbc1.uk", start: now.addingTimeInterval(-600), end: now.addingTimeInterval(600), title: "Sky at Night"),
+        ]
+        let (service, _) = await importedService(fixture)
+        // The channel named Sky first, then the one showing it.
+        #expect(service.findChannels("sky", includingWhatsOnAt: now).map(\.name) == ["Sky Sports", "BBC One"])
+    }
+
+    @Test func warmingUpDoesntSignInTwice() async throws {
+        let fake = FakeSourceClient(configuration: Fixtures.configuration(), fixture: Fixtures.catalog())
+        let service = CatalogService(storeURL: nil, clientFactory: { _ in fake })
+        await service.warmUp()
+        #expect(fake.calls.filter { $0 == "signIn" }.isEmpty, "No sources yet")
+        service.setSources([fake.configuration])
+        await service.waitForBackgroundRefreshes()
+        let afterImport = fake.calls.filter { $0 == "signIn" }.count
+        await service.warmUp()
+        #expect(fake.calls.filter { $0 == "signIn" }.count == afterImport, "An import already signed in")
+    }
+}
+
+@MainActor
 @Suite struct StableKeyTests {
     @Test func episodesAreKeyedBySeasonAndNumber() async throws {
         let (service, fake) = await importedService()

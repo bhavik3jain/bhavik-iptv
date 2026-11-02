@@ -84,16 +84,20 @@ import Testing
 
 @Suite struct TVMultiViewBackTests {
     @Test func menuLeavesThePickerFirst() {
-        #expect(TVMultiViewBack.onMenu(hasPicker: true, hasFullScreen: false) == .closePicker)
-        #expect(TVMultiViewBack.onMenu(hasPicker: true, hasFullScreen: true) == .closePicker)
+        #expect(TVMultiViewBack.onMenu(hasPicker: true, hasFullScreen: false, hasPlayingTiles: true) == .closePicker)
+        #expect(TVMultiViewBack.onMenu(hasPicker: true, hasFullScreen: true, hasPlayingTiles: true) == .closePicker)
     }
 
     @Test func thenTheFullScreenTile() {
-        #expect(TVMultiViewBack.onMenu(hasPicker: false, hasFullScreen: true) == .closeFullScreen)
+        #expect(TVMultiViewBack.onMenu(hasPicker: false, hasFullScreen: true, hasPlayingTiles: true) == .closeFullScreen)
     }
 
-    @Test func thenMultiViewItself() {
-        #expect(TVMultiViewBack.onMenu(hasPicker: false, hasFullScreen: false) == .leave)
+    @Test func thenMultiViewItselfAskingWhileChannelsPlay() {
+        #expect(TVMultiViewBack.onMenu(hasPicker: false, hasFullScreen: false, hasPlayingTiles: true) == .confirmLeaving)
+    }
+
+    @Test func nothingPlayingLeavesWithoutAsking() {
+        #expect(TVMultiViewBack.onMenu(hasPicker: false, hasFullScreen: false, hasPlayingTiles: false) == .leave)
     }
 }
 

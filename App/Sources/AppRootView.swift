@@ -82,6 +82,18 @@ struct WindowPresentations: ViewModifier {
     func body(content: Content) -> some View {
         @Bindable var navigation = navigation
         content
+            .overlay(alignment: backgroundBarAlignment) {
+                if let item = playback.backgroundPlayback {
+                    BackgroundPlaybackBar(
+                        item: item,
+                        onReturn: { playback.returnToBackground(sceneID: sceneID) },
+                        onStop: { playback.stopBackground() }
+                    )
+                    .padding(backgroundBarPadding)
+                    .transition(.opacity)
+                }
+            }
+            .environment(playback.multiViewBackground)
             #if os(tvOS)
             // A tvOS sheet is a narrow card in the middle of the room, which
             // squeezes a page; the TV's pages fill the screen and Menu
@@ -145,6 +157,7 @@ struct WindowPresentations: ViewModifier {
                     .environment(services.catalog)
                     .environment(services.store)
                     .environment(services.session)
+                    .environment(playback.multiViewBackground)
                     .environment(\.play, playAction)
                     .environment(\.hearthLayout, layout)
             }
@@ -164,8 +177,10 @@ struct WindowPresentations: ViewModifier {
             })
             .onAppear { playback.lastSceneID = sceneID }
             .onChange(of: session.currentProfile?.id) { _, _ in
-                // A profile switch: nothing of the last profile's browsing stays.
+                // A profile switch: nothing of the last profile's browsing
+                // stays, nor anything of theirs still playing.
                 navigation.reset()
+                playback.stopBackground()
             }
             .task(id: model.pendingLaunchTab) {
                 if let tab = model.pendingLaunchTab {
@@ -191,6 +206,26 @@ struct WindowPresentations: ViewModifier {
         let layout = layout
         return PlayAction { intent in
             playback.play(intent, sceneID: sceneID, layout: layout)
+        }
+    }
+
+    // MARK: The way back to what's running
+
+    /// Above the phone's tab bar; beside the TV's, where right from the last
+    /// tab reaches it; in a corner otherwise.
+    private var backgroundBarAlignment: Alignment {
+        switch layout {
+        case .compact: .bottom
+        case .sidebar: .bottomTrailing
+        case .tv: .topTrailing
+        }
+    }
+
+    private var backgroundBarPadding: EdgeInsets {
+        switch layout {
+        case .compact: EdgeInsets(top: 0, leading: 12, bottom: 64, trailing: 12)
+        case .sidebar: EdgeInsets(top: 0, leading: 0, bottom: 20, trailing: 20)
+        case .tv: EdgeInsets()
         }
     }
 

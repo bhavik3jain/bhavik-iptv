@@ -111,19 +111,24 @@ public struct LiveClock: Sendable, Equatable {
     }
 }
 
-/// How far behind a live HLS stream's edge AVPlayer plays. Left alone it
-/// sits where the stream recommends, three target durations back: with the
-/// owner's provider's 6 s segments that's 18 s, about 10 s behind iSTB or a
-/// MAG box, which play a segment or two from the end. Half the
-/// recommendation keeps a segment and a half of buffer; never under 4 s,
-/// unless the recommendation itself is.
+/// How far behind a live HLS stream's edge AVPlayer starts. Left alone it
+/// sits where the stream recommends, three target durations back: 18–21 s with
+/// the owner's provider's 6–7 s segments, about 10 s behind iSTB or a MAG box,
+/// which play a segment or two from the end. Twelve seconds keeps about two
+/// segments of buffer.
+///
+/// Given to the item before it loads, never by seeking once it's ready: that
+/// seek threw away what AVPlayer had buffered and cost 0.7–1.8 s on every
+/// channel start, measured on the owner's portal. Set up front, it starts as
+/// fast as leaving it alone. The recommendation isn't known that early, so
+/// this is one number rather than a share of it.
 enum LiveEdgeOffset {
-    static let floor: TimeInterval = 4
+    static let seconds: TimeInterval = 12
 
-    /// Nil when the stream gives no usable recommendation.
-    static func target(recommended: TimeInterval) -> TimeInterval? {
-        guard recommended.isFinite, recommended > 0 else { return nil }
-        return max(min(recommended, floor), recommended / 2)
+    /// Nil when the stream isn't live, or starts somewhere of its own.
+    static func initial(isLive: Bool, startPosition: TimeInterval?) -> TimeInterval? {
+        guard isLive, (startPosition ?? 0) <= 0 else { return nil }
+        return seconds
     }
 }
 

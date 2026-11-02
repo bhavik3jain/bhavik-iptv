@@ -133,6 +133,7 @@ final class AppModel {
         services.session.restore()
         startObserving(services)
         Task { await services.playback.downloadsLaunched() }
+        Task { await services.catalog.warmUp() }
         phase = .ready
         readyWaiters.forEach { $0.resume() }
         readyWaiters.removeAll()
@@ -249,6 +250,13 @@ final class AppModel {
         guard phase == .ready, let services else { return }
         services.store.purgeStalePlaybacks()
         refreshIfStale()
+        #if os(tvOS)
+        services.playback.multiViewBackground.resume(
+            catalog: services.catalog,
+            store: services.store,
+            profileID: services.session.currentProfile?.id
+        )
+        #endif
     }
 
     /// The app went to the background: progress now, not at the next
@@ -256,6 +264,10 @@ final class AppModel {
     /// next guide refresh asked for.
     func enteredBackground() {
         services?.playback.saveProgressNow()
+        #if os(tvOS)
+        // Tiles kept running would hold every stream behind the Home screen.
+        if let services { services.playback.multiViewBackground.suspend(store: services.store) }
+        #endif
         GuideRefreshScheduler.schedule()
     }
 

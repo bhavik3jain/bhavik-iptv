@@ -32,6 +32,7 @@ struct MultiViewContent: View {
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
+    @Environment(MultiViewBackground.self) private var background: MultiViewBackground?
     @Environment(\.hearthLayout) private var layout
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -82,7 +83,11 @@ struct MultiViewContent: View {
             }
         }
         .onAppear {
-            if let stored = MultiViewArrangement(rawValue: arrangementRaw) {
+            // Back from a full-screen tile, this screen's tiles are its own.
+            guard multiView.occupants.isEmpty else { return }
+            if let kept = background?.take() {
+                multiView = kept
+            } else if let stored = MultiViewArrangement(rawValue: arrangementRaw) {
                 multiView.setArrangement(stored, store: store)
             }
         }
@@ -111,6 +116,7 @@ struct MultiViewContent: View {
                 arrangementButtons
                 Spacer(minLength: 4)
                 soundLabel
+                keepPlayingButton
                 AirPlayRouteButton()
             }
             .frame(minHeight: 52)
@@ -130,6 +136,7 @@ struct MultiViewContent: View {
                     if showsModePicker { arrangementButtons }
                     soundLabel
                     Spacer(minLength: 0)
+                    keepPlayingButton
                 }
                 .frame(minHeight: showsModePicker ? 44 : 0)
             }
@@ -328,6 +335,27 @@ struct MultiViewContent: View {
     }
 
     // MARK: Actions
+
+    /// Leaves with the tiles still playing, and the app's button to return.
+    @ViewBuilder
+    private var keepPlayingButton: some View {
+        if background != nil, !multiView.occupants.isEmpty {
+            Button {
+                background?.keep(multiView, catalog: catalog, store: store)
+                // What this screen closes as it goes is now nothing.
+                multiView = MultiViewSession()
+                if let onShowGuide { onShowGuide() } else { dismiss() }
+            } label: {
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(HearthColor.textPrimary)
+                    .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Keep playing in the background"))
+        }
+    }
 
     private func play(_ channel: CatalogChannel, inTile id: Int) {
         let programme = catalog.nowAndNext(for: channel).now

@@ -64,17 +64,25 @@ enum TVMultiViewFocusRules {
 }
 
 /// What Menu does on the screen: the picker first, then the full-screen
-/// player, then multi-view itself. Never nothing, and never out of the app.
+/// player, then multi-view itself, asking first when that would stop channels
+/// that are playing. Never nothing, and never out of the app.
 enum TVMultiViewBack: Hashable, Sendable {
     case closePicker
     case closeFullScreen
+    case confirmLeaving
     case leave
 
-    static func onMenu(hasPicker: Bool, hasFullScreen: Bool) -> TVMultiViewBack {
+    static func onMenu(hasPicker: Bool, hasFullScreen: Bool, hasPlayingTiles: Bool) -> TVMultiViewBack {
         if hasPicker { return .closePicker }
         if hasFullScreen { return .closeFullScreen }
-        return .leave
+        return hasPlayingTiles ? .confirmLeaving : .leave
     }
+}
+
+/// How long the focused tile keeps its white ring once the remote goes quiet,
+/// so it doesn't sit around a picture someone is watching.
+enum TVMultiViewFocusRing {
+    static let idleDelay: Duration = .seconds(4)
 }
 
 /// Whether a channel in the picker can be chosen, and what its row says if

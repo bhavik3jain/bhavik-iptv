@@ -444,8 +444,13 @@ public struct StreamLink: Sendable, Hashable {
 public struct SourceCapabilities: Sendable, Hashable {
     public var hasMovies: Bool
     public var hasSeries: Bool
-    /// One call returns the whole guide (Xtream `xmltv.php`, an XMLTV file).
+    /// One call returns the whole guide (Xtream `xmltv.php`, an XMLTV file,
+    /// Stalker's `get_epg_info`).
     public var hasFullGuide: Bool
+    /// The guide can also be asked for one channel at a time (`shortGuide`),
+    /// as channels scroll by. On a Stalker portal that reaches further ahead
+    /// than its full guide does.
+    public var hasShortGuide: Bool
     public var hasCatchup: Bool
     /// The provider reports its stream limit and use (Xtream only).
     public var reportsStreamCount: Bool
@@ -453,13 +458,14 @@ public struct SourceCapabilities: Sendable, Hashable {
     /// a Stalker portal, whose catalog can be too big to keep on a device.
     public var searchesCatalog: Bool
 
-    public init(hasMovies: Bool, hasSeries: Bool, hasFullGuide: Bool, hasCatchup: Bool, reportsStreamCount: Bool, searchesCatalog: Bool = false) {
+    public init(hasMovies: Bool, hasSeries: Bool, hasFullGuide: Bool, hasCatchup: Bool, reportsStreamCount: Bool, searchesCatalog: Bool = false, hasShortGuide: Bool? = nil) {
         self.hasMovies = hasMovies
         self.hasSeries = hasSeries
         self.hasFullGuide = hasFullGuide
         self.hasCatchup = hasCatchup
         self.reportsStreamCount = reportsStreamCount
         self.searchesCatalog = searchesCatalog
+        self.hasShortGuide = hasShortGuide ?? !hasFullGuide
     }
 }
 

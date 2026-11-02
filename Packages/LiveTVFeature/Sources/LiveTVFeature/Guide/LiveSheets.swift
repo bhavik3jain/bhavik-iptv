@@ -55,7 +55,7 @@ struct ChannelSearchSheet: View {
             // A short pause so each keystroke doesn't run a fetch.
             if !results.isEmpty { try? await Task.sleep(for: .milliseconds(150)) }
             guard !Task.isCancelled else { return }
-            results = catalog.findChannels(trimmed)
+            results = catalog.findChannels(trimmed, includingWhatsOnAt: .now)
         }
         .onAppear { isFocused = true }
     }

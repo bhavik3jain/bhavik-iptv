@@ -4,7 +4,8 @@ import SwiftUI
 /// One multi-view tile on the Apple TV (PLY-9 at ten feet): one focusable
 /// button whatever it shows, so a tile keeps focus when its channel starts,
 /// fails or goes full screen. Focus is a thick white ring and a slight lift,
-/// as tvOS draws it; amber stays the mark of the tile with the sound.
+/// as tvOS draws it, which the screen can hide (`showsFocus`) while the remote
+/// is idle; amber stays the mark of the tile with the sound.
 ///
 /// A touch tile (`PlayerTileView`) takes taps on the picture, which the TV
 /// doesn't have, and its type is sized for a hand's reach. Nothing here is
@@ -19,24 +20,28 @@ public struct TVPlayerTile: View {
 
     private let content: Content
     private let hint: String?
+    private let showsFocus: Bool
     private let action: () -> Void
 
     /// - Parameters:
     ///   - hint: What Select does on a playing tile, shown only while it has
     ///     focus; an empty tile's "Add a channel" already says. Also the hint
     ///     VoiceOver reads.
+    ///   - showsFocus: Whether the focused tile looks focused, ring, lift and
+    ///     hint. It keeps focus either way, so the remote still works on it.
     ///   - action: Select.
-    public init(content: Content, hint: String?, action: @escaping () -> Void) {
+    public init(content: Content, hint: String?, showsFocus: Bool = true, action: @escaping () -> Void) {
         self.content = content
         self.hint = hint
+        self.showsFocus = showsFocus
         self.action = action
     }
 
     public var body: some View {
         Button(action: action) {
-            TVTileLabel(content: content, hint: hint)
+            TVTileLabel(content: content, hint: hint, showsFocus: showsFocus)
         }
-        .buttonStyle(TVTileButtonStyle())
+        .buttonStyle(TVTileButtonStyle(showsFocus: showsFocus))
     }
 }
 
@@ -51,13 +56,14 @@ private enum TVTileMetrics {
 private struct TVTileLabel: View {
     let content: TVPlayerTile.Content
     let hint: String?
+    let showsFocus: Bool
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         Group {
             switch content {
             case .playing(let player, let hasSound, let sourceName):
-                TVPlayingTile(player: player, hasSound: hasSound, sourceName: sourceName, hint: isFocused ? hint : nil)
+                TVPlayingTile(player: player, hasSound: hasSound, sourceName: sourceName, hint: isFocused && showsFocus ? hint : nil)
             case .fullScreen(let name):
                 TVTileMessage(
                     systemName: "arrow.up.left.and.arrow.down.right",
@@ -272,20 +278,25 @@ private struct TVTileMessage: View {
 
 /// The white ring and the lift, for a label the size of a picture.
 private struct TVTileButtonStyle: ButtonStyle {
+    let showsFocus: Bool
+
     func makeBody(configuration: Configuration) -> some View {
-        TVTileButtonBody(configuration: configuration)
+        TVTileButtonBody(configuration: configuration, showsFocus: showsFocus)
     }
 }
 
 private struct TVTileButtonBody: View {
     let configuration: ButtonStyleConfiguration
+    let showsFocus: Bool
     @Environment(\.isFocused) private var isFocused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var looksFocused: Bool { isFocused && showsFocus }
 
     var body: some View {
         configuration.label
             .overlay {
-                if isFocused {
+                if looksFocused {
                     RoundedRectangle(cornerRadius: TVTileMetrics.radius + TVTileMetrics.focusRing, style: .continuous)
                         .strokeBorder(.white, lineWidth: TVTileMetrics.focusRing)
                         .padding(-TVTileMetrics.focusRing)
@@ -293,13 +304,13 @@ private struct TVTileButtonBody: View {
                 }
             }
             .scaleEffect(scale)
-            .shadow(color: .black.opacity(isFocused ? 0.6 : 0), radius: 24, y: 12)
+            .shadow(color: .black.opacity(looksFocused ? 0.6 : 0), radius: 24, y: 12)
             .zIndex(isFocused ? 1 : 0)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isFocused)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: looksFocused)
     }
 
     private var scale: CGFloat {
-        guard isFocused, !reduceMotion else { return 1 }
+        guard looksFocused, !reduceMotion else { return 1 }
         return configuration.isPressed ? 1 : TVTileMetrics.focusScale
     }
 }

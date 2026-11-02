@@ -3,10 +3,38 @@ import Core
 import DownloadKit
 import Foundation
 import HouseholdKit
+import LiveTVFeature
 import Observation
 import os
 import PlayerKit
 import SourceKit
+
+/// What plays while someone browses, for the button back to it.
+struct BackgroundPlayback: Equatable {
+    enum Kind: Equatable {
+        case player
+        case multiView
+    }
+
+    let kind: Kind
+    let title: String
+
+    var systemImage: String {
+        switch kind {
+        case .player: "play.fill"
+        case .multiView: "rectangle.grid.2x2"
+        }
+    }
+
+    var returnLabel: String { String(localized: "Return to \(title)") }
+
+    var stopLabel: String {
+        switch kind {
+        case .player: String(localized: "Stop \(title)")
+        case .multiView: String(localized: "Stop multi-view")
+        }
+    }
+}
 
 /// One open player and what it is recording.
 @MainActor
@@ -89,6 +117,12 @@ struct PlaybackNotice: Identifiable {
 @Observable
 final class PlaybackCoordinator {
     private(set) var current: PlayerSession?
+    /// The player taken off screen with its stream still going; it stays
+    /// `current`, so it's closed like any other when something else plays.
+    private(set) var backgroundPlayerID: UUID?
+    /// Multi-view kept running the same way. One thing at a time: each holds
+    /// streams, and two sounds at once help nobody.
+    let multiViewBackground = MultiViewBackground()
     var limitPrompt: StreamLimitPrompt?
     var notice: PlaybackNotice?
     /// The window that asked for multi-view from the player.
@@ -122,6 +156,10 @@ final class PlaybackCoordinator {
         downloads.onChange = { [weak self] record, isRemoved in
             self?.downloadChanged(record, isRemoved: isRemoved)
         }
+        multiViewBackground.onOpening = { [weak self] in
+            guard let self, self.backgroundPlayerID != nil else { return }
+            self.closeCurrent()
+        }
     }
 
     /// Whether something addressed to `target` belongs to this window: its
@@ -134,8 +172,40 @@ final class PlaybackCoordinator {
     /// The player this window presents, if any: full screen on iOS and the
     /// TV, over the whole window on the Mac.
     func presentedSession(forScene sceneID: UUID) -> PlayerSession? {
-        guard let current, targets(current.sceneID, scene: sceneID) else { return nil }
+        guard let current, current.id != backgroundPlayerID, targets(current.sceneID, scene: sceneID) else { return nil }
         return current
+    }
+
+    // MARK: Running in the background
+
+    /// What runs off screen, if anything.
+    var backgroundPlayback: BackgroundPlayback? {
+        if let current, current.id == backgroundPlayerID {
+            let item = current.model.item
+            return BackgroundPlayback(kind: .player, title: item.channelName ?? item.title)
+        }
+        return multiViewBackground.title.map { BackgroundPlayback(kind: .multiView, title: $0) }
+    }
+
+    /// Takes the player off screen; its stream, sound and records carry on.
+    func keepInBackground(_ playerSession: PlayerSession) {
+        guard current === playerSession else { return }
+        backgroundPlayerID = playerSession.id
+    }
+
+    /// Back to what's running, in the window that asked.
+    func returnToBackground(sceneID: UUID) {
+        if backgroundPlayerID != nil {
+            backgroundPlayerID = nil
+        } else if multiViewBackground.isRunning {
+            multiViewStartingChannelKey = nil
+            multiViewSceneID = sceneID
+        }
+    }
+
+    func stopBackground() {
+        if backgroundPlayerID != nil { closeCurrent() }
+        multiViewBackground.stop(store: store)
     }
 
     // MARK: Playing
@@ -276,6 +346,7 @@ final class PlaybackCoordinator {
 
     private func present(_ prepared: PreparedPlay, factory: PlayerItemFactory, profile: ProfileRecord, sceneID: UUID?, layout: HearthLayout) {
         closeCurrent()
+        multiViewBackground.stop(store: store)
         let model = PlayerModel(item: prepared.item, navigator: { [weak factory] current, offset in
             factory?.neighbour(of: current, offset: offset)
         })
@@ -289,6 +360,10 @@ final class PlaybackCoordinator {
         model.onClose = { [weak self, weak playerSession] in
             guard let self, let playerSession else { return }
             self.closed(playerSession)
+        }
+        model.onKeepInBackground = { [weak self, weak playerSession] in
+            guard let self, let playerSession else { return }
+            self.keepInBackground(playerSession)
         }
         if layout.isWide {
             model.onShowMultiView = { [weak self, weak playerSession] in
@@ -346,6 +421,7 @@ final class PlaybackCoordinator {
         endPlayback(playerSession)
         if current === playerSession {
             current = nil
+            backgroundPlayerID = nil
         }
     }
 

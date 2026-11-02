@@ -144,6 +144,11 @@ final class AVPlayerEngine: PlaybackEngine {
         }
         let asset = AVURLAsset(url: stream.url, options: options)
         let item = AVPlayerItem(asset: asset)
+        if let offset = LiveEdgeOffset.initial(isLive: stream.isLive, startPosition: stream.startPosition) {
+            item.configuredTimeOffsetFromLive = CMTime(seconds: offset, preferredTimescale: 600)
+            item.automaticallyPreservesTimeOffsetFromLive = true
+            didSetLiveOffset = true
+        }
         observe(item)
         player.replaceCurrentItem(with: item)
         state = .loading
@@ -289,25 +294,11 @@ final class AVPlayerEngine: PlaybackEngine {
                 pendingStartPosition = nil
                 let time = CMTime(seconds: position, preferredTimescale: 600)
                 player.seek(to: time, toleranceBefore: .zero, toleranceAfter: CMTime(seconds: 1, preferredTimescale: 600))
-            } else if isLiveStream, !didSetLiveOffset {
-                moveCloserToLive(item)
             }
             loadTracks(for: item)
         }
         refresh()
         onChange?()
-    }
-
-    /// Starts a live stream nearer its edge than AVPlayer would
-    /// (`LiveEdgeOffset`), and keeps it there after a stall.
-    private func moveCloserToLive(_ item: AVPlayerItem) {
-        didSetLiveOffset = true
-        guard let target = LiveEdgeOffset.target(recommended: item.recommendedTimeOffsetFromLive.seconds),
-              let window = seekableWindow else { return }
-        item.configuredTimeOffsetFromLive = CMTime(seconds: target, preferredTimescale: 600)
-        item.automaticallyPreservesTimeOffsetFromLive = true
-        let tolerance = CMTime(seconds: 0.5, preferredTimescale: 600)
-        player.seek(to: CMTime(seconds: window.end.seconds - target, preferredTimescale: 600), toleranceBefore: tolerance, toleranceAfter: tolerance)
     }
 
     /// Where "back to live" lands: the offset set for this link, else the

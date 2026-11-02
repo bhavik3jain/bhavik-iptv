@@ -76,6 +76,80 @@ final class TVFlows: XCTestCase {
         expectFocus("On now", timeout: 5)
     }
 
+    // MARK: Multi-view
+
+    /// Back used to stop every channel without a word. Focus starts on keeping
+    /// them playing, and back again dismisses the warning, so pressing back
+    /// twice stops nothing.
+    func testMenuInMultiViewWarnsBeforeStopping() throws {
+        openMultiView()
+        press(.select) // Add a channel
+        expectFocus("Cityline News")
+        press(.select) // the first channel
+        expectFocus("Add a channel")
+
+        press(.menu)
+        expectFocus("Keep Playing in Background")
+        press(.menu) // back again dismisses the warning, and nothing stops
+        expectFocus("Add a channel")
+        XCTAssertEqual(app.state, .runningForeground)
+
+        press(.menu)
+        expectFocus("Keep Playing in Background")
+        moveFocus(to: "Stop Multi-view")
+        press(.select)
+        expectFocus("Multi-view") // back on the guide's pill
+    }
+
+    /// Keeps the tiles playing, shows the way back beside the tab bar, and
+    /// returns to them as they were.
+    func testMultiViewKeepsPlayingInTheBackgroundAndComesBack() throws {
+        openMultiView()
+        press(.select) // Add a channel
+        expectFocus("Cityline News")
+        press(.select) // the first channel
+        expectFocus("Add a channel")
+
+        press(.menu)
+        expectFocus("Keep Playing in Background")
+        press(.select)
+        expectFocus("Multi-view") // back on the guide
+
+        openBackgroundReturn(named: "Cityline News")
+        XCTAssertTrue(app.staticTexts["Multi-view"].waitForExistence(timeout: 5), "Should be back in multi-view")
+        expectFocus("Cityline News") // the tile, still playing
+
+        // And stopping for real leaves nothing behind.
+        press(.menu)
+        expectFocus("Keep Playing in Background")
+        moveFocus(to: "Stop Multi-view")
+        press(.select)
+        // Back where the way back was pressed: Settings, the last tab.
+        expectFocus("Switch profile")
+        XCTAssertFalse(app.buttons["Return to Cityline News"].exists)
+    }
+
+    /// The player's own button: off screen with the stream going, and back.
+    func testThePlayerKeepsPlayingInTheBackgroundAndComesBack() throws {
+        openPlayerFromTheGuide()
+        press(.select) // the controls
+        press(.up)
+        moveFocus(to: "Keep playing in the background")
+        press(.select)
+        expectFocus("On now", timeout: 5)
+
+        let title = try XCTUnwrap(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Return to '")).firstMatch.label as String?)
+        openBackgroundReturn(named: String(title.dropFirst("Return to ".count)))
+        XCTAssertFalse(app.focusDescription.contains("On now"), "Should be back in the player")
+    }
+
+    func testMenuInAnEmptyMultiViewLeavesWithoutAsking() throws {
+        openMultiView()
+        expectFocus("Add a channel")
+        press(.menu)
+        expectFocus("Multi-view")
+    }
+
     // MARK: Household
 
     /// It used to open as a narrow card, with controls the TV can't honor.
@@ -131,6 +205,40 @@ final class TVFlows: XCTestCase {
         expectFocus("Switch profile")
         press(.select)
         XCTAssertTrue(waitForGate(toBeShowing: true), "Switch profile should open the gate")
+    }
+
+    /// Up to the tab bar, right past the last tab, and Select.
+    private func openBackgroundReturn(named name: String) {
+        XCTAssertTrue(app.buttons["Return to \(name)"].waitForExistence(timeout: 5), "The way back should show")
+        var presses = 0
+        while !app.focusDescription.contains("Return to"), presses < 14 {
+            let onTabBar = ["Search", "Home", "Live TV", "Movies", "Shows", "My List", "Settings"].contains(app.focusDescription)
+            press(onTabBar ? .right : .up)
+            presses += 1
+        }
+        expectFocus("Return to \(name)")
+        press(.select)
+    }
+
+    /// Walks a row or column of buttons, any way, until one has focus.
+    private func moveFocus(to label: String) {
+        for direction in [XCUIRemote.Button.down, .right, .up, .left] {
+            for _ in 0..<3 where !app.focusDescription.contains(label) {
+                press(direction)
+            }
+        }
+        expectFocus(label)
+    }
+
+    private func openMultiView() {
+        press(.right)
+        expectFocus("Live TV")
+        press(.down)
+        expectFocus("On now")
+        press(.up, times: 2)
+        expectFocus("Multi-view")
+        press(.select)
+        expectFocus("Add a channel")
     }
 
     /// Plays what's on now on the first channel, with the controls faded.

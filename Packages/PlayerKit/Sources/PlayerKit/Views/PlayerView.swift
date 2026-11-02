@@ -197,6 +197,9 @@ struct PlayerTopBar: View {
 
             HStack(spacing: 6) {
                 PlayerTracksMenu(model: model)
+                if let keep = model.onKeepInBackground {
+                    PlayerCircleButton(systemName: "arrow.down.right.and.arrow.up.left", label: "Keep playing in the background", action: keep)
+                }
                 if !narrow, let showMultiView = model.onShowMultiView {
                     PlayerCircleButton(systemName: "rectangle.grid.2x2", label: "Multi-view", action: showMultiView)
                 }

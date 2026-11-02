@@ -219,6 +219,15 @@ enum StalkerParse {
             .sorted { $0.start < $1.start }
     }
 
+    /// The whole guide (`get_epg_info` with no channel): `js.data` keyed by
+    /// channel id. Anything else is a portal without one, and gives nothing.
+    static func bulkProgrammes(_ js: JSONValue, timeZone: TimeZone) -> [RemoteProgramme] {
+        guard let channels = js["data"]?.object else { return [] }
+        return channels.flatMap { channelID, rows in
+            (rows.array ?? []).compactMap { programme($0, guideChannelID: channelID, timeZone: timeZone) }
+        }
+    }
+
     static func programme(_ row: JSONValue, guideChannelID: String, timeZone: TimeZone) -> RemoteProgramme? {
         // Unix timestamps first: they can't be misread across a zone change.
         guard let start = date(in: row, keys: ["start_timestamp", "start", "from", "time"], timeZone: timeZone) else { return nil }

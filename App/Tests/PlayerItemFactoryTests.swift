@@ -1,5 +1,6 @@
 import CatalogKit
 import Core
+import DownloadKit
 import Foundation
 import HouseholdKit
 import PlayerKit
@@ -273,5 +274,94 @@ struct FactoryFixture {
         #expect(factory.prepare(PlayIntent(itemKey: "not-a-key/episode/s1/1/1", kind: .episode, title: "")) == nil)
         // Another source's channel, which the household doesn't have.
         #expect(factory.prepare(PlayIntent(itemKey: ItemKey.channel(source: UUID(), id: "ch101").rawValue, kind: .live, title: "")) == nil)
+    }
+}
+
+/// A player taken off screen keeps running, and something new ends it.
+@MainActor
+@Suite struct BackgroundPlaybackTests {
+    private func makeCoordinator() async throws -> (PlaybackCoordinator, CatalogService, ProfileSession) {
+        let store = try makeHouseholdStore()
+        let configuration = SourceConfiguration(name: "Fixture", kind: .stalker, serverURL: "http://portal.test", macAddress: "00:1A:79:00:00:01")
+        let catalog = CatalogService(storeURL: nil, clientFactory: { FixtureSourceClient(configuration: $0) })
+        catalog.setSources([configuration])
+        await catalog.waitForBackgroundRefreshes()
+        let session = ProfileSession(store: store, defaults: makeDefaults())
+        session.restore()
+        let downloads = DownloadCenter()
+        return (PlaybackCoordinator(catalog: catalog, store: store, session: session, downloads: downloads), catalog, session)
+    }
+
+    private func intent(_ name: String, in catalog: CatalogService) throws -> PlayIntent {
+        let channel = try #require(catalog.findChannels(name).first)
+        return PlayIntent(itemKey: channel.key.rawValue, kind: .live, title: channel.name)
+    }
+
+    /// `play` starts its work on a task.
+    private func waitForPlayer(_ playback: PlaybackCoordinator, named name: String) async throws -> PlayerSession {
+        for _ in 0..<200 {
+            if let current = playback.current, current.model.item.channelName == name { return current }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        throw CancellationError()
+    }
+
+    @Test func thePlayerLeavesTheScreenButKeepsRunningThenComesBack() async throws {
+        let (playback, catalog, _) = try await makeCoordinator()
+        let scene = UUID()
+        playback.play(try intent("Cityline", in: catalog), sceneID: scene, layout: .compact)
+        let player = try await waitForPlayer(playback, named: "Cityline News")
+        #expect(playback.presentedSession(forScene: scene) === player)
+        #expect(playback.backgroundPlayback == nil)
+
+        player.model.onKeepInBackground?()
+        #expect(playback.presentedSession(forScene: scene) == nil, "Off screen")
+        #expect(playback.current === player, "Still running")
+        #expect(playback.backgroundPlayback == BackgroundPlayback(kind: .player, title: "Cityline News"))
+
+        playback.returnToBackground(sceneID: scene)
+        #expect(playback.presentedSession(forScene: scene) === player)
+        #expect(playback.backgroundPlayback == nil)
+    }
+
+    @Test func stoppingItClosesThePlayer() async throws {
+        let (playback, catalog, _) = try await makeCoordinator()
+        playback.play(try intent("Cityline", in: catalog), sceneID: UUID(), layout: .compact)
+        let player = try await waitForPlayer(playback, named: "Cityline News")
+        player.model.onKeepInBackground?()
+        playback.stopBackground()
+        #expect(playback.current == nil)
+        #expect(playback.backgroundPlayback == nil)
+    }
+
+    @Test func aNewPlayEndsWhatRanInTheBackground() async throws {
+        let (playback, catalog, _) = try await makeCoordinator()
+        let scene = UUID()
+        playback.play(try intent("Cityline", in: catalog), sceneID: scene, layout: .compact)
+        let first = try await waitForPlayer(playback, named: "Cityline News")
+        first.model.onKeepInBackground?()
+
+        playback.play(try intent("Fieldhouse", in: catalog), sceneID: scene, layout: .compact)
+        let second = try await waitForPlayer(playback, named: "Fieldhouse Sports")
+        #expect(first !== second)
+        #expect(playback.backgroundPlayback == nil)
+        #expect(playback.presentedSession(forScene: scene) === second, "The new one is on screen")
+    }
+
+    @Test func openingMultiViewEndsABackgroundPlayer() async throws {
+        let (playback, catalog, _) = try await makeCoordinator()
+        playback.play(try intent("Cityline", in: catalog), sceneID: UUID(), layout: .sidebar)
+        let player = try await waitForPlayer(playback, named: "Cityline News")
+        player.model.onKeepInBackground?()
+        playback.multiViewBackground.onOpening?()
+        #expect(playback.current == nil)
+    }
+
+    @Test func aPlayerOnScreenSurvivesMultiViewOpeningElsewhere() async throws {
+        let (playback, catalog, _) = try await makeCoordinator()
+        playback.play(try intent("Cityline", in: catalog), sceneID: UUID(), layout: .sidebar)
+        let player = try await waitForPlayer(playback, named: "Cityline News")
+        playback.multiViewBackground.onOpening?()
+        #expect(playback.current === player, "Only what's in the background gives way")
     }
 }

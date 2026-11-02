@@ -178,7 +178,7 @@ struct MultiViewChannelPicker: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         channels = trimmed.isEmpty
             ? ChipChannels.channels(for: chip, favoriteKeys: favoriteKeys, catalog: catalog)
-            : catalog.findChannels(trimmed)
+            : catalog.findChannels(trimmed, includingWhatsOnAt: .now)
     }
 }
 
