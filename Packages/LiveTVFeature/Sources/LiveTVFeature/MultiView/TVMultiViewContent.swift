@@ -37,6 +37,7 @@ struct TVMultiViewContent: View {
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
     @Environment(ProfileSession.self) private var session
+    @Environment(MultiViewBackground.self) private var background: MultiViewBackground?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -46,6 +47,12 @@ struct TVMultiViewContent: View {
     @State private var picker: TVPickerRequest?
     @State private var lastFocus: TVMultiViewFocus?
     @State private var didStart = false
+    @State private var isConfirmingLeave = false
+    /// The white ring on the focused tile, until the remote goes quiet.
+    @State private var showsTileFocus = true
+    /// Counts remote presses that reach this screen; each restarts the wait.
+    @State private var remoteActivity = 0
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @FocusState private var focus: TVMultiViewFocus?
 
     private static let spacing: CGFloat = 24
@@ -72,6 +79,26 @@ struct TVMultiViewContent: View {
             }
         }
         .hearthOnExitCommand(handleMenu)
+        .confirmationDialog(
+            String(localized: "Stop multi-view?"),
+            isPresented: $isConfirmingLeave,
+            titleVisibility: .visible
+        ) {
+            if background != nil {
+                Button(String(localized: "Keep Playing in Background"), action: keepInBackground)
+            }
+            Button(String(localized: "Stop Multi-view"), role: .destructive, action: leave)
+            Button(String(localized: "Keep Watching"), role: .cancel) { remoteActivity += 1 }
+        } message: {
+            Text("Going back stops every channel playing here.")
+        }
+        .tint(Color?.none) // the app's amber is unreadable on tvOS's white focused button
+        .task(id: remoteActivity) {
+            showsTileFocus = true
+            try? await Task.sleep(for: TVMultiViewFocusRing.idleDelay)
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { showsTileFocus = false }
+        }
         .task {
             // Who's-watching heartbeats and the Stalker watchdog while tiles
             // play; the session decides which are due.
@@ -104,10 +131,12 @@ struct TVMultiViewContent: View {
         }
         .onChange(of: focus) { _, newValue in
             if let newValue { lastFocus = newValue }
+            remoteActivity += 1
         }
         .onChange(of: isCovered) { _, covered in
             // Back from the picker or the player: to the tile it opened from.
             if !covered { focus = lastFocus }
+            remoteActivity += 1
         }
     }
 
@@ -217,7 +246,8 @@ struct TVMultiViewContent: View {
 
     private func tileView(_ tile: MultiViewModel.Tile) -> some View {
         let action = action(on: tile)
-        return TVPlayerTile(content: content(of: tile), hint: action.hint) {
+        return TVPlayerTile(content: content(of: tile), hint: action.hint, showsFocus: showsTileFocus || tile.isEmpty || voiceOverEnabled) {
+            remoteActivity += 1
             perform(action, on: tile.id)
         }
         .focused($focus, equals: .tile(tile.id))
@@ -283,6 +313,14 @@ struct TVMultiViewContent: View {
     private func start() {
         guard !didStart else { return }
         didStart = true
+        if let kept = background?.take() {
+            // Back from the background, the tiles as they were, on the one
+            // with the sound rather than an empty one.
+            multiView = kept
+            focus = kept.audibleTileID.map { .tile($0) } ?? initialFocus
+            lastFocus = focus
+            return
+        }
         if let stored = MultiViewArrangement(rawValue: arrangementRaw) {
             multiView.setArrangement(stored, store: store)
         }
@@ -333,14 +371,33 @@ struct TVMultiViewContent: View {
     }
 
     private func handleMenu() {
-        switch TVMultiViewBack.onMenu(hasPicker: picker != nil, hasFullScreen: multiView.expanded != nil) {
+        remoteActivity += 1
+        switch TVMultiViewBack.onMenu(
+            hasPicker: picker != nil,
+            hasFullScreen: multiView.expanded != nil,
+            hasPlayingTiles: multiView.visibleTiles.contains { !$0.isEmpty }
+        ) {
         case .closePicker:
             picker = nil
         case .closeFullScreen:
             multiView.collapse()
+        case .confirmLeaving:
+            isConfirmingLeave = true
         case .leave:
-            multiView.closeAll(store: store)
-            if let onClose { onClose() } else { dismiss() }
+            leave()
         }
+    }
+
+    private func leave() {
+        multiView.closeAll(store: store)
+        if let onClose { onClose() } else { dismiss() }
+    }
+
+    /// Goes back with the tiles still playing, and the app's button to return.
+    private func keepInBackground() {
+        background?.keep(multiView, catalog: catalog, store: store)
+        // What this screen closes as it goes is now nothing.
+        multiView = MultiViewSession()
+        if let onClose { onClose() } else { dismiss() }
     }
 }

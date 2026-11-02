@@ -326,7 +326,7 @@ extension CatalogService {
         for channel in channels {
             if let last = shortGuideRequestedAt[channel.key], now.timeIntervalSince(last) < Self.shortGuideInterval, last <= now { continue }
             guard let configuration = source(channel.sourceID),
-                  !client(for: configuration).capabilities.hasFullGuide,
+                  client(for: configuration).capabilities.hasShortGuide,
                   let row = liveRow(CatalogModel.Entity.channel, key: channel.key) else { continue }
             // Marked when asked, not when answered: a portal that fails is
             // left alone for the same half hour instead of hit on every scroll.

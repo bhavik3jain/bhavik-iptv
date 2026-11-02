@@ -235,6 +235,7 @@ private struct TVPlayerTopBar: View {
     let model: PlayerModel
     let isInteractive: Bool
     @FocusState private var isMultiViewFocused: Bool
+    @FocusState private var isKeepFocused: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 24) {
@@ -255,6 +256,15 @@ private struct TVPlayerTopBar: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
+
+            if let keep = model.onKeepInBackground {
+                TVPlayerCircleButton(systemName: "arrow.down.right.and.arrow.up.left", label: "Keep playing in the background", diameter: 88, iconSize: 30, action: keep)
+                    .focused($isKeepFocused)
+                    .disabled(!isInteractive)
+                    .onChange(of: isKeepFocused) { _, focused in
+                        if focused { model.showControls() }
+                    }
+            }
 
             if let showMultiView = model.onShowMultiView {
                 TVPlayerCircleButton(systemName: "rectangle.grid.2x2", label: "Multi-view", diameter: 88, iconSize: 30, action: showMultiView)

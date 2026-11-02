@@ -23,6 +23,38 @@ struct MultiViewModelTests {
         #expect(makeModel(.three).tiles.count == 3)
     }
 
+    // VLCKit turns the app's shared audio session off when a stream stops, so
+    // every change of sound puts it back, now and shortly after.
+    @Test func changingTheSoundPutsTheAudioSessionBack() async throws {
+        let model = makeModel()
+        var activations = 0
+        model.reactivateAudioSession = { activations += 1 }
+        model.audioSessionRetries = []
+        let first = try #require(model.play(channel(101, "Cityline News", resolver: resolver)))
+        #expect(activations == 1)
+        _ = try #require(model.play(channel(102, "Fieldhouse Sports", resolver: resolver)))
+        #expect(activations == 2)
+        model.giveSound(toTile: 1)
+        #expect(activations == 3)
+        #expect(first.isMuted)
+        // Closing a tile is what can turn the session off.
+        model.clearTile(0)
+        #expect(activations == 4)
+    }
+
+    @Test func theAudioSessionIsAskedAgainAfterAChange() async throws {
+        let model = makeModel()
+        var activations = 0
+        model.reactivateAudioSession = { activations += 1 }
+        model.audioSessionRetries = [.milliseconds(1), .milliseconds(1)]
+        _ = try #require(model.play(channel(101, "Cityline News", resolver: resolver)))
+        #expect(activations == 1)
+        for _ in 0..<200 where activations < 3 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(activations == 3)
+    }
+
     @Test func firstChannelHasTheSoundAndTheRestAreMuted() async throws {
         let model = makeModel()
         let sports = try #require(model.play(channel(102, "Fieldhouse Sports", resolver: resolver)))

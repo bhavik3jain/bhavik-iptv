@@ -287,6 +287,44 @@ import Testing
         #expect(portal.requests("get_ordered_list").allSatisfy { $0.query["type"] == "series" && $0.query["episode_id"] == "0" })
     }
 
+    // MARK: The whole guide
+
+    @Test func theWholeGuideComesInOneCallKeyedByChannel() async throws {
+        let portal = Portal { action, request, _ in
+            guard action == "get_epg_info" else { return nil }
+            #expect(request.query["ch_id"] == nil)
+            #expect(request.query["period"] == "12")
+            return .json(#"{"js":{"data":{"1001":[{"id":"1","ch_id":"1001","name":"NFL RedZone","start_timestamp":1793500000,"stop_timestamp":1793507200}],"1002":[{"id":"2","name":"Evening News","start_timestamp":1793500000,"stop_timestamp":1793503600}],"1003":[]}}}"#)
+        }
+        let client = portal.client()
+        #expect(client.capabilities.hasFullGuide)
+        #expect(client.capabilities.hasShortGuide, "The guide still loads further ahead a channel at a time")
+        var programmes: [RemoteProgramme] = []
+        for try await programme in try #require(client.fullGuide()) { programmes.append(programme) }
+        #expect(programmes.count == 2)
+        #expect(programmes.first { $0.guideChannelID == "1001" }?.title == "NFL RedZone")
+        // A row that doesn't name its channel takes it from the key.
+        #expect(programmes.first { $0.guideChannelID == "1002" }?.title == "Evening News")
+    }
+
+    @Test(arguments: [
+        #"{"js":[]}"#,
+        #"{"js":{"data":[{"id":"1","name":"One channel's list","start_timestamp":1793500000,"stop_timestamp":1793503600}]}}"#,
+    ])
+    func aPortalWithoutAWholeGuideGivesNothingAndNoError(answer: String) async throws {
+        let portal = Portal { action, _, _ in action == "get_epg_info" ? .json(answer) : nil }
+        var programmes: [RemoteProgramme] = []
+        for try await programme in try #require(portal.client().fullGuide()) { programmes.append(programme) }
+        #expect(programmes.isEmpty)
+    }
+
+    @Test func aFailingWholeGuideIsNotAnError() async throws {
+        let portal = Portal { action, _, _ in action == "get_epg_info" ? .text("<html>Bad Gateway</html>", status: 502) : nil }
+        var programmes: [RemoteProgramme] = []
+        for try await programme in try #require(portal.client().fullGuide()) { programmes.append(programme) }
+        #expect(programmes.isEmpty)
+    }
+
     @Test func shortGuideAsksByChannelID() async throws {
         let portal = Portal { action, _, _ in
             action == "get_short_epg" ? .fixture("stalker/short_epg_timestamps.json") : nil

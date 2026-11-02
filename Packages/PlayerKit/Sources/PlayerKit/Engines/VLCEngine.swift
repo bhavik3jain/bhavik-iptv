@@ -173,11 +173,15 @@ final class VLCEngine: PlaybackEngine {
 
     func bufferingChanged(_ progress: Float) {
         bufferingProgress = progress
+        // libvlc can make its audio output after it reports playing, and that
+        // output forgets a mute set before then.
+        applyAudio()
         refresh()
     }
 
     func tracksChanged() {
         readTracks()
+        applyAudio()
         onChange?()
     }
 

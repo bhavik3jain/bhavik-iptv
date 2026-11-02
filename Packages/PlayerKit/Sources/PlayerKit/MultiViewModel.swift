@@ -46,6 +46,12 @@ public final class MultiViewModel {
 
     public let configuration: PlayerConfiguration
     @ObservationIgnored let engineFactory: PlaybackEngineFactory
+    /// Puts the app's audio session back; see `keepAudioSessionActive`.
+    @ObservationIgnored var reactivateAudioSession: @MainActor () -> Void = { PlaybackAudioSession.activate() }
+    /// libvlc stops a stream on a thread of its own, so the session can go off
+    /// just after a change. Asked again this long after.
+    @ObservationIgnored var audioSessionRetries: [Duration] = [.milliseconds(500), .seconds(2)]
+    @ObservationIgnored private var audioSessionRetryTask: Task<Void, Never>?
 
     public init(
         layout: Layout = .four,
@@ -149,6 +155,25 @@ public final class MultiViewModel {
     private func applySound() {
         for tile in tiles {
             tile.player?.isMuted = tile.id != audibleTileID
+        }
+        keepAudioSessionActive()
+    }
+
+    /// VLCKit's audio output on an iPhone, iPad or Apple TV turns the whole
+    /// app's audio session off when its stream stops or pauses (`avas_SetActive`
+    /// in `audiounit_ios`), though the session is shared. One tile changing
+    /// channel could silence whichever tile had the sound, which read as
+    /// "sometimes the audio is missing" (the owner, 2026-11-01).
+    private func keepAudioSessionActive() {
+        reactivateAudioSession()
+        audioSessionRetryTask?.cancel()
+        let retries = audioSessionRetries
+        audioSessionRetryTask = Task { [weak self] in
+            for delay in retries {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+                self?.reactivateAudioSession()
+            }
         }
     }
 }

@@ -301,19 +301,15 @@ struct VLCKitInfoTests {
 }
 
 @Suite struct LiveEdgeOffsetTests {
-    @Test func halfTheRecommendationWithAFloor() {
-        // 6 s segments: AVPlayer's 18 s becomes 9.
-        #expect(LiveEdgeOffset.target(recommended: 18) == 9)
-        #expect(LiveEdgeOffset.target(recommended: 33) == 16.5)
-        // Never under 4 s unless the stream asks for less.
-        #expect(LiveEdgeOffset.target(recommended: 6) == 4)
-        #expect(LiveEdgeOffset.target(recommended: 3) == 3)
+    @Test func aLiveStreamStartsAboutTwoSegmentsFromTheEdge() {
+        #expect(LiveEdgeOffset.initial(isLive: true, startPosition: nil) == 12)
+        #expect(LiveEdgeOffset.initial(isLive: true, startPosition: 0) == 12)
     }
 
-    @Test func noRecommendationNoChange() {
-        #expect(LiveEdgeOffset.target(recommended: .nan) == nil)
-        #expect(LiveEdgeOffset.target(recommended: 0) == nil)
-        #expect(LiveEdgeOffset.target(recommended: .infinity) == nil)
+    @Test func anythingElseStartsWhereItSays() {
+        #expect(LiveEdgeOffset.initial(isLive: false, startPosition: nil) == nil)
+        #expect(LiveEdgeOffset.initial(isLive: false, startPosition: 90) == nil)
+        #expect(LiveEdgeOffset.initial(isLive: true, startPosition: 90) == nil)
     }
 }
 

@@ -78,6 +78,9 @@ public final class PlayerModel: Identifiable {
     public var onClose: (() -> Void)?
     /// Shows the multi-view button in the top bar; the owner opens it.
     public var onShowMultiView: (() -> Void)?
+    /// Shows the keep-playing button in the top bar: the owner takes the player
+    /// off screen with the stream and its sound still going, and brings it back.
+    public var onKeepInBackground: (() -> Void)?
     /// A multi-view tile shown full screen: the TV's Menu goes back to it
     /// through `onShowMultiView` with the stream still running, rather than
     /// closing the player and reopening the channel in the tile.

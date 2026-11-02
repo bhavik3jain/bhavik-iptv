@@ -41,7 +41,7 @@ public actor StalkerClient: SourceClient {
     }
 
     public nonisolated var capabilities: SourceCapabilities {
-        SourceCapabilities(hasMovies: true, hasSeries: true, hasFullGuide: false, hasCatchup: true, reportsStreamCount: false, searchesCatalog: true)
+        SourceCapabilities(hasMovies: true, hasSeries: true, hasFullGuide: true, hasCatchup: true, reportsStreamCount: false, searchesCatalog: true, hasShortGuide: true)
     }
 
     // MARK: Session
@@ -245,8 +245,40 @@ public actor StalkerClient: SourceClient {
         return Array(programmes.prefix(max(limit, 1)))
     }
 
-    /// Stalker has only the per-channel short guide.
-    public nonisolated func fullGuide() -> AsyncThrowingStream<RemoteProgramme, Error>? { nil }
+    /// Every channel's guide in one call, so search can find what's on a
+    /// channel nobody has scrolled past (the owner's "RedZone" was on four
+    /// channels whose names don't say so). `get_epg_info` with a `period` and
+    /// no channel; verified on the owner's portal: 25 MB, 48,000 programmes,
+    /// 7 s for twelve hours. A portal that doesn't answer it just keeps loading
+    /// the guide a channel at a time, so this is never a failed refresh.
+    public nonisolated func fullGuide() -> AsyncThrowingStream<RemoteProgramme, Error>? {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                for programme in await self.bulkGuide() {
+                    continuation.yield(programme)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Twice how often the catalog refreshes it (`guideMaxAge`, 6 h), so the
+    /// guide never runs out between refreshes.
+    static let bulkGuideHours = 12
+    /// The portal builds the whole answer before sending a byte.
+    static let bulkGuideTimeout: TimeInterval = 60
+
+    private func bulkGuide() async -> [RemoteProgramme] {
+        guard let portal = try? await sessionEndpoint().portal,
+              let envelope = try? await call(
+                  [("type", "itv"), ("action", "get_epg_info"), ("period", String(Self.bulkGuideHours))],
+                  what: "get_epg_info (all)",
+                  timeout: Self.bulkGuideTimeout
+              )
+        else { return [] }
+        return StalkerParse.bulkProgrammes(envelope.js, timeZone: portal.timeZone)
+    }
 
     // MARK: Links
 
@@ -550,11 +582,13 @@ public actor StalkerClient: SourceClient {
     /// One API call with the session. On an auth error, or an answer that
     /// isn't an envelope (an expired token often gets plain text), the
     /// session is dropped and the call made once more after a new handshake.
-    private func call(_ parameters: [(String, String)], what: String) async throws -> StalkerEnvelope {
+    private func call(_ parameters: [(String, String)], what: String, timeout: TimeInterval? = nil) async throws -> StalkerEnvelope {
         var retried = false
         while true {
             let (portal, api) = try await sessionEndpoint()
-            let response = try await HTTP.send(portal.request(api, parameters, token: token), session: session)
+            var request = portal.request(api, parameters, token: token)
+            if let timeout { request.timeoutInterval = timeout }
+            let response = try await HTTP.send(request, session: session)
             switch classify(response, what: what) {
             case .envelope(let envelope):
                 return envelope

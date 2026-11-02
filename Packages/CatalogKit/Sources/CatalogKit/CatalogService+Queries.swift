@@ -199,6 +199,37 @@ extension CatalogService {
         return fetch(CatalogModel.Entity.channel, itemPredicate(applyingFilter: true, match), sort: Self.channelOrder, limit: limit).compactMap(channelValue)
     }
 
+    /// `queryFindChannels`, then the channels showing a matching programme
+    /// right now, whatever they're called: type "redzone" and a channel called
+    /// Sky Sports Mix turns up because that's what it's showing.
+    func queryFindChannelsIncludingWhatsOn(_ query: String, now: Date, limit: Int = 100) -> [CatalogChannel] {
+        let named = queryFindChannels(query, limit: limit)
+        let tokens = SearchKey.tokens(query)
+        guard !tokens.isEmpty, named.count < limit else { return named }
+
+        let match = NSCompoundPredicate(andPredicateWithSubpredicates: tokens.map { NSPredicate(format: "searchKey CONTAINS %@", $0) })
+        let onNow = NSPredicate(format: "start <= %@ AND end > %@", now as NSDate, now as NSDate)
+        let scope = liveScope(scopedSourceIDs(applyingFilter: true), guide: true)
+        let programmes = fetch(CatalogModel.Entity.programme, NSCompoundPredicate(andPredicateWithSubpredicates: [scope, onNow, match]), limit: limit * 5)
+        guard !programmes.isEmpty else { return named }
+
+        let showing = Set(programmes.compactMap { row in row.uuid("sourceID").map { "\($0.uuidString)/\(row.string("guideChannelID"))" } })
+        let keys = Array(Set(programmes.map { $0.string("guideChannelID") }))
+        let rows = fetch(
+            CatalogModel.Entity.channel,
+            itemPredicate(applyingFilter: true, NSPredicate(format: "guideKey IN %@", keys)),
+            sort: Self.channelOrder
+        )
+        var seen = Set(named.map(\.key))
+        var channels = named
+        for row in rows where channels.count < limit {
+            guard let sourceID = row.uuid("sourceID"), showing.contains("\(sourceID.uuidString)/\(row.string("guideKey"))"),
+                  let channel = channelValue(row), seen.insert(channel.key).inserted else { continue }
+            channels.append(channel)
+        }
+        return channels
+    }
+
     func channelValue(_ row: NSManagedObject) -> CatalogChannel? {
         guard let sourceID = row.uuid("sourceID") else { return nil }
         return RowReader.channel(row, sourceName: sourceName(sourceID))
