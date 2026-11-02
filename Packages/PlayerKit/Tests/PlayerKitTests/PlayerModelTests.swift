@@ -509,4 +509,62 @@ struct PlayerModelTests {
         #expect(await eventually { !model.controlsVisible })
         model.close()
     }
+
+    /// A model that hides quickly, already playing with its controls showing.
+    private func playingWithQuickHide() async throws -> (PlayerModel, FakeEngine) {
+        let configuration = PlayerConfiguration(publishesNowPlaying: false, controlsHideDelay: 0.05, tickInterval: 3600)
+        let model = makeModel(movie(resolver: ScriptedResolver(Streams.movie)), configuration: configuration)
+        await model.start()
+        let engine = try #require(engines.last)
+        engine.simulate(.playing)
+        return (model, engine)
+    }
+
+    @Test func controlsHideAfterResumingThroughBuffering() async throws {
+        let (model, engine) = try await playingWithQuickHide()
+        engine.simulate(.paused)
+        #expect(model.controlsVisible)
+        // A network stream comes back from a pause by way of buffering.
+        engine.simulate(.buffering)
+        engine.simulate(.playing)
+        #expect(await eventually { !model.controlsVisible })
+        model.close()
+    }
+
+    @Test func controlsHideAfterATapDuringAStall() async throws {
+        let (model, engine) = try await playingWithQuickHide()
+        engine.simulate(.buffering)
+        model.showControls()
+        engine.simulate(.playing)
+        #expect(await eventually { !model.controlsVisible })
+        model.close()
+    }
+
+    @Test func controlsHideWhenTheTimerRunsOutDuringAStall() async throws {
+        let (model, engine) = try await playingWithQuickHide()
+        model.showControls()
+        engine.simulate(.buffering)
+        try await Task.sleep(for: .milliseconds(150))
+        engine.simulate(.playing)
+        #expect(await eventually { !model.controlsVisible })
+        model.close()
+    }
+
+    @Test func controlsHideOnAStreamThatKeepsBuffering() async throws {
+        let (model, engine) = try await playingWithQuickHide()
+        // Every blip is far shorter than the delay; none may restart it.
+        #expect(await eventually {
+            engine.simulate(engine.state == .playing ? .buffering : .playing)
+            return !model.controlsVisible
+        })
+        model.close()
+    }
+
+    @Test func controlsStayWhilePaused() async throws {
+        let (model, engine) = try await playingWithQuickHide()
+        engine.simulate(.paused)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(model.controlsVisible)
+        model.close()
+    }
 }

@@ -399,7 +399,9 @@ public final class PlayerModel: Identifiable {
             showControls()
         case .playing, .buffering:
             if old == .paused { liveClock.resumed(at: configuration.now()) }
-            if new == .playing, old != .buffering { scheduleControlsHide() }
+            // Only on the way in: a stall mid-play leaves the timer running,
+            // or a stream that keeps buffering would never lose its controls.
+            if !wasPlaying { scheduleControlsHide() }
             if new == .playing, !startedEventSent {
                 // Played again after it finished: a new viewing as far as the
                 // household's progress and who's-watching rows go.
@@ -774,11 +776,12 @@ public final class PlayerModel: Identifiable {
 
     private func scheduleControlsHide() {
         hideControlsTask?.cancel()
-        guard autoHidesControls, state == .playing else { return }
+        // Buffering counts: the player shows its spinner once the controls go.
+        guard autoHidesControls, isPlaying else { return }
         let delay = configuration.controlsHideDelay
         hideControlsTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled, let self, self.state == .playing, self.autoHidesControls else { return }
+            guard !Task.isCancelled, let self, self.isPlaying, self.autoHidesControls else { return }
             self.controlsVisible = false
         }
     }
