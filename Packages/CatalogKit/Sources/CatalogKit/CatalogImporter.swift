@@ -125,6 +125,9 @@ struct CatalogImporter: Sendable {
             movieCount = movies.count
             browseCursors.merge(movies.cursors) { _, new in new }
             listedCategories += movies.categories
+            if !movies.cursors.isEmpty {
+                try await keepUnlisted(CatalogModel.Entity.movie, from: live, into: generation)
+            }
         }
 
         if capabilities.hasSeries {
@@ -147,6 +150,9 @@ struct CatalogImporter: Sendable {
             seriesCount = shows.count
             browseCursors.merge(shows.cursors) { _, new in new }
             listedCategories += shows.categories
+            if !shows.cursors.isEmpty {
+                try await keepUnlisted(CatalogModel.Entity.series, from: live, into: generation)
+            }
         }
         try await insert(CatalogModel.Entity.category, listedCategories) { category, _ in
             RowWriter.category(category, sourceID: sourceID, generation: generation)
@@ -368,6 +374,52 @@ struct CatalogImporter: Sendable {
         try await insert(entity, items, row: row)
         await progress.update(slice.upperBound, "\(label): \(items.count.formatted())", force: true)
         return ListOutcome(count: max(items.count, remoteTotal), cursors: cursors, categories: kept)
+    }
+
+    /// A list imported a page per category holds only part of the
+    /// provider's, so a title missing from the new first pages isn't gone:
+    /// it was browsed to, or found by searching the provider
+    /// (`searchProviders`). Its row moves into the new generation, after the
+    /// first pages and in its old order, rather than vanishing at the daily
+    /// refresh — from My List ("No longer available"), from the page open on
+    /// it, and from search until the next launch asked again. The owner's
+    /// Grey's Anatomy, found by search and in My List, went that way.
+    /// Returns how many rows came along.
+    @discardableResult
+    private func keepUnlisted(_ entity: String, from live: Int64, into generation: Int64) async throws -> Int {
+        let sourceID = self.sourceID
+        return try await store.write { context in
+            let listed = Set(try Fetch.strings("remoteID", from: entity, where: Where.generation(generation, of: sourceID), in: context))
+            let last = NSFetchRequest<NSDictionary>(entityName: entity)
+            last.resultType = .dictionaryResultType
+            last.propertiesToFetch = ["position"]
+            last.predicate = Where.generation(generation, of: sourceID)
+            last.sortDescriptors = [NSSortDescriptor(key: "position", ascending: false)]
+            last.fetchLimit = 1
+            let base = Int((try context.fetch(last).first?["position"] as? Int64) ?? -1) + 1
+
+            // Every attribute (a dictionary fetch with no properties named).
+            let previous = NSFetchRequest<NSDictionary>(entityName: entity)
+            previous.resultType = .dictionaryResultType
+            previous.predicate = Where.generation(live, of: sourceID)
+            previous.sortDescriptors = [NSSortDescriptor(key: "position", ascending: true)]
+            var seen = listed
+            var kept: [[String: Any]] = []
+            for case let row as [String: Any] in try context.fetch(previous) {
+                guard let remoteID = row["remoteID"] as? String, seen.insert(remoteID).inserted else { continue }
+                var copy = row
+                copy["generation"] = generation
+                copy["position"] = Int64(base + kept.count)
+                kept.append(copy)
+            }
+            var start = 0
+            while start < kept.count {
+                let end = min(start + Batch.chunkSize, kept.count)
+                try Batch.insert(entity, Array(kept[start..<end]), into: context)
+                start = end
+            }
+            return kept.count
+        }
     }
 
     /// Page 0 of every category, `firstPageConcurrency` at a time, in the

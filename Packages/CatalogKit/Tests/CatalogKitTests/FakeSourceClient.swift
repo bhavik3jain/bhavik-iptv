@@ -26,6 +26,11 @@ final class FakeSourceClient: SourceClient {
         /// (`"vod/all"` for every movie): a big portal's count without the
         /// fixture holding that many titles. Unset lists report what they hold.
         var reportedTotals: [String: Int] = [:]
+        /// Queries the provider's search finds nothing for, as a portal whose
+        /// search doesn't match a name with its decorations.
+        var unmatchedQueries: Set<String> = []
+        /// How long a search page takes, so a test can watch one running.
+        var searchDelay: Duration?
         var failure: Failure?
     }
 
@@ -34,6 +39,7 @@ final class FakeSourceClient: SourceClient {
         case channels(SourceError)
         case moviesPage(Int, SourceError)
         case guide(SourceError)
+        case search(SourceError)
     }
 
     let configuration: SourceConfiguration
@@ -112,7 +118,9 @@ final class FakeSourceClient: SourceClient {
     func search(_ query: String, page: Int) async throws -> RemoteSearchPage {
         record("search(\(query),\(page))")
         let fixture = self.fixture
-        guard capabilities.searchesCatalog else { return RemoteSearchPage(page: page, hasMore: false) }
+        if let searchDelay = fixture.searchDelay { try await Task.sleep(for: searchDelay) }
+        if case .search(let error) = fixture.failure { throw error }
+        guard capabilities.searchesCatalog, !fixture.unmatchedQueries.contains(query) else { return RemoteSearchPage(page: page, hasMore: false) }
         let movies = try paged(fixture.movies.filter { $0.name.localizedCaseInsensitiveContains(query) }, kind: .vod, categoryID: nil, page: page, fixture: fixture, category: \.categoryID)
         let series = try paged(fixture.series.filter { $0.name.localizedCaseInsensitiveContains(query) }, kind: .series, categoryID: nil, page: page, fixture: fixture, category: \.categoryID)
         return RemoteSearchPage(movies: movies.items, series: series.items, page: page, hasMore: movies.hasMore || series.hasMore)

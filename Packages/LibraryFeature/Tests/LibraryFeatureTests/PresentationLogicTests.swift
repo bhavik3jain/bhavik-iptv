@@ -311,6 +311,14 @@ import Testing
         #expect(MyListEntry.status(found: nil, catalogContains: false, sourceImported: true) == .unavailable)
     }
 
+    /// A title found by search on another device, being asked of its
+    /// provider here, isn't "Unavailable" while the answer is on its way.
+    @Test func aMissingTitleBeingLookedUpIsPending() {
+        #expect(MyListEntry.status(found: nil, catalogContains: false, sourceImported: true, lookingUp: true) == .pending)
+        #expect(MyListEntry.status(found: entry, catalogContains: true, sourceImported: true, lookingUp: true) == .available(entry))
+        #expect(MyListEntry.status(found: nil, catalogContains: true, sourceImported: true, lookingUp: true) == nil)
+    }
+
     @Test func anEntryIsIdentifiedByItsFavorite() {
         let favorite = FavoriteRecord(profileID: Fixture.profile, itemKey: entry.id.rawValue, kind: .movie, sortOrder: 1, addedAt: Fixture.now)
         #expect(MyListEntry(favorite: favorite, status: .pending).id == favorite.id)

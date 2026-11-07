@@ -163,6 +163,75 @@ import Testing
         #expect(fake.callCount("search(") == 2)
     }
 
+    @Test func aQueryIsAskedAgainAfterARefresh() async throws {
+        let (service, fake) = await importedService(Self.hugeCatalog(), capabilities: Self.searching)
+        _ = await service.searchProviders("echo")
+        #expect(fake.callCount("search(") == 2)
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        _ = await service.searchProviders("echo")
+        #expect(fake.callCount("search(") == 4)
+    }
+
+    // MARK: Keeping what was found over a refresh
+
+    /// A show list too big to import whole, one show a page: Drama's first
+    /// page holds The Office, and Grey's Anatomy is on its second.
+    static func hugeShowList() -> FakeSourceClient.Fixture {
+        var fixture = Fixtures.catalog()
+        fixture.pageSize = 1
+        fixture.series.reverse()
+        fixture.reportedTotals = ["series/all": 20_000]
+        return fixture
+    }
+
+    // The owner's Grey's Anatomy: found by searching the provider and put in
+    // My List, then "No longer available" once the daily refresh swapped in
+    // a catalog of first pages, and not found again until a relaunch.
+    @Test func aShowFoundBySearchSurvivesARefresh() async throws {
+        let (service, fake) = await importedService(Self.hugeShowList(), capabilities: Self.searching)
+        let key = ItemKey.series(source: fake.configuration.id, id: "s1")
+        #expect(!service.contains(key))
+        #expect(await service.searchProviders("anatomy") == 1)
+        let show = try #require(service.seriesItem(key))
+        #expect(try await service.episodes(for: show).count == 3)
+
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        #expect(service.contains(key))
+        #expect(service.seriesItem(key)?.name == "Grey's Anatomy")
+        #expect(service.search("anatomy").series.map(\.name) == ["Grey's Anatomy"])
+        // Its cached episodes stay with it, so they still play.
+        #expect(service.cachedEpisodes(seriesKey: key).count == 3)
+        #expect(service.series(categoryID: Self.key(fake, "series", "20")).count == 2)
+        #expect(service.canLoadMore(kind: .series, categoryID: Self.key(fake, "series", "20")))
+    }
+
+    @Test func aTitleKeptOverARefreshIsStoredOnce() async throws {
+        let (service, fake) = await importedService(Self.hugeCatalog(), capabilities: Self.searching)
+        _ = await service.searchProviders("echo")
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        #expect(service.count(CatalogModel.Entity.movie, NSPredicate(format: "remoteID == %@", "m9")) == 1)
+        // And a title that reached a first page is stored from it, once.
+        fake.update { $0.movies.insert($0.movies.remove(at: 8), at: 0) }
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        #expect(service.count(CatalogModel.Entity.movie, NSPredicate(format: "remoteID == %@", "m9")) == 1)
+    }
+
+    @Test func aListImportedWholeKeepsNothingTheProviderDropped() async throws {
+        let (service, fake) = await importedService(Self.hugeCatalog(), capabilities: Self.searching)
+        _ = await service.searchProviders("echo")
+        let echo = ItemKey.movie(source: fake.configuration.id, id: "m9")
+        #expect(service.contains(echo))
+        // Under the limit the whole list comes in, and it no longer has Echo.
+        fake.update {
+            $0.reportedTotals = [:]
+            $0.movies.removeAll { $0.id == "m9" }
+        }
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        #expect(!service.contains(echo))
+        #expect(service.count(CatalogModel.Entity.movie, NSPredicate(value: true)) == 9)
+    }
+
     @Test func aCatalogKeptWholeIsNeverSearchedRemotely() async throws {
         let (service, fake) = await importedService(Fixtures.catalog(), capabilities: Self.searching)
         #expect(!service.searchesProviders)
@@ -234,19 +303,44 @@ import Testing
         #expect(fake.calls.count == before)
     }
 
-    @Test func aRefreshStartsBrowsingOver() async throws {
+    @Test func aRefreshKeepsWhatWasBrowsedAndStartsItsCursorsOver() async throws {
         let (service, fake) = await importedService(Self.hugeCatalog())
         let action = Self.key(fake, "vod", "10")
         _ = await service.loadMore(kind: .vod, categoryID: action)
-        _ = await service.loadMore(kind: .vod, categoryID: action)
-        #expect(!service.canLoadMore(kind: .vod, categoryID: action))
+        #expect(Self.names(service.movies(categoryID: action)) == ["Grey's Day", "Alpha", "Zulu", "Delta"])
 
-        // A new generation holds first pages again, with fresh cursors.
+        // A new generation: the first pages fresh, what was browsed still
+        // there, and the cursors back at each category's second page.
         await service.refresh(sourceID: fake.configuration.id, force: true)
+        #expect(Self.names(service.movies(categoryID: action)) == ["Grey's Day", "Alpha", "Zulu", "Delta"])
+        #expect(service.movies(categoryID: action).count == 4)
         #expect(service.canLoadMore(kind: .vod, categoryID: action))
-        #expect(service.movies(categoryID: action).count == 2)
+
+        // The second page holds nothing new, so the same call goes on to the
+        // third rather than leaving the grid waiting.
+        let revision = service.revision
         #expect(await service.loadMore(kind: .vod, categoryID: action))
         #expect(fake.callCount("movies(10,1)") == 2)
+        #expect(fake.callCount("movies(10,2)") == 1)
+        #expect(Self.names(service.movies(categoryID: action)).contains("Echo"))
+        #expect(service.revision > revision)
+        #expect(!service.canLoadMore(kind: .vod, categoryID: action))
+    }
+
+    @Test func loadMoreStopsSkippingAtItsLimit() async throws {
+        // Twenty-five pages of one title each, every one stored already.
+        var fixture = Self.hugeCatalog()
+        fixture.pageSize = 1
+        fixture.movies = (0..<30).map { RemoteMovie(id: "x\($0)", name: "Title \($0)", categoryID: "10") }
+        let (service, fake) = await importedService(fixture, capabilities: Self.searching)
+        let action = Self.key(fake, "vod", "10")
+        fake.update { $0.pageSize = 30 }
+        _ = await service.searchProviders("title")
+        fake.update { $0.pageSize = 1 }
+
+        #expect(await service.loadMore(kind: .vod, categoryID: action))
+        #expect(fake.callCount("movies(10,") == 1 + CatalogService.loadMoreSkipLimit)
+        #expect(service.canLoadMore(kind: .vod, categoryID: action))
     }
 
     // MARK: Relaunch

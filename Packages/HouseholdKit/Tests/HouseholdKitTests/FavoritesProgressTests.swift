@@ -291,3 +291,76 @@ private final class ChangeFlag: @unchecked Sendable {
         #expect(store.count(HouseholdModel.Entity.favorite) == 1)
     }
 }
+
+/// The name a favorite or progress row carries, so a device whose catalog
+/// never stored the title (a big portal is kept a page per category) can
+/// search its provider for it. The app fills it in from a catalog that holds
+/// the title (`fillInTitles`).
+@MainActor
+@Suite struct HeldTitleTests {
+    @Test func titlesAreWrittenOnFavoritesAndProgressThatHaveNone() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        let show = TestKeys.series("s1")
+        let episode = TestKeys.episode("s1", 2, 3)
+        let movie = TestKeys.movie("m1")
+        store.toggleFavorite(profileID: profile, itemKey: show, kind: .series)
+        store.saveProgress(profileID: profile, itemKey: episode, kind: .episode, position: 60, duration: 2_700, seriesKey: show, season: 2, episode: 3)
+        store.saveProgress(profileID: profile, itemKey: movie, kind: .movie, position: 60, duration: 6_000)
+        #expect(store.favorites(profileID: profile, kind: .series).map(\.title) == [""])
+
+        let changed = store.fillInTitles([show: "Grey's Anatomy", episode: "Grey's Anatomy", movie: "Echo", TestKeys.movie("other"): "Other"])
+        #expect(changed == 3)
+        #expect(store.favorites(profileID: profile, kind: .series).map(\.title) == ["Grey's Anatomy"])
+        #expect(store.progress(profileID: profile, itemKey: episode)?.title == "Grey's Anatomy")
+        #expect(store.progress(profileID: profile, itemKey: movie)?.title == "Echo")
+        #expect(store.continueWatching(profileID: profile).map(\.title).sorted() == ["Echo", "Grey's Anatomy"])
+    }
+
+    /// A name already written stays: the device that wrote it held the title.
+    @Test func aRowWithATitleKeepsIt() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        let show = TestKeys.series("s1")
+        store.toggleFavorite(profileID: profile, itemKey: show, kind: .series)
+        store.fillInTitles([show: "Grey's Anatomy"])
+        #expect(store.fillInTitles([show: "Greys Anatomy - ENGLISH"]) == 0)
+        #expect(store.favorites(profileID: profile, kind: .series).first?.title == "Grey's Anatomy")
+    }
+
+    /// Every write syncs, and the app calls this at every household change.
+    @Test func nothingIsSavedWhenNothingChanges() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        let show = TestKeys.series("s1")
+        store.toggleFavorite(profileID: profile, itemKey: show, kind: .series)
+        store.fillInTitles([show: "Grey's Anatomy"])
+        let revision = store.revision
+        #expect(store.fillInTitles([show: "Grey's Anatomy"]) == 0)
+        #expect(store.fillInTitles([show: "   "]) == 0)
+        #expect(store.fillInTitles([:]) == 0)
+        #expect(store.revision == revision)
+    }
+
+    @Test func everyProfilesRowsGetTheirTitle() throws {
+        let store = try makeStore()
+        let other = try #require(store.addProfile(name: "Anya", kind: .standard, avatarColor: .teal)).id
+        let show = TestKeys.series("s1")
+        store.toggleFavorite(profileID: store.firstProfile.id, itemKey: show, kind: .series)
+        store.toggleFavorite(profileID: other, itemKey: show, kind: .series)
+        #expect(store.fillInTitles([show: "Grey's Anatomy"]) == 2)
+        #expect(store.favorites(profileID: other, kind: .series).first?.title == "Grey's Anatomy")
+    }
+
+    /// A title another device wrote (an iCloud import) reads back.
+    @Test func aSyncedTitleIsReadBack() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        let show = TestKeys.series("s1")
+        store.simulateImport { store in
+            let row = store.importFavorite(profileID: profile, itemKey: show, kind: .series, sortOrder: 1, addedAt: .now)
+            row.title = "Grey's Anatomy"
+        }
+        #expect(store.favorites(profileID: profile, kind: .series).map(\.title) == ["Grey's Anatomy"])
+    }
+}

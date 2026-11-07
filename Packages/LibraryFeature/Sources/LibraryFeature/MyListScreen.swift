@@ -30,14 +30,19 @@ struct MyListEntry: Identifiable, Equatable {
     ///   My List syncs through iCloud long before a new device has
     ///   downloaded a 40 000-title catalog, and calling everything
     ///   "Unavailable" then would invite removing it.
+    /// - An item its provider is being searched for is pending too: a big
+    ///   portal is kept here a page per category, so a title found by search
+    ///   on another device arrives as a key this catalog never stored, and
+    ///   the app searches for it by the name that came with it
+    ///   (`CatalogService.resolveHeldItems`).
     /// - Otherwise an item the catalog doesn't hold is unavailable.
     ///
     /// Favorites of a removed source never reach here: the store hides them
     /// (SRC-9).
-    static func status(found: GridEntry?, catalogContains: Bool, sourceImported: Bool) -> Status? {
+    static func status(found: GridEntry?, catalogContains: Bool, sourceImported: Bool, lookingUp: Bool = false) -> Status? {
         if let found { return .available(found) }
         if catalogContains { return nil }
-        return sourceImported ? .unavailable : .pending
+        return sourceImported && !lookingUp ? .unavailable : .pending
     }
 }
 
@@ -302,7 +307,7 @@ struct MyListScreen: View {
                 found = nil
             }
             let contains = found != nil || catalog.contains(key)
-            return MyListEntry.status(found: found, catalogContains: contains, sourceImported: isImported(sourceOf: key))
+            return MyListEntry.status(found: found, catalogContains: contains, sourceImported: isImported(sourceOf: key), lookingUp: catalog.isLookingUp(key))
                 .map { MyListEntry(favorite: favorite, status: $0) }
         }
     }

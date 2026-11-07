@@ -601,6 +601,31 @@ public final class HouseholdStore {
         commit("rewrite item keys")
     }
 
+    /// Writes a name onto every favorite and progress row (every profile's)
+    /// that has none, by the row's item key: a movie's or show's name, and
+    /// for an episode's row its show's. Each device keeps its own catalog,
+    /// and a big portal is kept a page per category, so another device may
+    /// never have stored a title found by search here; it searches its
+    /// provider by this name. HouseholdKit never talks to a provider: the app
+    /// reads the names from its catalog. A row that has a name keeps it, and
+    /// nothing is saved when nothing changed. Returns how many rows changed.
+    @discardableResult
+    public func fillInTitles(_ titles: [String: String]) -> Int {
+        let titles = titles.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !titles.isEmpty, let household = currentHouseholdEntity() else { return 0 }
+        var changed = 0
+        for profile in live(household.profiles) where profile.kind != .guest {
+            for favorite in live(profile.favorites) where favorite.title.isEmpty {
+                if let title = titles[favorite.itemKey] { favorite.title = title; changed += 1 }
+            }
+            for row in live(profile.progress) where row.title.isEmpty {
+                if let title = titles[row.itemKey] { row.title = title; changed += 1 }
+            }
+        }
+        if changed > 0 { commit("fill in titles") }
+        return changed
+    }
+
     // MARK: Progress (VOD-3, SER-2, PRF-7)
 
     public func progress(profileID: UUID, itemKey: String) -> ProgressRecord? {
@@ -1000,7 +1025,8 @@ extension FavoriteEntity {
             itemKey: itemKey,
             kind: FavoriteKind(rawValue: kindRaw) ?? .channel,
             sortOrder: sortOrder,
-            addedAt: addedAt
+            addedAt: addedAt,
+            title: title
         )
     }
 
@@ -1022,7 +1048,8 @@ extension ProgressEntity {
             updatedAt: updatedAt,
             seriesKey: seriesKey,
             season: season?.intValue,
-            episode: episode?.intValue
+            episode: episode?.intValue,
+            title: title
         )
     }
 
