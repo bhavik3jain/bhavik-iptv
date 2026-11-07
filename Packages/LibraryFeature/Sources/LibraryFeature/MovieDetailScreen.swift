@@ -226,7 +226,19 @@ struct UnavailableItemView: View {
         let _ = (catalog.revision, store.revision)
         ScrollView {
             Group {
-                if catalog.contains(itemKey) {
+                if catalog.isLookingUp(itemKey) {
+                    // Found by search on another device, and being asked
+                    // of its provider here (`resolveHeldItems`).
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .tint(HearthColor.accent)
+                        Text("Looking for it on its provider…", bundle: .module)
+                            .font(.hearthBody)
+                            .foregroundStyle(HearthColor.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .combine)
+                } else if catalog.contains(itemKey) {
                     EmptyStateView(
                         systemName: "eye.slash",
                         title: String(localized: "Not available on this profile", bundle: .module),

@@ -174,14 +174,19 @@ public struct FavoriteRecord: Identifiable, Sendable, Hashable {
     /// Set by hand (FAV-1); a Double so a move writes one row.
     public var sortOrder: Double
     public var addedAt: Date
+    /// The movie's or show's name as a catalog knew it, empty until a device
+    /// whose catalog holds the item fills it in (`fillInTitles`). Another
+    /// device whose catalog never stored the item searches its provider by it.
+    public var title: String
 
-    public init(id: UUID = UUID(), profileID: UUID, itemKey: String, kind: FavoriteKind, sortOrder: Double, addedAt: Date = .now) {
+    public init(id: UUID = UUID(), profileID: UUID, itemKey: String, kind: FavoriteKind, sortOrder: Double, addedAt: Date = .now, title: String = "") {
         self.id = id
         self.profileID = profileID
         self.itemKey = itemKey
         self.kind = kind
         self.sortOrder = sortOrder
         self.addedAt = addedAt
+        self.title = title
     }
 }
 
@@ -200,8 +205,10 @@ public struct ProgressRecord: Identifiable, Sendable, Hashable {
     public var seriesKey: String?
     public var season: Int?
     public var episode: Int?
+    /// The movie's name, or an episode's show's; see `FavoriteRecord.title`.
+    public var title: String
 
-    public init(id: UUID = UUID(), profileID: UUID, itemKey: String, kind: ProgressKind, position: TimeInterval, duration: TimeInterval, watched: Bool = false, updatedAt: Date = .now, seriesKey: String? = nil, season: Int? = nil, episode: Int? = nil) {
+    public init(id: UUID = UUID(), profileID: UUID, itemKey: String, kind: ProgressKind, position: TimeInterval, duration: TimeInterval, watched: Bool = false, updatedAt: Date = .now, seriesKey: String? = nil, season: Int? = nil, episode: Int? = nil, title: String = "") {
         self.id = id
         self.profileID = profileID
         self.itemKey = itemKey
@@ -213,6 +220,7 @@ public struct ProgressRecord: Identifiable, Sendable, Hashable {
         self.seriesKey = seriesKey
         self.season = season
         self.episode = episode
+        self.title = title
     }
 
     public var fraction: Double { duration > 0 ? min(max(position / duration, 0), 1) : 0 }

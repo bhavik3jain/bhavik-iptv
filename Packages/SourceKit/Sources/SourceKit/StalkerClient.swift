@@ -321,18 +321,22 @@ public actor StalkerClient: SourceClient {
             // file rows, like a movie's (verified). Its id is no file id:
             // `/media/file_<episode id>.mpg` played another title (the
             // owner's All American opened a different show). An episode with
-            // a cmd of its own, or its season's plus `series=<n>`, plays that.
+            // a cmd of its own, or its season's, plays that.
             var command = episode.command.map(StalkerParse.movieCommand)
-            var sendsNumber = true
             if command == nil, let seasonID = episode.seasonID {
                 command = try await episodeFileCommand(episode, seasonID: seasonID)
-                sendsNumber = false
                 guard command != nil else {
                     throw SourceError(.noLink, detail: "get_ordered_list (episode files) listed no file for the episode")
                 }
             }
+            // `series=<n>` goes with every episode, its own file included: the
+            // portal builds the stream's address from it and, without it,
+            // from episode 1. On the owner's portal every file linked without
+            // it was ".../Show.S23E01.<this episode's title>.mp4", which the
+            // stream server answered 404, so only each season's first episode
+            // played (verified on Grey's Anatomy S5, S22 and S23).
             var parameters = [("type", "vod"), ("action", "create_link"), ("cmd", command ?? StalkerParse.movieCommand(episode.id))]
-            if sendsNumber, episode.number > 0 { parameters.append(("series", String(episode.number))) }
+            if episode.number > 0 { parameters.append(("series", String(episode.number))) }
             let envelope = try await call(parameters, what: "create_link (episode)")
             guard let link = StalkerParse.vodLink(envelope.js, streamServerBase: StalkerPortal.streamServerBase(for: api), mac: portal.mac, linkType: "series"),
                   let url = URL(string: link)

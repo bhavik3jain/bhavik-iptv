@@ -63,11 +63,13 @@ public final class CatalogService {
     @ObservationIgnored var backgroundRunner: Task<Void, Never>?
     /// Categories with a page on its way from the provider (`loadMore`).
     @ObservationIgnored var loadingMoreCategories: Set<String> = []
-    /// Queries already asked of the providers this launch
-    /// (`searchProviders`), by normalised text.
+    /// Queries already asked of the providers since the last catalog
+    /// refresh (`searchProviders`), by normalised text.
     @ObservationIgnored var providerSearchedQueries: Set<String> = []
     /// Provider searches on their way; Search shows that it's still asking.
     public internal(set) var providerSearchesRunning = 0
+    /// Held titles being asked for now (observed: `isLookingUp(_:)`).
+    var heldKeysLookingUp: Set<ItemKey> = []
     /// When each channel's short guide was last asked for (throttle).
     @ObservationIgnored var shortGuideRequestedAt: [ItemKey: Date] = [:]
     /// Category keys whose names match as adult, per `revision`.

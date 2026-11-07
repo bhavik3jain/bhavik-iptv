@@ -116,6 +116,9 @@ enum HouseholdModel {
             // A Double so a move writes one row (FAV-1).
             double("sortOrder", default: 0),
             date("addedAt"),
+            // The movie's or show's name, so a device whose catalog never
+            // stored it can search its provider by it. Added 2026-11-07.
+            string("title", default: ""),
         ]
         progress.properties = [
             uuid("id"),
@@ -128,6 +131,8 @@ enum HouseholdModel {
             optionalString("seriesKey"),
             optionalInteger("season"),
             optionalInteger("episode"),
+            // The movie's name, or an episode's show's (see Favorite).
+            string("title", default: ""),
         ]
         playback.properties = [
             uuid("id"),
@@ -358,6 +363,7 @@ final class FavoriteEntity: NSManagedObject {
     @NSManaged var kindRaw: String
     @NSManaged var sortOrder: Double
     @NSManaged var addedAt: Date
+    @NSManaged var title: String
     @NSManaged var profile: ProfileEntity?
 }
 
@@ -374,6 +380,7 @@ final class ProgressEntity: NSManagedObject {
     /// NSNumber because an optional scalar has no Objective-C form.
     @NSManaged var season: NSNumber?
     @NSManaged var episode: NSNumber?
+    @NSManaged var title: String
     @NSManaged var profile: ProfileEntity?
 }
 

@@ -28,9 +28,15 @@ extension CatalogService {
         browseCursor(categoryID)?.remoteTotal
     }
 
+    /// Pages one `loadMore` call goes through when each adds nothing new.
+    static let loadMoreSkipLimit = 20
+
     /// Fetches the next page of a movie or show category from its provider
-    /// into the live catalog and bumps `revision`. Returns false when nothing
-    /// more can come (the end, a failure, or a page already on its way).
+    /// into the live catalog and bumps `revision`. A page whose titles are
+    /// all stored already (kept over a refresh, found by search) moves
+    /// straight on to the next, up to `loadMoreSkipLimit` pages, so the grid
+    /// isn't left waiting on a page that changed nothing. Returns false when
+    /// nothing more can come (the end, a failure, or a page already on its way).
     @discardableResult
     public func loadMore(kind: ContentKind, categoryID: String) async -> Bool {
         guard kind != .live,
@@ -43,41 +49,49 @@ extension CatalogService {
         defer { loadingMoreCategories.remove(categoryID) }
         let generation = persisted[sourceID]?.generation ?? 0
 
+        var added = 0
+        var pages = 0
+        defer { if added > 0 { catalogDidChange() } }
         do {
             let client = try await readyClient(for: configuration)
-            let added: Int
-            let pageHasMore: Bool
-            switch kind {
-            case .vod:
-                let page = try await client.movies(categoryID: remoteID, page: cursor.nextPage)
-                let movies = page.items.map { movie -> RemoteMovie in
-                    var movie = movie
-                    movie.categoryID = movie.categoryID ?? remoteID
-                    return movie
+            repeat {
+                let pageHasMore: Bool
+                switch kind {
+                case .vod:
+                    let page = try await client.movies(categoryID: remoteID, page: cursor.nextPage)
+                    let movies = page.items.map { movie -> RemoteMovie in
+                        var movie = movie
+                        movie.categoryID = movie.categoryID ?? remoteID
+                        return movie
+                    }
+                    added += try await CatalogWriter.appendMovies(movies, sourceID: sourceID, generation: generation, store: store)
+                    pageHasMore = page.hasMore && !page.items.isEmpty
+                case .series:
+                    let page = try await client.series(categoryID: remoteID, page: cursor.nextPage)
+                    let shows = page.items.map { series -> RemoteSeries in
+                        var series = series
+                        series.categoryID = series.categoryID ?? remoteID
+                        return series
+                    }
+                    added += try await CatalogWriter.appendSeries(shows, sourceID: sourceID, generation: generation, store: store)
+                    pageHasMore = page.hasMore && !page.items.isEmpty
+                case .live:
+                    return false
                 }
-                added = try await CatalogWriter.appendMovies(movies, sourceID: sourceID, generation: generation, store: store)
-                pageHasMore = page.hasMore && !page.items.isEmpty
-            case .series:
-                let page = try await client.series(categoryID: remoteID, page: cursor.nextPage)
-                let shows = page.items.map { series -> RemoteSeries in
-                    var series = series
-                    series.categoryID = series.categoryID ?? remoteID
-                    return series
-                }
-                added = try await CatalogWriter.appendSeries(shows, sourceID: sourceID, generation: generation, store: store)
-                pageHasMore = page.hasMore && !page.items.isEmpty
-            case .live:
-                return false
-            }
-            cursor.nextPage += 1
-            cursor.hasMore = pageHasMore
-            persisted[sourceID, default: PersistedSourceState()].browseCursors[categoryID] = cursor
+                cursor.nextPage += 1
+                cursor.hasMore = pageHasMore
+                pages += 1
+                persisted[sourceID, default: PersistedSourceState()].browseCursors[categoryID] = cursor
+            } while added == 0 && cursor.hasMore && pages < Self.loadMoreSkipLimit && !Task.isCancelled
             let cursors = persisted[sourceID]?.browseCursors ?? [:]
             try? await CatalogWriter.saveBrowseCursors(cursors, sourceID: sourceID, store: store)
-            if added > 0 { catalogDidChange() }
             return cursor.hasMore || added > 0
         } catch {
-            return false
+            if pages > 0 {
+                let cursors = persisted[sourceID]?.browseCursors ?? [:]
+                try? await CatalogWriter.saveBrowseCursors(cursors, sourceID: sourceID, store: store)
+            }
+            return added > 0
         }
     }
 
@@ -97,10 +111,17 @@ extension CatalogService {
     /// titles nobody has browsed to yet and gives the same answer every time.
     /// The query goes to the provider: the owner chose that over search
     /// staying on the device for these sources (SRCH-2). Each query is asked
-    /// once a launch. Returns how many titles were new; `revision` bumps when
-    /// any were.
+    /// once per catalog: a refresh that swaps one in asks again. Returns how
+    /// many titles were new; `revision` bumps when any were.
     @discardableResult
     public func searchProviders(_ query: String) async -> Int {
+        await searchProviders(query, showingProgress: true)
+    }
+
+    /// `searchProviders(_:)`; `showingProgress` false keeps a search nobody
+    /// typed (a held title's, `resolveHeldItems`) out of
+    /// `providerSearchesRunning`, so Search doesn't spin for it.
+    func searchProviders(_ query: String, showingProgress: Bool) async -> Int {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = SearchKey.normalize(trimmed)
         guard normalized.count >= 2, let store = openStore(),
@@ -108,8 +129,8 @@ extension CatalogService {
         else { return 0 }
         let browsed = sources.filter { persisted[$0.id]?.browseCursors.isEmpty == false }
         guard !browsed.isEmpty else { return 0 }
-        providerSearchesRunning += 1
-        defer { providerSearchesRunning -= 1 }
+        if showingProgress { providerSearchesRunning += 1 }
+        defer { if showingProgress { providerSearchesRunning -= 1 } }
 
         var added = 0
         var answered = false

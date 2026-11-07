@@ -474,6 +474,15 @@ import Testing
     static let rightTitle = #"{"js":{"id":"99200","cmd":"http://vod.portal.test:8080/right-show/video.m3u8?token=Tk1"}}"#
     /// ...and for anything else: it never refuses, it links another title.
     static let wrongTitle = #"{"js":{"id":"56275","cmd":"http://vod.portal.test:8080/another-title/video.m3u8?token=No"}}"#
+    /// The right file linked without `series=<n>`: the right show, but the
+    /// portal builds the address from episode 1 (".../Show.S23E01.<title>.mp4"),
+    /// a file the stream server doesn't have.
+    static let firstEpisodesAddress = #"{"js":{"id":"99200","cmd":"http://vod.portal.test:8080/first-episode/video.m3u8?token=E1"}}"#
+
+    /// `create_link` for the episode's file, as the owner's portal answers it.
+    static func fileLink(_ request: URLRequest, episodeNumber: String = "3") -> StubURLProtocol.Reply {
+        .json(request.query["series"] == episodeNumber ? rightTitle : firstEpisodesAddress)
+    }
 
     static let fileEpisode = RemoteEpisode(id: "170880", seriesID: "99200", season: 1, number: 3, title: "Episode 3", seasonID: "7066")
 
@@ -485,7 +494,7 @@ import Testing
             case "get_ordered_list" where request.query["episode_id"] == "170880":
                 return .json(Self.episodeFileRow)
             case "create_link" where request.query["cmd"] == "/media/file_237948.mpg":
-                return .json(Self.rightTitle)
+                return Self.fileLink(request)
             case "create_link":
                 return .json(Self.wrongTitle)
             default:
@@ -503,7 +512,9 @@ import Testing
         #expect(lookup.query["episode_id"] == "170880")
         let links = portal.requests("create_link")
         #expect(links.map { $0.query["cmd"] } == ["/media/file_237948.mpg"])
-        #expect(links.first?.query["series"] == nil)
+        // Without its number the portal links episode 1's address: only each
+        // season's first episode played (the owner's Grey's Anatomy S23 E2).
+        #expect(links.first?.query["series"] == "3")
     }
 
     @Test func episodeWithNoFileHasNoLinkRatherThanAnotherTitle() async throws {
@@ -582,7 +593,7 @@ import Testing
                     return nil
                 }
             case "create_link" where request.query["cmd"] == "/media/file_237948.mpg":
-                return .json(Self.rightTitle)
+                return Self.fileLink(request)
             case "create_link":
                 return .json(Self.wrongTitle)
             default:
@@ -596,7 +607,7 @@ import Testing
         #expect(episode.command == nil)
         #expect(episode.seasonID == "7066")
         let link = try await client.streamLink(for: .episode(episode, series: show))
-        #expect(link.url.path().contains("right-show"))
+        #expect(link.url.absoluteString == "http://vod.portal.test:8080/right-show/video.m3u8?token=Tk1")
     }
 
     @Test func catchupFindsTheProgrammeAndAsksTheArchive() async throws {

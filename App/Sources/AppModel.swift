@@ -32,6 +32,8 @@ struct AppServices {
 /// - the current profile and household → `catalog.filter` (PRF-4, PRF-6, PAR-1);
 /// - store changes → `session.refresh()` (an edited or deleted profile);
 /// - each finished catalog refresh → FAV-2's key rewrite;
+/// - held movies and shows → their names onto household rows, and a search
+///   for each one the catalog lacks (`HeldItems`);
 /// - launch, becoming active and background refresh → `refreshAllIfStale`.
 ///
 /// One instance, made in `HearthApp.init` so the iOS background task can be
@@ -192,6 +194,10 @@ final class AppModel {
             observeChanges(of: { catalog.refreshStates.compactMapValues(\.catalogRefreshedAt) }) { [weak self] dates in
                 self?.catalogRefreshed(dates)
             },
+            // Titles held through iCloud that this device's catalog never
+            // stored (a show found by search on another device): names
+            // written down here, and searched for by name there.
+            HeldItems.observe(store: store, catalog: catalog),
         ]
     }
 
@@ -292,6 +298,93 @@ final class AppModel {
             } catch {
                 self.shareAcceptError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
+        }
+    }
+}
+
+/// The household's movies and shows that this device's catalog may never
+/// have stored. Each device keeps its own catalog, and a big Stalker portal
+/// is kept a page per category plus what that device browsed or searched, so
+/// a show found by search and favorited on the iPhone reaches the Apple TV
+/// through iCloud as a key its catalog doesn't hold: "Unavailable" in My List
+/// and "No longer available" on its page. A Stalker portal can't be asked for
+/// a title by id (only its seasons and files, without a name or poster), so
+/// each favorite and progress row carries the title's name: this device
+/// writes it from its catalog (`HouseholdStore.fillInTitles`), and a device
+/// that lacks the title searches its provider by it
+/// (`CatalogService.resolveHeldItems`). HouseholdKit never talks to a
+/// provider and CatalogKit never reads iCloud, so the app passes both across.
+@MainActor
+enum HeldItems {
+    /// One household row holding a movie or show.
+    struct Row: Equatable {
+        /// The row's own key, which `fillInTitles` writes by (for a show in
+        /// progress, its latest episode's).
+        var itemKey: String
+        /// The key the catalog has to hold.
+        var heldKey: ItemKey
+        var title: String
+    }
+
+    /// Every profile's favorite movies and shows, its unfinished movies and
+    /// episodes, and the shows it has in progress. Channels are left out:
+    /// their lists are always imported whole.
+    static func rows(in store: HouseholdStore) -> [Row] {
+        var rows: [Row] = []
+        func add(_ itemKey: String, held: String, title: String) {
+            // A catch-up key carries a programme start after the channel's.
+            guard !held.contains("@") else { return }
+            rows.append(Row(itemKey: itemKey, heldKey: ItemKey(rawValue: held), title: title))
+        }
+        for profile in store.profiles where !profile.isGuest {
+            for kind in [FavoriteKind.series, .movie] {
+                store.favorites(profileID: profile.id, kind: kind).forEach { add($0.itemKey, held: $0.itemKey, title: $0.title) }
+            }
+            store.continueWatching(profileID: profile.id, limit: 100).forEach { add($0.itemKey, held: $0.itemKey, title: $0.title) }
+            for row in store.seriesInProgress(profileID: profile.id, limit: 100) {
+                if let seriesKey = row.seriesKey { add(row.itemKey, held: seriesKey, title: row.title) }
+            }
+        }
+        return rows
+    }
+
+    /// What the catalog looks for.
+    static func items(_ rows: [Row]) -> [HeldItem] {
+        rows.map { HeldItem(key: $0.heldKey, title: $0.title) }
+    }
+
+    /// Names for the rows that have none yet, from this device's catalog,
+    /// by each row's own key (an episode's row gets its show's name).
+    static func titlesToFillIn(_ rows: [Row], catalog: CatalogService) -> [String: String] {
+        var titles: [String: String] = [:]
+        for row in rows where row.title.isEmpty && titles[row.itemKey] == nil {
+            if let title = catalog.heldTitle(for: ItemKey(rawValue: row.itemKey)) { titles[row.itemKey] = title }
+        }
+        return titles
+    }
+
+    /// What starts a pass: the household's rows changing (a favorite or a
+    /// name arriving from another device, a favorite made here) or a catalog
+    /// refresh finishing (a first import, or a new generation, which asks
+    /// again for what wasn't found).
+    struct Trigger: Equatable {
+        var rows: [Row]
+        var refreshed: [UUID: Date]
+    }
+
+    /// For the life of the task, now and at every trigger: writes the names
+    /// this device's catalog knows onto rows without one, then has the
+    /// catalog search for held titles it lacks. The catalog asks each query
+    /// once a catalog and skips titles it holds, so a trigger with nothing
+    /// new costs a few reads.
+    static func observe(store: HouseholdStore, catalog: CatalogService) -> Task<Void, Never> {
+        observeChanges(of: {
+            _ = store.revision
+            return Trigger(rows: rows(in: store), refreshed: catalog.refreshStates.compactMapValues(\.catalogRefreshedAt))
+        }) { trigger in
+            let titles = titlesToFillIn(trigger.rows, catalog: catalog)
+            if !titles.isEmpty { store.fillInTitles(titles) }
+            Task { await catalog.resolveHeldItems(items(trigger.rows)) }
         }
     }
 }
