@@ -1,0 +1,12 @@
+#EXTM3U
+# Hearth's sample playlist for App Review and TestFlight's Beta App Review:
+# Apple's own public HLS test streams, so a reviewer can try the app without
+# an IPTV subscription. Short clips played as live channels: each stops after
+# a minute or two. Served at
+# https://raw.githubusercontent.com/bhavik3jain/bhavik-iptv/main/docs/review/sample.m3u
+#EXTINF:-1 tvg-id="apple-sample-1" tvg-chno="1" group-title="Apple sample streams",Apple Sample 1 (Advanced HLS, fMP4)
+https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8
+#EXTINF:-1 tvg-id="apple-sample-2" tvg-chno="2" group-title="Apple sample streams",Apple Sample 2 (BipBop 16x9)
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8
+#EXTINF:-1 tvg-id="apple-sample-3" tvg-chno="3" group-title="Apple sample streams",Apple Sample 3 (HEVC)
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8
