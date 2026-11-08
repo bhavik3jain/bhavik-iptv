@@ -115,6 +115,30 @@ struct PlayerModelTests {
         model.close()
     }
 
+    @Test func aMovieGetsLongerToStartThanAChannel() async throws {
+        // An episode's first HLS segment on the owner's provider is 16 MB:
+        // a channel's six seconds gave up on starts that were nearly there.
+        let model = makeModel(
+            movie(resolver: ScriptedResolver(Streams.movie)),
+            configuration: .test(startTimeout: 0.05, onDemandStartTimeout: 30)
+        )
+        await model.start()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(engines.made.map(\.kind) == [.avPlayer], "still waiting on AVPlayer")
+        #expect(model.state == .loading)
+        model.close()
+    }
+
+    @Test func aMovieThatNeverStartsIsStillRetriedOnVLC() async throws {
+        let model = makeModel(
+            movie(resolver: ScriptedResolver(Streams.movie)),
+            configuration: .test(startTimeout: 30, onDemandStartTimeout: 0.05)
+        )
+        await model.start()
+        #expect(await eventually { engines.last?.kind == .vlc && engines.last?.loaded.isEmpty == false })
+        model.close()
+    }
+
     @Test func pausedBeforeTheFirstFrameIsNotATimeout() async throws {
         let model = makeModel(
             channel(102, "Fieldhouse Sports", resolver: ScriptedResolver(Streams.hls)),
@@ -338,6 +362,121 @@ struct PlayerModelTests {
         await model.goToLastItem()
         #expect(model.item.id == "ch-102")
         #expect(model.lastItemTitle == "103 Lantern Drama", "previous channel flips back and forth")
+        model.close()
+    }
+
+    // MARK: Seeking a movie or episode (PLY-2)
+
+    /// A movie playing at 100 s of 3,000 on a fake engine.
+    private func playingMovie(configuration: PlayerConfiguration = .test()) async throws -> (PlayerModel, FakeEngine) {
+        let model = makeModel(movie(resolver: ScriptedResolver(Streams.movie)), configuration: configuration)
+        await model.start()
+        let engine = try #require(engines.last)
+        engine.duration = 3000
+        engine.currentTime = 100
+        engine.simulate(.playing)
+        return (model, engine)
+    }
+
+    @Test func quickSkipsAddUpToOneSeek() async throws {
+        let (model, engine) = try await playingMovie(configuration: .test(skipGatherDelay: 0.2))
+        engine.seekMovesClock = false
+        for _ in 0..<5 { model.skip(by: 10) }
+        #expect(model.currentTime == 150, "each press counts from where the last was headed")
+        model.tick(elapsed: 1)
+        #expect(model.currentTime == 150, "the engine's old time doesn't pull it back")
+        #expect(engine.seeks.isEmpty, "gathered, not sent yet")
+        #expect(await eventually { engine.seeks == [150] })
+        model.skip(by: -10)
+        #expect(model.currentTime == 140, "a press after the seek went counts from its target")
+        #expect(await eventually { engine.seeks == [150, 140] })
+        model.close()
+    }
+
+    @Test func theKnobStaysOnTheTargetUntilTheEngineGetsThere() async throws {
+        let clock = TestClock()
+        let (model, engine) = try await playingMovie(configuration: .test(clock: clock))
+        engine.seekMovesClock = false
+        await model.seek(toFraction: 0.4)
+        #expect(engine.seeks == [1200])
+        #expect(model.pendingSeek?.target == 1200)
+        engine.simulate(.buffering)
+        model.tick(elapsed: 1)
+        #expect(model.currentTime == 1200, "the engine still says 100 s")
+        #expect(abs(model.timeline.position - 0.4) < 1e-9)
+
+        engine.currentTime = 1201
+        engine.simulate(.playing)
+        #expect(model.pendingSeek == nil)
+        engine.currentTime = 1203
+        model.tick(elapsed: 1)
+        #expect(model.currentTime == 1203, "the engine's clock again once it's there")
+        model.close()
+    }
+
+    @Test func aSeekTheEngineDroppedIsLetGo() async throws {
+        let clock = TestClock()
+        let (model, engine) = try await playingMovie(configuration: .test(clock: clock))
+        engine.seekMovesClock = false
+        model.seek(to: 2000)
+        clock.advance(by: PendingSeek.patience)
+        model.tick(elapsed: 1)
+        #expect(model.pendingSeek == nil)
+        #expect(model.currentTime == 100)
+        model.close()
+    }
+
+    @Test func pressesInARowOnTheTVGoFurther() async throws {
+        let clock = TestClock()
+        let (model, engine) = try await playingMovie(configuration: .test(clock: clock))
+        engine.seekMovesClock = false
+        for _ in 0..<4 {
+            model.scrub(forward: true)
+            clock.advance(by: 0.3)
+        }
+        #expect(model.currentTime == 100 + 10 + 10 + 10 + 30)
+        #expect(model.pendingSeek?.offset == 60, "how far the run has gone, for the bar")
+        #expect(await eventually { engine.seeks.last == 160 })
+        model.close()
+    }
+
+    @Test func skipsStopAtTheEnds() async throws {
+        let (model, engine) = try await playingMovie()
+        engine.seekMovesClock = false
+        model.skip(by: -300)
+        #expect(model.currentTime == 0)
+        model.skip(by: 4000)
+        #expect(model.currentTime == 3000)
+        model.close()
+    }
+
+    @Test func aChannelScrubsTenSecondsAtATime() async throws {
+        let model = makeModel(channel(102, "Fieldhouse Sports", resolver: ScriptedResolver(Streams.hls)))
+        await model.start()
+        let engine = try #require(engines.last)
+        engine.duration = 60
+        engine.currentTime = 50
+        engine.simulate(.playing)
+        model.scrub(forward: false)
+        #expect(await eventually { engine.seeks.last == 40 })
+        #expect(model.pendingSeek == nil)
+        model.close()
+    }
+
+    @Test func switchingEpisodesForgetsAPendingSeek() async throws {
+        let resolver = ScriptedResolver(Streams.movie)
+        let next = PlayerItem(id: "ep-2", title: "Next", isLive: false, resolve: { try resolver.resolve($0) })
+        let model = makeModel(movie(resolver: resolver), configuration: .test(skipGatherDelay: 0.3), navigator: { _, offset in offset == 1 ? next : nil })
+        await model.start()
+        let engine = try #require(engines.last)
+        engine.duration = 3000
+        engine.currentTime = 100
+        engine.simulate(.playing)
+        model.skip(by: 10)
+        await model.goToNextItem()
+        #expect(model.pendingSeek == nil)
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(engine.seeks.isEmpty, "the gathered seek never reaches the next episode")
         model.close()
     }
 

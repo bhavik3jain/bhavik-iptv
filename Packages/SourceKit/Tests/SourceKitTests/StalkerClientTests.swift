@@ -209,6 +209,32 @@ import Testing
         #expect(portal.count("handshake") == 2)
     }
 
+    @Test func callsRefusedTogetherSignInAgainOnce() async throws {
+        // Four season lists in flight when the session lapses: one new
+        // sign-in, not four, each of which would end the one before.
+        let portal = Portal { action, request, attempt in
+            switch action {
+            case "handshake":
+                return .json(#"{"js":{"token":"TOKEN\#(attempt)"}}"#)
+            case "get_ordered_list" where request.query["season_id"] == "0":
+                return .json(#"{"js":{"total_items":4,"max_page_items":14,"data":[{"id":"5:1","season_number":"1","is_season":1},{"id":"5:2","season_number":"2","is_season":1},{"id":"5:3","season_number":"3","is_season":1},{"id":"5:4","season_number":"4","is_season":1}]}}"#)
+            case "get_ordered_list":
+                if request.value(forHTTPHeaderField: "Authorization") == "Bearer TOKEN1" {
+                    // Refused one after another, the later ones after the
+                    // first has already signed in again.
+                    let season = Double(request.query["season_id"]?.split(separator: ":").last ?? "") ?? 1
+                    return StubURLProtocol.Reply.text("Authorization failed.").after(0.08 * season)
+                }
+                return .json(#"{"js":{"total_items":1,"max_page_items":14,"data":[{"id":"e","series_number":"1","name":"Episode 1"}]}}"#)
+            default:
+                return nil
+            }
+        }
+        let detail = try await portal.client().seriesDetail(RemoteSeries(id: "5", name: "Lapsed"))
+        #expect(detail.episodes.map(\.season) == [1, 2, 3, 4])
+        #expect(portal.count("handshake") == 2)
+    }
+
     @Test func aRefusalThatPersistsFailsAfterOneRetry() async {
         let portal = Portal { action, _, _ in
             action == "get_all_channels" ? .text("Unauthorized", status: 401) : nil
@@ -287,6 +313,30 @@ import Testing
         #expect(portal.requests("get_ordered_list").allSatisfy { $0.query["type"] == "series" && $0.query["episode_id"] == "0" })
     }
 
+    @Test func seriesDetailAsksSeveralSeasonsAtOnceAndKeepsTheirOrder() async throws {
+        // Nine seasons, each answered 0.15 s later, the later ones sooner, so
+        // they finish out of order. One after another, Grey's Anatomy's 23
+        // seasons kept the owner on "Loading episodes…" for up to 27 s.
+        let seasons = (1...9).map { #"{"id":"77:\#($0)","name":"Season \#($0)","season_number":"\#($0)","is_season":1}"# }
+        let portal = Portal { action, request, _ in
+            guard action == "get_ordered_list", request.query["movie_id"] == "77" else { return nil }
+            let seasonID = request.query["season_id"] ?? ""
+            if seasonID == "0" {
+                return .json(#"{"js":{"total_items":9,"max_page_items":14,"data":[\#(seasons.joined(separator: ","))]}}"#)
+            }
+            let number = Int(seasonID.split(separator: ":").last ?? "") ?? 0
+            let episode = #"{"id":"e\#(number)","series_number":"1","name":"Episode 1","is_episode":1}"#
+            return StubURLProtocol.Reply.json(#"{"js":{"total_items":1,"max_page_items":14,"data":[\#(episode)]}}"#).after(0.05 + Double(10 - number) * 0.01)
+        }
+        let detail = try await portal.client().seriesDetail(RemoteSeries(id: "77", name: "Long Runner"))
+        #expect(detail.seasons.map(\.number) == Array(1...9))
+        #expect(detail.episodes.map(\.season) == Array(1...9), "Episodes keep the seasons' order, whichever answered first")
+        #expect(detail.episodes.map(\.seasonID) == (1...9).map { "77:\($0)" })
+        let inFlight = StubURLProtocol.maxInFlight(for: portal.host)
+        #expect(inFlight > 1, "Seasons were asked one after another")
+        #expect(inFlight <= StalkerClient.seasonConcurrency, "A portal sees at most a few calls at once")
+    }
+
     // MARK: The whole guide
 
     @Test func theWholeGuideComesInOneCallKeyedByChannel() async throws {
@@ -305,6 +355,49 @@ import Testing
         #expect(programmes.first { $0.guideChannelID == "1001" }?.title == "NFL RedZone")
         // A row that doesn't name its channel takes it from the key.
         #expect(programmes.first { $0.guideChannelID == "1002" }?.title == "Evening News")
+    }
+
+    @Test func aLinkDoesNotWaitForTheWholeGuideToBeRead() async throws {
+        // A guide big enough to take a while to read (the owner's is 25 MB);
+        // a play's link asked while it's read used to wait for all of it.
+        var channels: [String] = []
+        for channel in 0..<30 {
+            let rows = (0..<1200).map { index in
+                #"{"id":"\#(channel)-\#(index)","name":"Programme \#(index) with a long enough title","descr":"What happens in it, at some length so the answer is a few megabytes.","start_timestamp":\#(1793500000 + index * 60),"stop_timestamp":\#(1793500060 + index * 60)}"#
+            }
+            channels.append(#""\#(1000 + channel)":[\#(rows.joined(separator: ","))]"#)
+        }
+        let guide = Data(#"{"js":{"data":{\#(channels.joined(separator: ","))}}}"#.utf8)
+        let served = Mutex(false)
+        let portal = Portal { action, _, _ in
+            switch action {
+            case "get_epg_info":
+                served.withLock { $0 = true }
+                return StubURLProtocol.Reply(headers: ["Content-Type": "application/json"], body: guide)
+            case "create_link":
+                return .fixture("stalker/create_link_ffmpeg.json")
+            default:
+                return nil
+            }
+        }
+        let client = portal.client()
+        _ = try await client.signIn()
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        let guideTask = Task { () -> Duration? in
+            var firstAt: Duration?
+            for try await _ in try #require(client.fullGuide()) where firstAt == nil {
+                firstAt = clock.now - started
+            }
+            return firstAt
+        }
+        while !served.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(5)) }
+        let channel = RemoteChannel(id: "1001", name: "Cityline News", command: "ffrt http://localhost/ch/1001_")
+        _ = try await client.streamLink(for: .live(channel))
+        let linkAt = clock.now - started
+        let guideAt = try #require(try await guideTask.value)
+        #expect(linkAt < guideAt, "The link waited \(linkAt) for a guide read by \(guideAt)")
     }
 
     @Test(arguments: [

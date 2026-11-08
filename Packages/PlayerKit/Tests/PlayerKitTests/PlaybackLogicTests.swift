@@ -141,6 +141,100 @@ struct PlaybackTimelineTests {
     }
 }
 
+@Suite("Scrubbing a movie or episode")
+struct ScrubbingTests {
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    // MARK: The label under the finger
+
+    @Test func theBarSaysWhatAPointStandsFor() {
+        let movie = PlaybackTimeline.make(isLive: false, programmeStart: nil, programmeEnd: nil, now: start, liveOffset: 0, currentTime: 0, duration: 2560)
+        #expect(movie.label(forFraction: 0.5) == "21:20")
+        #expect(movie.label(forFraction: 1.4) == "42:40", "clamped to the end")
+
+        let end = start.addingTimeInterval(3 * 3600)
+        let now = start.addingTimeInterval(3600)
+        let live = PlaybackTimeline.make(isLive: true, programmeStart: start, programmeEnd: end, now: now, liveOffset: 0, currentTime: 0, duration: nil)
+        #expect(live.label(forFraction: 0.25) == HearthFormat.clock(start.addingTimeInterval(2700)))
+        #expect(live.label(forFraction: 0.9) == HearthFormat.clock(now), "nothing past now")
+    }
+
+    // MARK: A run of presses
+
+    @Test func pressesInARowGoFurther() {
+        var run = SkipRun()
+        var at = start
+        var steps: [TimeInterval] = []
+        for _ in 0..<14 {
+            steps.append(run.step(forward: true, at: at))
+            at = at.addingTimeInterval(0.4)
+        }
+        #expect(steps == [10, 10, 10, 30, 30, 30, 60, 60, 60, 120, 120, 120, 300, 300])
+    }
+
+    @Test func aPauseOrATurnStartsTheRunOver() {
+        var run = SkipRun()
+        for index in 0..<5 { _ = run.step(forward: true, at: start.addingTimeInterval(Double(index) * 0.5)) }
+        #expect(run.step(forward: true, at: start.addingTimeInterval(2.4)) == 30, "still the same run")
+        #expect(run.step(forward: true, at: start.addingTimeInterval(2.4 + SkipRun.window + 0.1)) == 10, "a pause starts over")
+        _ = run.step(forward: true, at: start.addingTimeInterval(10))
+        _ = run.step(forward: true, at: start.addingTimeInterval(10.3))
+        _ = run.step(forward: true, at: start.addingTimeInterval(10.6))
+        #expect(run.step(forward: false, at: start.addingTimeInterval(10.9)) == -10, "turning back starts over")
+    }
+
+    // MARK: The target held until the engine arrives
+
+    @Test func aPendingSeekWaitsForTheEngine() {
+        let pending = PendingSeek(target: 1200, origin: 100, since: start)
+        #expect(pending.offset == 1100)
+        #expect(!pending.isSettled(engineTime: 100, sent: true, now: start.addingTimeInterval(1)))
+        #expect(pending.isSettled(engineTime: 1201.5, sent: true, now: start.addingTimeInterval(1)))
+        #expect(pending.isSettled(engineTime: 100, sent: true, now: start.addingTimeInterval(PendingSeek.patience)), "a seek the engine dropped is let go")
+        #expect(!pending.isSettled(engineTime: 1200, sent: false, now: start.addingTimeInterval(60)), "still gathering presses")
+    }
+
+    // MARK: Dragging
+
+    @Test func aDragStartsWhereTheFingerLandsAndFollowsIt() {
+        var drag = ScrubDrag(startX: 100, startY: 0, width: 400)
+        #expect(drag.fraction == 0.25, "a tap jumps there")
+        drag.move(toX: 200, y: 20)
+        #expect(drag.fraction == 0.5)
+        #expect(drag.speed == .full)
+        drag.move(toX: 1000, y: 0)
+        #expect(drag.fraction == 1, "kept on the bar")
+    }
+
+    @Test func movingAwayFromTheBarScrubsSlower() {
+        var drag = ScrubDrag(startX: 200, startY: 500, width: 400)
+        drag.move(toX: 200, y: 420)
+        #expect(drag.speed == .half)
+        #expect(drag.fraction == 0.5, "changing speed doesn't move the knob")
+        drag.move(toX: 240, y: 420)
+        #expect(abs(drag.fraction - 0.55) < 1e-9, "40 points at half speed")
+        drag.move(toX: 240, y: 360)
+        #expect(drag.speed == .quarter)
+        drag.move(toX: 280, y: 360)
+        #expect(abs(drag.fraction - 0.575) < 1e-9)
+        drag.move(toX: 280, y: 250)
+        #expect(drag.speed == .fine)
+        #expect(drag.speed.label != nil)
+        drag.move(toX: 200, y: 520)
+        #expect(drag.speed == .full)
+        #expect(ScrubDrag.Speed.full.label == nil)
+    }
+
+    @Test func aLiveDragStopsAtNow() {
+        var drag = ScrubDrag(startX: 390, startY: 0, width: 400, upperBound: 0.7)
+        #expect(drag.fraction == 0.7)
+        drag.move(toX: 100, y: 0)
+        #expect(drag.fraction == 0)
+        drag.move(toX: 400, y: 0)
+        #expect(drag.fraction == 0.7)
+    }
+}
+
 @Suite("Wording")
 struct PlayerFormatTests {
     @Test func offsetBadgeUsesATrueMinus() {
@@ -281,6 +375,20 @@ struct VLCMediaOptionsTests {
     @Test func filesCacheLongerAndResume() {
         let stream = StreamDescriptor(url: URL(string: "http://provider.test/movie/7.mkv")!, format: .mkv, startPosition: 90.6)
         #expect(VLCEngine.mediaOptions(for: stream) == [":network-caching=3000", ":start-time=90"])
+    }
+
+    @MainActor
+    @Test func theLengthLibVLCReportsCountsWhenTheMediaHasNone() {
+        // Without a length the player hides the scrub bar and greys out the
+        // skip buttons; a network stream's media may not say, the player does.
+        let engine = VLCEngine()
+        engine.load(StreamDescriptor(url: URL(string: "http://provider.test/movie/7.mkv")!, format: .mkv))
+        #expect(engine.duration == nil)
+        engine.lengthChanged(2_561_000)
+        #expect(engine.duration == 2561)
+        engine.load(StreamDescriptor(url: URL(string: "http://provider.test/movie/8.mkv")!, format: .mkv))
+        #expect(engine.duration == nil, "the next stream doesn't inherit it")
+        engine.stop()
     }
 }
 #endif

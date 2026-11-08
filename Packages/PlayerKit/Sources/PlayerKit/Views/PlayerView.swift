@@ -447,51 +447,76 @@ struct PlayerLiveStatusRow: View {
 }
 
 /// The scrub bar (mockup 06): a white-22 % track, a lighter fill up to the
-/// live edge, the amber fill and a white knob at the playhead. Dragging moves
-/// the knob at once and seeks when let go — a seek behind live may open the
-/// archive, which shouldn't happen on every pixel of a drag.
+/// live edge, the amber fill and a white knob at the playhead. A touch jumps
+/// the knob to the finger and a drag carries it (`ScrubDrag`: slower the
+/// further the finger moves up away from the bar), with the time it points
+/// at shown above it; the seek goes when the finger lifts — a seek behind
+/// live may open the archive, which shouldn't happen on every pixel of a drag.
+/// After it the knob stays on the target while the picture catches up
+/// (`PlayerModel.pendingSeek`).
 struct PlayerScrubBar: View {
     let model: PlayerModel
     let timeline: PlaybackTimeline
-    @State private var dragFraction: Double?
+    @State private var drag: ScrubDrag?
+    @State private var bubbleSize = CGSize(width: 70, height: 30)
 
     var body: some View {
         GeometryReader { proxy in
             let width = max(proxy.size.width, 1)
-            let position = dragFraction ?? timeline.position
+            let position = drag?.fraction ?? timeline.position
+            let isDragging = drag != nil
+            let track: CGFloat = isDragging ? 8 : 4
+            let knob: CGFloat = isDragging ? 26 : 16
             ZStack(alignment: .leading) {
-                Capsule().fill(PlayerPalette.scrubTrack).frame(height: 4)
+                Capsule().fill(PlayerPalette.scrubTrack).frame(height: track)
                 if let edge = timeline.liveEdge {
-                    Capsule().fill(PlayerPalette.scrubLiveFill).frame(width: width * edge, height: 4)
+                    Capsule().fill(PlayerPalette.scrubLiveFill).frame(width: width * edge, height: track)
                 }
-                Capsule().fill(HearthColor.accent).frame(width: width * position, height: 4)
+                Capsule().fill(HearthColor.accent).frame(width: width * position, height: track)
                 Circle()
                     .fill(.white)
-                    .frame(width: 16, height: 16)
+                    .frame(width: knob, height: knob)
                     .shadow(color: .black.opacity(0.3), radius: 2)
-                    .offset(x: width * position - 8)
+                    .offset(x: width * position - knob / 2)
             }
             .frame(width: width, height: proxy.size.height)
+            .overlay(alignment: .topLeading) {
+                if let drag {
+                    ScrubPreviewBubble(time: timeline.label(forFraction: drag.fraction), speed: drag.speed.label)
+                        .fixedSize()
+                        .onGeometryChange(for: CGSize.self) { $0.size } action: { bubbleSize = $0 }
+                        // Centred over the knob, kept inside the bar at its ends.
+                        .offset(
+                            x: min(max(width * drag.fraction - bubbleSize.width / 2, 0), max(width - bubbleSize.width, 0)),
+                            y: -bubbleSize.height - 6
+                        )
+                        .allowsHitTesting(false)
+                }
+            }
             .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.12), value: isDragging)
             #if !os(tvOS)
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        dragFraction = fraction(at: value.location.x, width: width)
+                        if drag == nil {
+                            drag = ScrubDrag(startX: value.startLocation.x, startY: value.startLocation.y, width: width, upperBound: timeline.liveEdge ?? 1)
+                        }
+                        drag?.move(toX: value.location.x, y: value.location.y)
                         model.showControls()
                     }
                     .onEnded { value in
-                        let target = fraction(at: value.location.x, width: width)
-                        dragFraction = target
+                        drag?.move(toX: value.location.x, y: value.location.y)
+                        let target = drag?.fraction ?? timeline.position
                         Task {
                             await model.seek(toFraction: target)
-                            dragFraction = nil
+                            drag = nil
                         }
                     }
             )
             #endif
         }
-        .frame(height: 32)
+        .frame(height: 44)
         .disabled(!model.canSeek)
         .accessibilityElement()
         .accessibilityLabel(Text(model.item.isLive ? "Playback position, live" : "Playback position"))
@@ -504,12 +529,27 @@ struct PlayerScrubBar: View {
             }
         }
     }
+}
 
-    /// Live drags stop at now: there is nothing to see past the live edge.
-    private func fraction(at x: CGFloat, width: CGFloat) -> Double {
-        let raw = PlaybackTimeline.clamp(Double(x / width))
-        if let edge = timeline.liveEdge { return min(raw, edge) }
-        return raw
+/// "23:41" above the knob while it's dragged, with the speed when slower.
+struct ScrubPreviewBubble: View {
+    let time: String
+    let speed: String?
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(time)
+                .font(.hearthMono(15, relativeTo: .callout))
+                .foregroundStyle(.white)
+            if let speed {
+                Text(speed)
+                    .font(.hearthText(11, relativeTo: .caption2))
+                    .foregroundStyle(PlayerPalette.secondaryText)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.black.opacity(0.75)))
     }
 }
 
