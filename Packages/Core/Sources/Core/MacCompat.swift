@@ -248,6 +248,19 @@ extension View {
         #endif
     }
 
+    /// A list that exists to set an order (Reorder My List, Favorite
+    /// channels): iOS's edit mode, always on, so rows show the system's drag
+    /// handles (and delete buttons where they can be removed) and move at a
+    /// touch rather than after a long press. The Mac drags the rows of any
+    /// list with `onMove` as it is; the TV doesn't reorder.
+    public func hearthAlwaysReordering() -> some View {
+        #if os(iOS)
+        self.environment(\.editMode, .constant(.active))
+        #else
+        self
+        #endif
+    }
+
     /// The remote's Menu button (and the Mac's Esc): `action` instead of the
     /// system's back. Nothing on iOS.
     public func hearthOnExitCommand(_ action: (() -> Void)?) -> some View {
@@ -288,6 +301,23 @@ public enum HearthPlatform {
         false
         #else
         true
+        #endif
+    }
+}
+
+/// The ≡ grip at the end of a row in a list made to be reordered, where the
+/// system draws none: the Mac. iOS's edit mode draws its own handle
+/// (`hearthAlwaysReordering()`), so there it's nothing, as on the TV.
+public struct ReorderGrip: View {
+    public init() {}
+
+    public var body: some View {
+        #if os(macOS)
+        Image(systemName: "line.3.horizontal")
+            .foregroundStyle(HearthColor.glyphMuted)
+            .accessibilityHidden(true)
+        #else
+        EmptyView()
         #endif
     }
 }
