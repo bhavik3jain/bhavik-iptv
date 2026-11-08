@@ -535,12 +535,18 @@ public final class HouseholdStore {
     public func favorites(profileID: UUID, kind: FavoriteKind) -> [FavoriteRecord] {
         guard let profile = profileEntity(profileID), profile.kind != .guest else { return [] }
         let removed = removedSourceIDs()
-        let rows = live(profile.favorites).filter { (FavoriteKind(rawValue: $0.kindRaw) ?? .channel) == kind }
-        return Dictionary(grouping: rows, by: \.itemKey)
-            .compactMap { _, group in FoldRules.favoriteKeeper(group.map(\.foldRow)).map { group[$0] } }
+        return foldedFavorites(of: profile, kind: kind)
             .filter { favorite in ItemKeyHint.sourceID(of: favorite.itemKey).map { !removed.contains($0) } ?? true }
             .map(\.record)
             .sorted(by: Self.favoriteOrder)
+    }
+
+    /// One row per item key (a duplicate a fold hasn't reached counts once),
+    /// removed sources' rows included, unordered.
+    private func foldedFavorites(of profile: ProfileEntity, kind: FavoriteKind) -> [FavoriteEntity] {
+        let rows = live(profile.favorites).filter { (FavoriteKind(rawValue: $0.kindRaw) ?? .channel) == kind }
+        return Dictionary(grouping: rows, by: \.itemKey)
+            .compactMap { _, group in FoldRules.favoriteKeeper(group.map(\.foldRow)).map { group[$0] } }
     }
 
     public func isFavorite(profileID: UUID, itemKey: String) -> Bool {
@@ -569,12 +575,28 @@ public final class HouseholdStore {
 
     /// Moves within one profile's list of one kind, writing only the moved
     /// rows: each gets a sort order between its new neighbours (FAV-1).
+    /// The offsets are in `favorites(profileID:kind:)`; a screen that shows
+    /// fewer rows than that uses `moveFavorites(profileID:kind:shownIDs:…)`.
     public func moveFavorites(profileID: UUID, kind: FavoriteKind, fromOffsets: IndexSet, toOffset: Int) {
-        let ordered = favorites(profileID: profileID, kind: kind)
-        guard !ordered.isEmpty, let profile = profileEntity(profileID) else { return }
-        let writes = FractionalOrder.writes(orders: ordered.map(\.sortOrder), fromOffsets: fromOffsets, toOffset: toOffset)
+        let shown = favorites(profileID: profileID, kind: kind).map(\.id)
+        moveFavorites(profileID: profileID, kind: kind, shownIDs: shown, fromOffsets: fromOffsets, toOffset: toOffset)
+    }
+
+    /// Moves within the list as a screen shows it, writing only the moved
+    /// rows (FAV-1). `shownIDs` are the favorites' ids in the order shown,
+    /// and the offsets are that list's, as `onMove` gives them. A screen may
+    /// leave rows out — titles a profile's rules hide, titles still loading,
+    /// a removed source's favorites — and those keep their places: the moved
+    /// rows land just before the shown row that follows them.
+    public func moveFavorites(profileID: UUID, kind: FavoriteKind, shownIDs: [UUID], fromOffsets: IndexSet, toOffset: Int) {
+        guard let profile = profileEntity(profileID), profile.kind != .guest else { return }
+        // The whole list, removed sources' rows included, so a move never
+        // lands on a hidden row's sort order or renumbers past one.
+        let rows = foldedFavorites(of: profile, kind: kind)
+        let ordered = rows.map(\.record).sorted(by: Self.favoriteOrder)
+        guard let move = FractionalOrder.offsets(in: ordered.map(\.id), shown: shownIDs, fromOffsets: fromOffsets, toOffset: toOffset) else { return }
+        let writes = FractionalOrder.writes(orders: ordered.map(\.sortOrder), fromOffsets: move.fromOffsets, toOffset: move.toOffset)
         guard !writes.isEmpty else { return }
-        let rows = live(profile.favorites)
         for (index, sortOrder) in writes {
             let id = ordered[index].id
             if let row = rows.first(where: { $0.id == id }) { set(row, \.sortOrder, sortOrder) }
