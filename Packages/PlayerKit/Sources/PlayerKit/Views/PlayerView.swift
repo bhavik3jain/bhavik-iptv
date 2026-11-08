@@ -120,6 +120,7 @@ public struct PlayerView: View {
             return PlayerWindow.toggleFullScreen() ? .handled : .ignored
         }
         .onAppear { hasKeyboardFocus = true }
+        .playerOrientationSupport()
         .onChange(of: voiceOverEnabled, initial: true) { _, enabled in
             // Controls that fade can't be reached with VoiceOver.
             model.autoHidesControls = !enabled
@@ -165,7 +166,8 @@ struct PlayerControlsOverlay: View {
     }
 }
 
-/// Close, the channel, its programme, then tracks, multi-view, PiP, AirPlay.
+/// Close, the channel, its programme, then rotate (iPhone), tracks,
+/// multi-view, PiP, AirPlay.
 struct PlayerTopBar: View {
     let model: PlayerModel
     let narrow: Bool
@@ -196,6 +198,7 @@ struct PlayerTopBar: View {
             .accessibilityAddTraits(.isHeader)
 
             HStack(spacing: 6) {
+                PlayerRotateButton(model: model)
                 PlayerTracksMenu(model: model)
                 if let keep = model.onKeepInBackground {
                     PlayerCircleButton(systemName: "arrow.down.right.and.arrow.up.left", label: "Keep playing in the background", action: keep)
@@ -205,6 +208,7 @@ struct PlayerTopBar: View {
                 }
                 if model.supportsPictureInPicture {
                     PlayerCircleButton(systemName: "pip.enter", label: "Picture in picture") {
+                        PlayerOrientationLock.shared.handBack()
                         model.startPictureInPicture()
                     }
                 }

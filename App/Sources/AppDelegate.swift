@@ -1,6 +1,7 @@
 import CloudKit
 import DownloadKit
 import Foundation
+import PlayerKit
 
 // Tapping a household invitation (Messages, Mail) has to land somewhere
 // (HH-3). On a scene-based iOS app the entry point is a UIWindowSceneDelegate
@@ -60,6 +61,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         nonisolated(unsafe) let completion = completionHandler
         DownloadCenter.handleEvents(forBackgroundSession: identifier) { completion() }
     }
+
+    /// The player's rotate button narrows this to the orientation it asked
+    /// for, so a turn holds with Portrait Orientation Lock on; otherwise it's
+    /// the Info.plist lists (PlayerKit's `PlayerOrientationLock`). Deprecated
+    /// in iOS 27 for the scene delegate's own, which says the same.
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        PlayerOrientationLock.shared.supportedInterfaceOrientations(for: window?.windowScene)
+    }
     #endif
 
     /// The only way to name a custom UIWindowSceneDelegate; without it
@@ -88,6 +97,14 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
     func windowScene(_ windowScene: UIWindowScene, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
         MainActor.assumeIsolated { ShareInbox.receive(cloudKitShareMetadata) }
     }
+
+    #if os(iOS)
+    /// iOS 27's replacement for the app delegate's answer above; the same.
+    @available(iOS 27.0, *)
+    func supportedInterfaceOrientations(for windowScene: UIWindowScene) -> UIInterfaceOrientationMask {
+        MainActor.assumeIsolated { PlayerOrientationLock.shared.supportedInterfaceOrientations(for: windowScene) }
+    }
+    #endif
 }
 #endif
 
