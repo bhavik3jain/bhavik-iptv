@@ -22,6 +22,16 @@ final class FakeSourceClient: SourceClient {
         var listsNeedCategory = false
         /// How long each page takes, so a test can cancel mid-import.
         var pageDelay: Duration?
+        /// How long each page of shows takes, so a test can act while a
+        /// refresh is past its movies and still on its shows.
+        var seriesPageDelay: Duration?
+        /// Lists answered with nothing, no total and no more pages: what a
+        /// Stalker portal sends on a session that another sign-in from the
+        /// same MAC ended (an envelope with an empty `js`).
+        var emptyLists: Set<ContentKind> = []
+        /// Movie pages past the first wait while this is set, so a test can
+        /// have a browsed page answer after a refresh has swapped.
+        var holdsLaterMoviePages = false
         /// What a list claims as its `totalItems`, by `"<kind>/<category id>"`
         /// (`"vod/all"` for every movie): a big portal's count without the
         /// fixture holding that many titles. Unset lists report what they hold.
@@ -95,15 +105,21 @@ final class FakeSourceClient: SourceClient {
 
     func movies(categoryID: String?, page: Int) async throws -> Page<RemoteMovie> {
         record("movies(\(categoryID ?? "all"),\(page))")
+        while page > 0, state.withLock({ $0.holdsLaterMoviePages }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         let fixture = self.fixture
         if let pageDelay = fixture.pageDelay { try await Task.sleep(for: pageDelay) }
         if case .moviesPage(let failingPage, let error) = fixture.failure, failingPage == page { throw error }
+        if fixture.emptyLists.contains(.vod) { return Page(items: [], page: page, totalItems: nil, hasMore: false) }
         return try paged(fixture.movies, kind: .vod, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
     }
 
     func series(categoryID: String?, page: Int) async throws -> Page<RemoteSeries> {
         record("series(\(categoryID ?? "all"),\(page))")
         let fixture = self.fixture
+        if let seriesPageDelay = fixture.seriesPageDelay { try await Task.sleep(for: seriesPageDelay) }
+        if fixture.emptyLists.contains(.series) { return Page(items: [], page: page, totalItems: nil, hasMore: false) }
         return try paged(fixture.series, kind: .series, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
     }
 

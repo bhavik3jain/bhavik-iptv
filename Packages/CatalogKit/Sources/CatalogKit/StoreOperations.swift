@@ -9,10 +9,45 @@ import SourceKit
 
 extension CatalogStore {
     /// Runs `body` on a fresh background context and returns its result.
-    /// Every write in CatalogKit goes through here, off the main thread.
+    /// Every write in CatalogKit goes through here, off the main thread, and
+    /// one at a time (`writes`): a refresh's swap reads the old catalog and
+    /// copies what it must keep, and a page browsed or a search answered
+    /// meanwhile has to land wholly before that or wholly after it, never
+    /// between the copy and the swap (where it was lost).
     func write<T: Sendable>(_ body: @escaping @Sendable (NSManagedObjectContext) throws -> T) async throws -> T {
+        await writes.acquire()
         let context = newBackgroundContext()
-        return try await context.perform { try body(context) }
+        do {
+            let result = try await context.perform { try body(context) }
+            await writes.release()
+            return result
+        } catch {
+            await writes.release()
+            throw error
+        }
+    }
+}
+
+/// Hands out the store's write turn in order, one holder at a time.
+actor WriteQueue {
+    private var busy = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        guard busy else {
+            busy = true
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func release() {
+        if waiting.isEmpty {
+            busy = false
+        } else {
+            // The turn passes straight to the next writer.
+            waiting.removeFirst().resume()
+        }
     }
 }
 
