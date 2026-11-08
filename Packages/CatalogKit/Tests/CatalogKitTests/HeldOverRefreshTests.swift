@@ -179,4 +179,102 @@ import Testing
         await whole.refresh(sourceID: wholeFake.configuration.id, force: true)
         #expect(whole.series().isEmpty)
     }
+
+    // MARK: Looking hard enough on a device that lacks it
+
+    /// A portal of 162,000 titles holds most films in several versions, so a
+    /// name matches more than the two pages a typed search asks for. The held
+    /// title's own key is known, so its search goes on until that turns up.
+    @Test func aHeldTitleFurtherDownTheProvidersSearchIsFound() async throws {
+        var fixture = CatalogBrowseTests.hugeCatalog()
+        // Six other matches come first: Echo is on the search's fourth page
+        // (two titles a page here).
+        fixture.movies.insert(contentsOf: (1...6).map { RemoteMovie(id: "e\($0)", name: "Echo Park \($0)", categoryID: "12") }, at: 0)
+        let (service, fake) = await Self.service(fixture)
+        let echo = ItemKey.movie(source: fake.configuration.id, id: "m9")
+        // Someone typed the same name first: its two pages don't hold it.
+        _ = await service.searchProviders("Echo")
+        #expect(!service.contains(echo))
+
+        #expect(await service.resolveHeldItems([HeldItem(key: echo, title: "Echo")]) > 0)
+        #expect(service.movie(echo)?.name == "Echo")
+        // Pages already asked aren't asked again, and none past the one it's on.
+        #expect(fake.callCount("search(Echo,0)") == 1)
+        #expect(fake.callCount("search(Echo,3)") == 1)
+        #expect(fake.callCount("search(Echo,4)") == 0)
+    }
+
+    /// Paging stops at the provider's last page and at a limit.
+    @Test func aHeldSearchStopsAtTheEndAndAtItsLimit() async throws {
+        var fixture = CatalogBrowseTests.hugeCatalog()
+        fixture.movies.insert(contentsOf: (1...40).map { RemoteMovie(id: "x\($0)", name: "Nowhere \($0)", categoryID: "12") }, at: 0)
+        let (service, fake) = await Self.service(fixture)
+        let gone = HeldItem(key: .movie(source: fake.configuration.id, id: "gone"), title: "Nowhere")
+        #expect(await service.resolveHeldItems([gone]) > 0)
+        #expect(fake.callCount("search(Nowhere,") == CatalogService.heldSearchPageLimit)
+
+        let (small, smallFake) = await Self.service()
+        _ = await small.resolveHeldItems([HeldItem(key: .movie(source: smallFake.configuration.id, id: "gone"), title: "Charlie")])
+        // One page holds every match, and it says there's no more.
+        #expect(smallFake.callCount("search(Charlie,") == CatalogService.providerSearchPages)
+    }
+
+    // MARK: Favorites that lost their row before names were kept
+
+    /// Builds before 112 dropped every title past the first pages at the
+    /// daily refresh, and a favorite then carried only its key: the names
+    /// came in 112, written only by a catalog that holds the title. Such a
+    /// favorite had nothing to be searched by on any device. The catalog
+    /// remembers the name of every title a refresh dropped (180 days, for
+    /// FAV-2), which is enough to find it.
+    @Test func aDroppedTitleIsNamedFromWhatTheCatalogRemembers() async throws {
+        let (service, fake) = await Self.service()
+        let echo = ItemKey.movie(source: fake.configuration.id, id: "m9")
+        _ = await service.searchProviders("echo")
+        #expect(service.heldTitle(for: echo) == "Echo")
+        // A refresh that drops it (a whole list without it, as an older
+        // build's refresh dropped everything past the first pages), then the
+        // list is big again and Echo is back, past the first pages.
+        let echoRow = try #require(Fixtures.catalog().movies.first { $0.id == "m9" })
+        fake.update {
+            $0.reportedTotals = [:]
+            $0.movies.removeAll { $0.id == "m9" }
+        }
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        fake.update {
+            $0.reportedTotals = ["vod/all": 160_000]
+            $0.movies.insert(echoRow, at: 8)
+        }
+        await service.refresh(sourceID: fake.configuration.id, force: true)
+        #expect(!service.contains(echo))
+
+        let title = try #require(service.heldTitle(for: echo))
+        #expect(SearchKey.normalize(title) == "echo")
+        #expect(await service.resolveHeldItems([HeldItem(key: echo, title: title)]) > 0)
+        #expect(service.movie(echo)?.name == "Echo")
+    }
+
+    /// A remembered name is folded ("greys anatomy english tv series"), and
+    /// the portal's search doesn't match it whole. Its most distinctive word
+    /// goes last.
+    @Test func aFoldedNameIsFoundByItsMostDistinctiveWord() async throws {
+        let (fixture, decorated) = HeldItemTests.decoratedShowList()
+        let (service, fake) = await Self.service(fixture)
+        let key = ItemKey.series(source: fake.configuration.id, id: "s1")
+        let folded = SearchKey.normalize(decorated)
+        #expect(folded == "greys anatomy english tv series")
+        #expect(await service.resolveHeldItems([HeldItem(key: key, title: folded)]) > 0)
+        #expect(service.seriesItem(key)?.name == decorated)
+        #expect(fake.calls.contains("search(anatomy,0)"))
+    }
+
+    @Test func theDistinctiveWordSkipsProviderLabels() {
+        #expect(HeldTitleSearch.queries(for: "greys anatomy english tv series") == ["greys anatomy english tv series", "anatomy"])
+        #expect(HeldTitleSearch.queries(for: "en dune part two 2024") == ["en dune part two 2024", "dune"])
+        #expect(HeldTitleSearch.queries(for: "Greys Anatomy - ENGLISH | TV SERIES") == ["Greys Anatomy", "Greys Anatomy - ENGLISH | TV SERIES", "Anatomy"])
+        #expect(HeldTitleSearch.queries(for: "EN | Lupin (2021)") == ["Lupin", "EN | Lupin (2021)"])
+        #expect(HeldTitleSearch.queries(for: "Echo") == ["Echo"])
+        #expect(HeldTitleSearch.queries(for: "Up") == ["Up"])
+        #expect(HeldTitleSearch.queries(for: "Hindi Movies 1080p") == ["Hindi Movies 1080p"])
+    }
 }

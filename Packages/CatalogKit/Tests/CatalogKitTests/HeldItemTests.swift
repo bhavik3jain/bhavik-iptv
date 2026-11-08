@@ -101,11 +101,13 @@ import Testing
         #expect(Set(fake.calls.filter { $0.hasPrefix("search(") }) == ["search(Grey's Anatomy,0)", "search(Grey's Anatomy,1)"])
     }
 
+    /// The plain part, the whole name, then the plain part's most distinctive
+    /// word (`HeldOverRefreshTests` has why).
     @Test func searchQueriesForANameAndItsPlainPart() {
-        #expect(HeldTitleSearch.queries(for: "Greys Anatomy - ENGLISH | TV SERIES") == ["Greys Anatomy", "Greys Anatomy - ENGLISH | TV SERIES"])
+        #expect(HeldTitleSearch.queries(for: "Greys Anatomy - ENGLISH | TV SERIES") == ["Greys Anatomy", "Greys Anatomy - ENGLISH | TV SERIES", "Anatomy"])
         #expect(HeldTitleSearch.queries(for: "EN | Lupin (2021)") == ["Lupin", "EN | Lupin (2021)"])
-        #expect(HeldTitleSearch.queries(for: "  The   Office ") == ["The Office"])
-        #expect(HeldTitleSearch.queries(for: "Grey's Anatomy") == ["Grey's Anatomy"])
+        #expect(HeldTitleSearch.queries(for: "  The   Office ") == ["The Office", "Office"])
+        #expect(HeldTitleSearch.queries(for: "Grey's Anatomy") == ["Grey's Anatomy", "Anatomy"])
         #expect(HeldTitleSearch.queries(for: "x").isEmpty)
         #expect(HeldTitleSearch.queries(for: "").isEmpty)
     }
@@ -148,11 +150,13 @@ import Testing
         let gone = HeldItem(key: .series(source: fake.configuration.id, id: "dropped"), title: "Nothing Like It")
         #expect(await service.resolveHeldItems([gone]) == 0)
         #expect(await service.resolveHeldItems([gone]) == 0)
-        #expect(fake.callCount("search(") == 2)
+        // The name, then its word "Nothing": two pages each, the last page
+        // saying there's no more.
+        #expect(fake.callCount("search(") == 4)
         // A new catalog asks again.
         await service.refresh(sourceID: fake.configuration.id, force: true)
         _ = await service.resolveHeldItems([gone])
-        #expect(fake.callCount("search(") == 4)
+        #expect(fake.callCount("search(") == 8)
     }
 
     @Test func aSearchThatFailedIsAskedAgain() async throws {

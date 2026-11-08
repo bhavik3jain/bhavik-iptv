@@ -98,6 +98,9 @@ extension CatalogService {
     /// How many pages of a provider's search are asked for (14 titles a page
     /// on Ministra, 2–4 s each, so the pages go out together).
     static let providerSearchPages = 2
+    /// How many pages a held title's search goes through looking for its
+    /// key (`resolveHeldItems`).
+    static let heldSearchPageLimit = 6
 
     /// True when some source keeps only part of its movies and shows on this
     /// device and can search the rest: a search there also asks the provider.
@@ -110,9 +113,9 @@ extension CatalogService {
     /// matching `query`, and adds what comes back, so `search(_:)` finds
     /// titles nobody has browsed to yet and gives the same answer every time.
     /// The query goes to the provider: the owner chose that over search
-    /// staying on the device for these sources (SRCH-2). Each query is asked
-    /// once per catalog: a refresh that swaps one in asks again. Returns how
-    /// many titles were new; `revision` bumps when any were.
+    /// staying on the device for these sources (SRCH-2). Each query's pages
+    /// are asked once per catalog: a refresh that swaps one in asks again.
+    /// Returns how many titles were new; `revision` bumps when any were.
     @discardableResult
     public func searchProviders(_ query: String) async -> Int {
         await searchProviders(query, showingProgress: true)
@@ -121,38 +124,68 @@ extension CatalogService {
     /// `searchProviders(_:)`; `showingProgress` false keeps a search nobody
     /// typed (a held title's, `resolveHeldItems`) out of
     /// `providerSearchesRunning`, so Search doesn't spin for it.
-    func searchProviders(_ query: String, showingProgress: Bool) async -> Int {
+    ///
+    /// Pages go out `providerSearchPages` at a time, up to `pageLimit`, and
+    /// stop early once `found` says so or the provider has no more. Pages a
+    /// query was already asked for this catalog aren't asked again, so a held
+    /// title's search (`heldSearchPageLimit`) carries on past the two pages
+    /// a typed search of the same name asked, rather than being skipped.
+    func searchProviders(_ query: String, showingProgress: Bool, pageLimit: Int = CatalogService.providerSearchPages, until found: () -> Bool = { false }) async -> Int {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = SearchKey.normalize(trimmed)
-        guard normalized.count >= 2, let store = openStore(),
-              providerSearchedQueries.insert(normalized).inserted
-        else { return 0 }
+        guard normalized.count >= 2, let store = openStore() else { return 0 }
         let browsed = sources.filter { persisted[$0.id]?.browseCursors.isEmpty == false }
         guard !browsed.isEmpty else { return 0 }
-        if showingProgress { providerSearchesRunning += 1 }
-        defer { if showingProgress { providerSearchesRunning -= 1 } }
+        var showing = false
+        defer { if showing { providerSearchesRunning -= 1 } }
 
         var added = 0
-        var answered = false
-        for configuration in browsed {
-            guard let client = try? await readyClient(for: configuration), client.capabilities.searchesCatalog else { continue }
-            let pages = await withTaskGroup(of: RemoteSearchPage?.self) { group in
-                for page in 0..<Self.providerSearchPages {
-                    group.addTask { try? await client.search(trimmed, page: page) }
-                }
-                var pages: [RemoteSearchPage] = []
-                for await page in group { if let page { pages.append(page) } }
-                return pages.sorted { $0.page < $1.page }
+        while !found(), !Task.isCancelled {
+            let asked = providerSearchedPages[normalized] ?? 0
+            guard asked < pageLimit else { break }
+            let batch = asked..<min(asked + Self.providerSearchPages, pageLimit)
+            // Claimed before asking, so the same query sent again meanwhile
+            // doesn't ask for these pages a second time.
+            providerSearchedPages[normalized] = batch.upperBound
+            if showingProgress, !showing {
+                showing = true
+                providerSearchesRunning += 1
             }
-            if !pages.isEmpty { answered = true }
-            let generation = persisted[configuration.id]?.generation ?? 0
-            let movies = pages.flatMap(\.movies)
-            let series = pages.flatMap(\.series)
-            added += (try? await CatalogWriter.appendMovies(movies, sourceID: configuration.id, generation: generation, store: store)) ?? 0
-            added += (try? await CatalogWriter.appendSeries(series, sourceID: configuration.id, generation: generation, store: store)) ?? 0
+            var answered = false
+            var more = false
+            for configuration in browsed {
+                guard let client = try? await readyClient(for: configuration), client.capabilities.searchesCatalog else { continue }
+                let pages = await withTaskGroup(of: RemoteSearchPage?.self) { group in
+                    for page in batch {
+                        group.addTask { try? await client.search(trimmed, page: page) }
+                    }
+                    var pages: [RemoteSearchPage] = []
+                    for await page in group { if let page { pages.append(page) } }
+                    return pages.sorted { $0.page < $1.page }
+                }
+                if !pages.isEmpty { answered = true }
+                if pages.last?.hasMore == true { more = true }
+                let generation = persisted[configuration.id]?.generation ?? 0
+                let movies = pages.flatMap(\.movies)
+                let series = pages.flatMap(\.series)
+                added += (try? await CatalogWriter.appendMovies(movies, sourceID: configuration.id, generation: generation, store: store)) ?? 0
+                added += (try? await CatalogWriter.appendSeries(series, sourceID: configuration.id, generation: generation, store: store)) ?? 0
+            }
+            if !answered {
+                // Nothing came back (offline, cancelled): these pages may be
+                // asked for again.
+                if providerSearchedPages[normalized] == batch.upperBound {
+                    providerSearchedPages[normalized] = asked == 0 ? nil : asked
+                }
+                break
+            }
+            if !more {
+                // The provider's last page: nothing further to ask, however
+                // many pages a later caller would go to.
+                providerSearchedPages[normalized] = .max
+                break
+            }
         }
-        // Nothing came back (offline, cancelled): the query may be asked again.
-        if !answered { providerSearchedQueries.remove(normalized) }
         if added > 0 { catalogDidChange() }
         return added
     }
