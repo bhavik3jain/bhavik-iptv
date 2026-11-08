@@ -746,10 +746,18 @@ public final class HouseholdStore {
     /// Writes the row at play. Returns its id for heartbeats and stop.
     @discardableResult
     public func startPlayback(profileID: UUID, sourceID: UUID, itemKey: String, title: String, deviceName: String) -> UUID {
+        startPlayback(profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, deviceName: deviceName, startedAt: .now)
+    }
+
+    /// Writes the row at play with the start time given: multi-view writes
+    /// its tiles' in slot order, which is how another device taking it over
+    /// lays them out in the same order (`ContinueOfferRules`).
+    @discardableResult
+    public func startPlayback(profileID: UUID, sourceID: UUID, itemKey: String, title: String, deviceName: String, startedAt: Date) -> UUID {
         let id = UUID()
         guard let household = currentHouseholdEntity() else { return id }
         let now = Date.now
-        let record = PlaybackRecord(id: id, deviceName: deviceName, profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, startedAt: now, lastSeenAt: now)
+        let record = PlaybackRecord(id: id, deviceName: deviceName, profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, startedAt: startedAt, lastSeenAt: now)
         insertPlayback(record, into: household)
         ownPlaybacks[id] = record
         commit("start playback")
@@ -761,13 +769,17 @@ public final class HouseholdStore {
     /// When the row is gone although this device never stopped it — another
     /// device purged it while this one was offline past the 15 minutes — it
     /// is written again under the same id, so the stream shows (and counts
-    /// against the limit) once more (HH-5, HH-6).
+    /// against the limit) once more (HH-5, HH-6). Not when another device
+    /// took it over (`takeover(ofPlaybacks:)`): that one is playing it now.
     public func heartbeat(playbackID: UUID) {
         if let row = playbackEntity(playbackID) {
             row.lastSeenAt = .now
-        } else if var record = ownPlaybacks[playbackID], let household = currentHouseholdEntity() {
+            ownPlaybacks[playbackID]?.lastSeenAt = row.lastSeenAt
+        } else if var record = ownPlaybacks[playbackID], let household = currentHouseholdEntity(),
+                  takeover(ofPlaybacks: [playbackID]) == nil {
             record.lastSeenAt = .now
             insertPlayback(record, into: household)
+            ownPlaybacks[playbackID] = record
             Logger.household.notice("Heartbeat: wrote this device's purged playback row again")
         } else {
             return
