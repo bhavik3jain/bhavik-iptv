@@ -22,7 +22,7 @@ Already done (2026-10-24): Xcode is signed in to team Y4M3S6H4NK, and signed bui
 5. **Wait for processing** (5–30 minutes; App Store Connect emails you). Export compliance is answered by the app (`ITSAppUsesNonExemptEncryption = NO`), so builds don't wait on that question.
 6. **Install**: the **TestFlight** app from the App Store on iPhone and iPad, from the Mac App Store on the Mac, from the App Store on Apple TV. Accept the invitation; Hearth appears with an Install button. The Debug app ("Hearth Dev") and the TestFlight app are separate and can sit side by side.
 
-External testers (people who aren't team users) go through Beta App Review, where guideline 5.2 (third-party content) applies — see the technical spec's *Build, release and App Review*. Stay internal for the household.
+External testers (people who aren't team users) go through Beta App Review, where guideline 5.2 (third-party content) applies — see the technical spec's *Build, release and App Review*. Stay internal for the household. For that review, leave **Sign-in required** off (Hearth has no account) and give the reviewer the sample playlist in **Review Notes**: `https://raw.githubusercontent.com/bhavik3jain/bhavik-iptv/main/docs/review/sample.m3u` ([docs/review/sample.m3u](review/sample.m3u), three of Apple's public HLS test streams), added in Household › Add a portal, Xtream login or playlist › Playlist. Never give Apple your own portal: a sign-in from its MAC ends your session.
 
 ## 2. Secrets for the GitHub TestFlight workflow
 
