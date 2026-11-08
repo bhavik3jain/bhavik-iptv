@@ -3,10 +3,10 @@ import Core
 import Foundation
 import HouseholdKit
 
-// Home's decisions as plain values: which episode is "up next", what the
-// hero says, which state the screen is in, how many posters fit. Kept out of
-// the views so they can be tested without a store or a screen (none are
-// written yet: the owner asked for the app first, tests later).
+// Home's decisions as plain values: which episode is "up next" and what the
+// hero says (the Apple TV's Home), which state the screen is in, how many
+// posters fit. Kept out of the views so they can be tested without a store or
+// a screen. What the iPhone, iPad and Mac Home shows is in HomeFavorites.swift.
 
 // MARK: - Episode text
 
@@ -54,7 +54,7 @@ enum EpisodeLine {
     }
 }
 
-// MARK: - Continue watching (HOME-1)
+// MARK: - Continue watching (HOME-1, the Apple TV)
 
 /// The Continue watching hero: one unfinished movie or episode, resolved
 /// through the catalog so the profile's filter applies (a Kids profile never
@@ -162,7 +162,7 @@ enum ContinueWatchingPicker {
     }
 }
 
-// MARK: - Up next (SER-2)
+// MARK: - Up next (SER-2, the Apple TV)
 
 /// The next episode of a show in progress, per profile (SER-2).
 ///
@@ -366,17 +366,39 @@ enum SyncChipContent {
 /// switcher in its sidebar). The window's toolbar already says "Home", so the
 /// header greets the profile instead of repeating it.
 enum HomeGreeting {
+    enum PartOfDay: Equatable, Sendable {
+        case morning, afternoon, evening
+
+        init(_ date: Date, calendar: Calendar) {
+            switch calendar.component(.hour, from: date) {
+            case 5..<12: self = .morning
+            case 12..<17: self = .afternoon
+            default: self = .evening
+            }
+        }
+    }
+
     static func text(name: String?, at date: Date, calendar: Calendar = .current) -> String {
         guard let name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
             return String(localized: "Home", bundle: .module)
         }
-        switch calendar.component(.hour, from: date) {
-        case 5..<12:
+        switch PartOfDay(date, calendar: calendar) {
+        case .morning:
             return String(localized: "Good morning, \(name)", bundle: .module)
-        case 12..<17:
+        case .afternoon:
             return String(localized: "Good afternoon, \(name)", bundle: .module)
-        default:
+        case .evening:
             return String(localized: "Good evening, \(name)", bundle: .module)
+        }
+    }
+
+    /// Under the profile switcher, which already shows the name: "Good
+    /// evening" on its own.
+    static func salutation(at date: Date, calendar: Calendar = .current) -> String {
+        switch PartOfDay(date, calendar: calendar) {
+        case .morning: String(localized: "Good morning", bundle: .module)
+        case .afternoon: String(localized: "Good afternoon", bundle: .module)
+        case .evening: String(localized: "Good evening", bundle: .module)
         }
     }
 }
@@ -393,12 +415,6 @@ enum HomeLayoutMetrics {
 
     static func gutter(layout: HearthLayout, width: CGFloat) -> CGFloat {
         layout == .sidebar && width >= 640 ? 32 : HearthMetrics.screenPadding
-    }
-
-    /// The sidebar hero puts the poster beside the text once there's room for
-    /// both a readable title and the art.
-    static func heroShowsSidePoster(layout: HearthLayout, contentWidth: CGFloat) -> Bool {
-        layout == .sidebar && contentWidth >= 520
     }
 }
 
