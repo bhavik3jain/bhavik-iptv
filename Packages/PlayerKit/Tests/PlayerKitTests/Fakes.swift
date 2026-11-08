@@ -53,9 +53,13 @@ final class FakeEngine: PlaybackEngine {
         }
     }
 
+    /// False for an engine whose clock reports the old time until its seek
+    /// lands, as AVPlayer and VLCKit can.
+    var seekMovesClock = true
+
     func seek(to seconds: TimeInterval) {
         seeks.append(seconds)
-        currentTime = seconds
+        if seekMovesClock { currentTime = seconds }
     }
 
     func stop() {
@@ -189,8 +193,14 @@ enum Streams {
 extension PlayerConfiguration {
     /// No Now Playing, no ticking of its own (tests call `tick`), and
     /// timeouts long enough not to fire unless a test shortens them.
-    static func test(clock: TestClock = TestClock(), startTimeout: TimeInterval = 30, slowStartTimeout: TimeInterval = 30) -> PlayerConfiguration {
-        PlayerConfiguration(
+    static func test(
+        clock: TestClock = TestClock(),
+        startTimeout: TimeInterval = 30,
+        slowStartTimeout: TimeInterval = 30,
+        onDemandStartTimeout: TimeInterval = 30,
+        skipGatherDelay: TimeInterval = 0
+    ) -> PlayerConfiguration {
+        var configuration = PlayerConfiguration(
             publishesNowPlaying: false,
             startTimeout: startTimeout,
             slowStartTimeout: slowStartTimeout,
@@ -199,6 +209,9 @@ extension PlayerConfiguration {
             tickInterval: 3600,
             now: { clock.now }
         )
+        configuration.onDemandStartTimeout = onDemandStartTimeout
+        configuration.skipGatherDelay = skipGatherDelay
+        return configuration
     }
 }
 

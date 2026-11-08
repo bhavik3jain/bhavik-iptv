@@ -22,6 +22,17 @@ public struct PlayerConfiguration: Sendable {
     /// The same for VLCKit, which opens raw MPEG-TS more slowly and has no
     /// engine to fall back to, so it gets longer before the retry.
     public var slowStartTimeout: TimeInterval
+    /// How long AVPlayer may take to start a movie, an episode or a recording
+    /// before the retry on VLCKit. Longer than a channel's: the owner's
+    /// provider serves an episode as HLS whose first segment is 16 MB (2.3 s
+    /// to fetch on a fast line, over 6 s below 25 Mbit/s), and AVPlayer plays
+    /// nothing until it has it. Six seconds threw away a start that was nearly
+    /// there, then asked for a new link and began again on VLCKit, which has
+    /// to fetch the same segment.
+    public var onDemandStartTimeout: TimeInterval = 15
+    /// How long a run of skips gathers before the seek goes to the engine,
+    /// so five presses make one seek rather than five segment downloads.
+    public var skipGatherDelay: TimeInterval = 0.5
     /// Controls fade after this long of uninterrupted playing.
     public var controlsHideDelay: TimeInterval
     /// Seconds of actual playback between progress checkpoints (5 minutes:

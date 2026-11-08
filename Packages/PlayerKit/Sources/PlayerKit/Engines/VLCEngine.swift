@@ -34,6 +34,10 @@ final class VLCEngine: PlaybackEngine {
     private var awaitingOpen = false
     /// libvlc's buffering progress, 0…1 (1 is "enough to play").
     private var bufferingProgress: Float = 1
+    /// The length libvlc reported for this media, for when the media itself
+    /// doesn't say (a network stream it hasn't parsed): without a length the
+    /// player hides the scrub bar and greys out the skip buttons.
+    private var reportedLength: TimeInterval?
 
     private(set) var audioTracks: [MediaTrack] = []
     private(set) var subtitleTracks: [MediaTrack] = []
@@ -67,7 +71,7 @@ final class VLCEngine: PlaybackEngine {
     }
 
     var duration: TimeInterval? {
-        guard let milliseconds = player.media?.length.value?.doubleValue, milliseconds > 0 else { return nil }
+        guard let milliseconds = player.media?.length.value?.doubleValue, milliseconds > 0 else { return reportedLength }
         return milliseconds / 1000
     }
 
@@ -95,6 +99,7 @@ final class VLCEngine: PlaybackEngine {
         stopRequested = false
         awaitingOpen = true
         bufferingProgress = 1
+        reportedLength = nil
         audioTracks = []
         subtitleTracks = []
         selectedAudioTrackID = nil
@@ -185,7 +190,8 @@ final class VLCEngine: PlaybackEngine {
         onChange?()
     }
 
-    func lengthChanged() {
+    func lengthChanged(_ milliseconds: Int64) {
+        reportedLength = milliseconds > 0 ? TimeInterval(milliseconds) / 1000 : nil
         onChange?()
     }
 
@@ -323,7 +329,7 @@ private final class VLCEventProxy: NSObject, VLCMediaPlayerDelegate, Sendable {
     }
 
     func mediaPlayerLengthChanged(_ length: Int64) {
-        forward { $0.lengthChanged() }
+        forward { $0.lengthChanged(length) }
     }
 
     func mediaPlayerTrackAdded(_ trackId: String, with trackType: VLCMedia.TrackType) {

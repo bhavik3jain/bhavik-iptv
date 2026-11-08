@@ -11,6 +11,17 @@ final class StubURLProtocol: URLProtocol {
         var status: Int = 200
         var headers: [String: String] = [:]
         var body: Data
+        /// Seconds before the answer arrives. Delayed answers leave the
+        /// request in flight meanwhile, so overlapping requests can be seen
+        /// (`maxInFlight(for:)`).
+        var delay: TimeInterval = 0
+
+        /// The same answer, `seconds` later.
+        func after(_ seconds: TimeInterval) -> Reply {
+            var reply = self
+            reply.delay = seconds
+            return reply
+        }
 
         static func json(_ text: String, status: Int = 200) -> Reply {
             Reply(status: status, headers: ["Content-Type": "application/json"], body: Data(text.utf8))
@@ -41,6 +52,8 @@ final class StubURLProtocol: URLProtocol {
     private struct State {
         var handlers: [String: Handler] = [:]
         var requests: [String: [URLRequest]] = [:]
+        var inFlight: [String: Int] = [:]
+        var maxInFlight: [String: Int] = [:]
     }
 
     private static let state = Mutex(State())
@@ -62,6 +75,11 @@ final class StubURLProtocol: URLProtocol {
         state.withLock { $0.requests[host] ?? [] }
     }
 
+    /// The most requests to `host` that were waiting for an answer at once.
+    static func maxInFlight(for host: String) -> Int {
+        state.withLock { $0.maxInFlight[host] ?? 0 }
+    }
+
     // MARK: URLProtocol
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -75,14 +93,44 @@ final class StubURLProtocol: URLProtocol {
         let host = request.url?.host() ?? ""
         let handler = Self.state.withLock { state -> Handler? in
             state.requests[host, default: []].append(recorded)
+            state.inFlight[host, default: 0] += 1
+            state.maxInFlight[host] = max(state.maxInFlight[host] ?? 0, state.inFlight[host] ?? 0)
             return state.handlers[host]
         }
         guard let handler else {
+            Self.landed(host)
             client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
             return
         }
         do {
             let reply = try handler(recorded)
+            guard reply.delay > 0 else { return deliver(reply, host: host) }
+            // Answered later on this thread's run loop, where the client
+            // expects its callbacks, leaving the request in flight meanwhile.
+            nonisolated(unsafe) let runLoop = CFRunLoopGetCurrent()
+            nonisolated(unsafe) let unsafeSelf = self
+            DispatchQueue.global().asyncAfter(deadline: .now() + reply.delay) {
+                CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) {
+                    unsafeSelf.deliver(reply, host: host)
+                }
+                CFRunLoopWakeUp(runLoop)
+            }
+        } catch let failure as TransportFailure {
+            Self.landed(host)
+            client?.urlProtocol(self, didFailWithError: URLError(failure.code))
+        } catch {
+            Self.landed(host)
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    private static func landed(_ host: String) {
+        state.withLock { $0.inFlight[host, default: 1] -= 1 }
+    }
+
+    private func deliver(_ reply: Reply, host: String) {
+        Self.landed(host)
+        do {
             let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: reply.headers)!
             if (300..<400).contains(reply.status), let location = reply.headers["Location"],
                let target = URL(string: location, relativeTo: request.url)?.absoluteURL {
@@ -96,10 +144,6 @@ final class StubURLProtocol: URLProtocol {
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: reply.body)
             client?.urlProtocolDidFinishLoading(self)
-        } catch let failure as TransportFailure {
-            client?.urlProtocol(self, didFailWithError: URLError(failure.code))
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
         }
     }
 

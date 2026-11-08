@@ -233,9 +233,169 @@ public struct PlaybackTimeline: Sendable, Equatable {
         }
     }
 
+    /// What a point on the bar stands for, shown above the finger while it
+    /// drags: "23:41" into a movie, "20:15" in a live programme (never past now).
+    public func label(forFraction fraction: Double) -> String {
+        let fraction = Self.clamp(fraction)
+        switch kind {
+        case .live(let start, let end):
+            let target = start.addingTimeInterval(end.timeIntervalSince(start) * fraction)
+            return HearthFormat.clock(min(target, now))
+        case .onDemand(let duration):
+            return HearthFormat.timecode(duration * fraction)
+        case .liveWithoutGuide, .unknown:
+            return positionLabel
+        }
+    }
+
     static func clamp(_ value: Double) -> Double {
         guard value.isFinite else { return 0 }
         return min(max(value, 0), 1)
+    }
+}
+
+// MARK: - Seeking a movie or episode
+
+/// Where a skip or a scrub sent a movie or episode, held until the engine's
+/// own clock gets there. Without it the scrub bar's knob snapped back to the
+/// old time for a moment after every seek (the engine still reported it), and
+/// quick skips each started from that old time, so five presses of +10 came
+/// to less than 50 seconds.
+public struct PendingSeek: Sendable, Equatable {
+    /// Seconds from the start, where the picture is headed.
+    public var target: TimeInterval
+    /// Where the picture was when the run of skips began, for "+1:30".
+    public var origin: TimeInterval
+    /// When the target last changed.
+    public var since: Date
+
+    /// The engine counts as there once its clock is this close.
+    public static let arrivalTolerance: TimeInterval = 2
+    /// Waits no longer than this for the engine (a seek it dropped, a stream
+    /// that can't seek), then believes the engine again.
+    public static let patience: TimeInterval = 10
+
+    public init(target: TimeInterval, origin: TimeInterval, since: Date) {
+        self.target = target
+        self.origin = origin
+        self.since = since
+    }
+
+    /// How far the run of skips has moved, "+1:30" or "−0:20".
+    public var offset: TimeInterval { target - origin }
+
+    /// True once the engine has got there, or waiting has gone on too long.
+    /// `sent` is false while the seek is still being gathered (a run of
+    /// presses not yet handed to the engine): the engine can't have arrived.
+    public func isSettled(engineTime: TimeInterval, sent: Bool, now: Date) -> Bool {
+        guard sent else { return false }
+        if abs(engineTime - target) <= Self.arrivalTolerance { return true }
+        return now.timeIntervalSince(since) >= Self.patience
+    }
+}
+
+/// The remote's left and right on the TV's picture (and anything else that
+/// presses repeatedly): presses in a row go further each time, so a 43-minute
+/// episode or a two-hour film can be crossed with a run of presses rather
+/// than one press per 10 seconds. The run starts over after a pause or a
+/// change of direction.
+public struct SkipRun: Sendable, Equatable {
+    /// Presses closer together than this continue the run.
+    public static let window: TimeInterval = 1.5
+
+    public private(set) var forward = true
+    public private(set) var presses = 0
+    private var lastPress: Date?
+
+    public init() {}
+
+    /// Seconds to move for one more press, signed by direction.
+    public mutating func step(forward: Bool, at now: Date) -> TimeInterval {
+        if let lastPress, self.forward == forward, now.timeIntervalSince(lastPress) <= Self.window, now >= lastPress {
+            presses += 1
+        } else {
+            presses = 1
+            self.forward = forward
+        }
+        lastPress = now
+        let seconds = Self.seconds(forPress: presses)
+        return forward ? seconds : -seconds
+    }
+
+    /// 10 s for the first three presses, then 30 s, 1, 2 and 5 minutes,
+    /// three presses each.
+    public static func seconds(forPress press: Int) -> TimeInterval {
+        switch press {
+        case ...3: 10
+        case 4...6: 30
+        case 7...9: 60
+        case 10...12: 120
+        default: 300
+        }
+    }
+}
+
+/// A drag on the scrub bar. It starts where the finger lands (a tap jumps
+/// there) and then follows the finger's movement rather than its position,
+/// slower the further the finger moves up or down away from the bar, so a
+/// minute can be found in a two-hour film on a phone's narrow bar: one point
+/// of a 340-point bar is 21 seconds of it.
+public struct ScrubDrag: Sendable, Equatable {
+    public enum Speed: Sendable, Equatable {
+        case full, half, quarter, fine
+
+        public var factor: Double {
+            switch self {
+            case .full: 1
+            case .half: 0.5
+            case .quarter: 0.25
+            case .fine: 0.1
+            }
+        }
+
+        /// Said above the knob while slower than full.
+        public var label: String? {
+            switch self {
+            case .full: nil
+            case .half: String(localized: "Half-speed scrubbing")
+            case .quarter: String(localized: "Quarter-speed scrubbing")
+            case .fine: String(localized: "Fine scrubbing")
+            }
+        }
+
+        /// Points away from the bar before each slower speed.
+        public static func forDistance(_ distance: Double) -> Speed {
+            switch abs(distance) {
+            case ..<60: .full
+            case ..<120: .half
+            case ..<180: .quarter
+            default: .fine
+            }
+        }
+    }
+
+    /// Where the knob is, 0…1.
+    public private(set) var fraction: Double
+    public private(set) var speed: Speed = .full
+    private let width: Double
+    private let startY: Double
+    private let upperBound: Double
+    private var lastX: Double
+
+    /// `upperBound` is the live edge on a live bar: nothing lies past now.
+    public init(startX: Double, startY: Double, width: Double, upperBound: Double = 1) {
+        self.width = max(width, 1)
+        self.startY = startY
+        self.upperBound = PlaybackTimeline.clamp(upperBound)
+        lastX = startX
+        fraction = min(PlaybackTimeline.clamp(startX / max(width, 1)), PlaybackTimeline.clamp(upperBound))
+    }
+
+    public mutating func move(toX x: Double, y: Double) {
+        speed = Speed.forDistance(y - startY)
+        let moved = (x - lastX) / width * speed.factor
+        fraction = min(max(fraction + moved, 0), upperBound)
+        lastX = x
     }
 }
 

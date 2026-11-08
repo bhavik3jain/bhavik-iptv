@@ -173,27 +173,52 @@ public actor StalkerClient: SourceClient {
         let rows = flagged.isEmpty ? seasonRows : flagged
 
         var seasons: [RemoteSeason] = []
-        var episodes: [RemoteEpisode] = []
+        var wanted: [(index: Int, row: JSONValue, seasonID: String, number: Int)] = []
         for (index, row) in rows.enumerated() {
             guard let seasonID = row.string("id") else { continue }
             let name = row.string("name")
             let number = row.int("season_number") ?? StalkerParse.leadingNumber(in: name) ?? index + 1
             seasons.append(RemoteSeason(number: number, name: name, remoteID: seasonID))
-
-            let episodeRows = try await allRows(
-                [("type", module), ("action", "get_ordered_list"), ("movie_id", series.id), ("season_id", seasonID), ("episode_id", "0")],
-                what: "get_ordered_list (episodes)"
-            )
-            var seasonEpisodes = StalkerParse.episodes(episodeRows, seriesID: series.id, season: number, seasonID: seasonID, api: api)
-            if seasonEpisodes.isEmpty {
-                // Older portals list episode numbers on the season and play
-                // them as the season's cmd plus `series=<n>`.
-                seasonEpisodes = StalkerParse.numberedEpisodes(row, seriesID: series.id, season: number)
-            }
-            episodes += seasonEpisodes
+            wanted.append((index, row, seasonID, number))
         }
+
+        // Each season's episodes, a few at a time: one after another, Grey's
+        // Anatomy's 23 seasons took 5 to 27 s on the owner's portal, all of it
+        // behind "Loading episodes…". The catalog importer asks four at once.
+        let seasonModule = module
+        let seriesID = series.id
+        var bySeason: [Int: [RemoteEpisode]] = [:]
+        try await withThrowingTaskGroup(of: (Int, [RemoteEpisode]).self) { group in
+            var remaining = wanted[...]
+            func addNext() {
+                guard let next = remaining.popFirst() else { return }
+                group.addTask {
+                    let episodeRows = try await self.allRows(
+                        [("type", seasonModule), ("action", "get_ordered_list"), ("movie_id", seriesID), ("season_id", next.seasonID), ("episode_id", "0")],
+                        what: "get_ordered_list (episodes)"
+                    )
+                    var seasonEpisodes = StalkerParse.episodes(episodeRows, seriesID: seriesID, season: next.number, seasonID: next.seasonID, api: api)
+                    if seasonEpisodes.isEmpty {
+                        // Older portals list episode numbers on the season and
+                        // play them as the season's cmd plus `series=<n>`.
+                        seasonEpisodes = StalkerParse.numberedEpisodes(next.row, seriesID: seriesID, season: next.number)
+                    }
+                    return (next.index, seasonEpisodes)
+                }
+            }
+            for _ in 0..<Self.seasonConcurrency { addNext() }
+            while let (index, seasonEpisodes) = try await group.next() {
+                bySeason[index] = seasonEpisodes
+                addNext()
+            }
+        }
+        // In the portal's order, as one after another gave them.
+        let episodes = wanted.flatMap { bySeason[$0.index] ?? [] }
         return SeriesDetail(series: series, seasons: seasons.sorted { $0.number < $1.number }, episodes: episodes)
     }
+
+    /// Seasons asked at once by `seriesDetail`.
+    static let seasonConcurrency = 4
 
     /// Ministra's own search (verified): `get_ordered_list` with `search`
     /// across every VOD category, shows flagged `is_series` among the movies;
@@ -277,7 +302,13 @@ public actor StalkerClient: SourceClient {
                   timeout: Self.bulkGuideTimeout
               )
         else { return [] }
-        return StalkerParse.bulkProgrammes(envelope.js, timeZone: portal.timeZone)
+        return await Self.bulkProgrammes(envelope.js, timeZone: portal.timeZone)
+    }
+
+    /// 48,000 programmes, read off the actor for the same reason as `classify`.
+    @concurrent
+    private nonisolated static func bulkProgrammes(_ js: JSONValue, timeZone: TimeZone) async -> [RemoteProgramme] {
+        StalkerParse.bulkProgrammes(js, timeZone: timeZone)
     }
 
     // MARK: Links
@@ -560,7 +591,7 @@ public actor StalkerClient: SourceClient {
     /// A call made while signing in: no retry, since signing in is the retry.
     private func sessionlessCall(_ request: URLRequest, what: String) async throws -> StalkerEnvelope {
         let response = try await HTTP.send(request, session: session)
-        switch classify(response, what: what) {
+        switch await Self.classify(response, what: what, configuration: configuration) {
         case .envelope(let envelope):
             return envelope
         case .unauthorised(let message):
@@ -590,10 +621,11 @@ public actor StalkerClient: SourceClient {
         var retried = false
         while true {
             let (portal, api) = try await sessionEndpoint()
-            var request = portal.request(api, parameters, token: token)
+            let sentToken = token
+            var request = portal.request(api, parameters, token: sentToken)
             if let timeout { request.timeoutInterval = timeout }
             let response = try await HTTP.send(request, session: session)
-            switch classify(response, what: what) {
+            switch await Self.classify(response, what: what, configuration: configuration) {
             case .envelope(let envelope):
                 return envelope
             case .unauthorised(let message):
@@ -608,7 +640,11 @@ public actor StalkerClient: SourceClient {
                 throw error
             }
             retried = true
-            token = nil
+            // Only the session this call used: another call refused at the
+            // same time may already have signed in again, and a second sign-in
+            // from the MAC would end that one (four season lists at once
+            // otherwise signed in four times).
+            if token == sentToken { token = nil }
         }
     }
 
@@ -619,7 +655,16 @@ public actor StalkerClient: SourceClient {
         case failure(SourceError)
     }
 
-    private func classify(_ response: HTTPResponse, what: String) -> Answer {
+    /// Reads an answer off the actor. The whole guide is a 25 MB answer
+    /// (`get_epg_info`), and decoding it on the actor held up every call
+    /// queued behind it: a play's `create_link` that the portal answered in
+    /// 0.25 s waited 6.7 s for the guide to finish decoding (measured on the
+    /// owner's portal), since its answer, too, is read on the actor.
+    @concurrent
+    private nonisolated static func classify(_ response: HTTPResponse, what: String, configuration: SourceConfiguration) async -> Answer {
+        func scrubbed(_ text: String?) -> String? {
+            text.map { Redaction.scrub($0, for: configuration) }
+        }
         if response.status == 401 || response.status == 403 {
             return .unauthorised(scrubbed(response.plainText))
         }

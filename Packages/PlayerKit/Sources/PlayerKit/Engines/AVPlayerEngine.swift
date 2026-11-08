@@ -32,6 +32,10 @@ final class AVPlayerEngine: PlaybackEngine {
     private var didReachEnd = false
     private var failureMessage: String?
     private var pendingStartPosition: TimeInterval?
+    /// Counts loads, so a seek finishing for an earlier item does nothing.
+    private var loadID = 0
+    /// The resume position went to the item before it loaded (tests read it).
+    private(set) var resumedBeforeLoading = false
     /// The live edge offset is set once per link, when the item is ready.
     private var didSetLiveOffset = false
 
@@ -148,6 +152,11 @@ final class AVPlayerEngine: PlaybackEngine {
             item.configuredTimeOffsetFromLive = CMTime(seconds: offset, preferredTimescale: 600)
             item.automaticallyPreservesTimeOffsetFromLive = true
             didSetLiveOffset = true
+        }
+        loadID += 1
+        resumedBeforeLoading = false
+        if let position = pendingStartPosition, !stream.isLive {
+            seekBeforeLoading(item, to: position)
         }
         observe(item)
         player.replaceCurrentItem(with: item)
@@ -287,13 +296,39 @@ final class AVPlayerEngine: PlaybackEngine {
         ]
     }
 
+    /// Resumes a movie or episode where it was left without first loading its
+    /// start. A seek once the item is ready (the older way, still the fallback)
+    /// came after AVPlayer had fetched the first segment, which on the owner's
+    /// provider is 16 MB, only to throw it away: resuming took 2.4 s, and once
+    /// 30 s. Seeking the item before it loads fetched only the segment at the
+    /// resume point and started in 0.8–1.2 s (measured on the portal, 2026-11-07).
+    /// Older AVFoundation refused a seek before the item was ready with an
+    /// exception, so this waits for the 27 releases it was tried on.
+    private func seekBeforeLoading(_ item: AVPlayerItem, to position: TimeInterval) {
+        guard #available(iOS 27, tvOS 27, macOS 27, *) else { return }
+        let id = loadID
+        resumedBeforeLoading = true
+        let time = CMTime(seconds: position, preferredTimescale: 600)
+        item.seek(to: time, toleranceBefore: .zero, toleranceAfter: CMTime(seconds: 1, preferredTimescale: 600)) { @Sendable [weak self] finished in
+            Task { @MainActor in
+                guard let self, finished, id == self.loadID else { return }
+                self.pendingStartPosition = nil
+            }
+        }
+    }
+
     private func itemStatusChanged() {
         guard let item = player.currentItem else { return }
         if item.status == .readyToPlay {
             if let position = pendingStartPosition {
                 pendingStartPosition = nil
-                let time = CMTime(seconds: position, preferredTimescale: 600)
-                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: CMTime(seconds: 1, preferredTimescale: 600))
+                // An early seek still finishing already reports its target;
+                // seeking again would start its download over.
+                let now = player.currentTime().seconds
+                if !(resumedBeforeLoading && now.isFinite && abs(now - position) <= 2) {
+                    let time = CMTime(seconds: position, preferredTimescale: 600)
+                    player.seek(to: time, toleranceBefore: .zero, toleranceAfter: CMTime(seconds: 1, preferredTimescale: 600))
+                }
             }
             loadTracks(for: item)
         }

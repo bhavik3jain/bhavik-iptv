@@ -115,6 +115,9 @@ public final class PlayerModel: Identifiable {
     public private(set) var now: Date
     public private(set) var preferredAudioLanguage: String?
     public private(set) var preferredSubtitleLanguage: String?
+    /// Where a skip or a scrub sent a movie or episode, until the engine gets
+    /// there: `currentTime` (and so the scrub bar) shows its target meanwhile.
+    public private(set) var pendingSeek: PendingSeek?
 
     public var isPlaying: Bool { state == .playing || state == .buffering }
     public var canGoToPreviousItem: Bool { previousNeighbour != nil }
@@ -169,6 +172,11 @@ public final class PlayerModel: Identifiable {
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     @ObservationIgnored private var startTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var hideControlsTask: Task<Void, Never>?
+    /// Sends a run of skips to the engine once the presses stop.
+    @ObservationIgnored private var gatherTask: Task<Void, Never>?
+    /// The pending seek has gone to the engine (rather than still gathering).
+    @ObservationIgnored private var pendingSeekSent = false
+    @ObservationIgnored private var skipRun = SkipRun()
     @ObservationIgnored private var lastActivity: Date = .distantPast
 
     /// Bumped by every open, switch and close; an async step that finds it
@@ -251,6 +259,9 @@ public final class PlayerModel: Identifiable {
         self.request = request
         attemptStarted = false
         attemptPlayedSeconds = 0
+        gatherTask?.cancel()
+        pendingSeek = nil
+        pendingSeekSent = false
         // Stop what's playing now: a channel change mustn't hold two of the
         // provider's streams while the new link resolves (Stalker allows one).
         engine?.onChange = nil
@@ -308,7 +319,7 @@ public final class PlayerModel: Identifiable {
         duration = nil
         engine.load(stream)
         engine.play()
-        scheduleStartTimeout(token: token, kind: kind)
+        scheduleStartTimeout(token: token, kind: kind, isLive: descriptor.isLive)
     }
 
     /// Reuses the running engine when the kind matches (AVPlayer keeps its
@@ -336,8 +347,11 @@ public final class PlayerModel: Identifiable {
         engineKind = nil
     }
 
-    private func scheduleStartTimeout(token: Int, kind: EngineKind) {
-        let seconds = kind == .avPlayer ? configuration.startTimeout : configuration.slowStartTimeout
+    private func scheduleStartTimeout(token: Int, kind: EngineKind, isLive: Bool) {
+        let seconds = switch kind {
+        case .avPlayer: isLive ? configuration.startTimeout : configuration.onDemandStartTimeout
+        case .vlc: configuration.slowStartTimeout
+        }
         startTimeoutTask?.cancel()
         startTimeoutTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
@@ -458,8 +472,18 @@ public final class PlayerModel: Identifiable {
 
     private func syncTime() {
         guard let engine else { return }
-        currentTime = engine.currentTime
         duration = engine.duration
+        let engineTime = engine.currentTime
+        if let pending = pendingSeek {
+            if pending.isSettled(engineTime: engineTime, sent: pendingSeekSent, now: configuration.now()) {
+                pendingSeek = nil
+                currentTime = engineTime
+            } else {
+                currentTime = pending.target
+            }
+        } else {
+            currentTime = engineTime
+        }
     }
 
     private func syncTracks() {
@@ -543,6 +567,8 @@ public final class PlayerModel: Identifiable {
 
     /// Back or forward (PLY-2). Live goes through the live-seek plan, so ten
     /// seconds back on a channel with an archive works even with no window.
+    /// A movie or episode gathers presses in quick succession into one seek,
+    /// each counted from where the last one was headed.
     public func skip(by seconds: TimeInterval) {
         guard engine != nil else { return }
         showControls()
@@ -550,7 +576,50 @@ public final class PlayerModel: Identifiable {
             Task { await seekBehindLive(max(0, liveOffset - seconds)) }
             return
         }
-        seek(to: currentTime + seconds)
+        gatherSeek(by: seconds)
+    }
+
+    /// Left or right on the TV's picture: a movie or episode goes further
+    /// with each press in a row (10 s, then 30 s, 1, 2 and 5 minutes; see
+    /// `SkipRun`). A live channel skips 10 seconds, as `skip(by:)` does.
+    public func scrub(forward: Bool) {
+        guard engine != nil else { return }
+        if item.isLive {
+            skip(by: forward ? 10 : -10)
+            return
+        }
+        showControls()
+        gatherSeek(by: skipRun.step(forward: forward, at: configuration.now()))
+    }
+
+    /// Moves the pending target now and the picture once the presses stop.
+    private func gatherSeek(by seconds: TimeInterval) {
+        let now = configuration.now()
+        let gathering = pendingSeek.flatMap { pendingSeekSent ? nil : $0 }
+        let base = pendingSeek?.target ?? currentTime
+        let upper = duration ?? .greatestFiniteMagnitude
+        let target = min(max(base + seconds, 0), upper)
+        pendingSeek = PendingSeek(target: target, origin: gathering?.origin ?? currentTime, since: now)
+        pendingSeekSent = false
+        currentTime = target
+        updateNowPlaying()
+        gatherTask?.cancel()
+        let delay = configuration.skipGatherDelay
+        let token = generation
+        gatherTask = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard !Task.isCancelled, let self, token == self.generation else { return }
+            self.sendPendingSeek()
+        }
+    }
+
+    private func sendPendingSeek() {
+        guard let engine, var pending = pendingSeek, !pendingSeekSent else { return }
+        pending.since = configuration.now()
+        pendingSeek = pending
+        pendingSeekSent = true
+        engine.seek(to: pending.target)
+        showControls()
     }
 
     /// Seconds from the start of the stream (or of the live window).
@@ -558,7 +627,14 @@ public final class PlayerModel: Identifiable {
         guard let engine else { return }
         let upper = duration ?? .greatestFiniteMagnitude
         let target = min(max(seconds, 0), upper)
+        gatherTask?.cancel()
         engine.seek(to: target)
+        if item.isLive {
+            pendingSeek = nil
+        } else {
+            pendingSeek = PendingSeek(target: target, origin: currentTime, since: configuration.now())
+            pendingSeekSent = true
+        }
         currentTime = target
         liveOffset = computeLiveOffset()
         showControls()
@@ -795,6 +871,7 @@ public final class PlayerModel: Identifiable {
         tickTask?.cancel()
         startTimeoutTask?.cancel()
         hideControlsTask?.cancel()
+        gatherTask?.cancel()
         if startedEventSent {
             startedEventSent = false
             emit(.stopped(itemID: item.id, position: currentTime, duration: duration))

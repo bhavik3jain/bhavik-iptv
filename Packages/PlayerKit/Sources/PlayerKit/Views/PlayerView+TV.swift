@@ -6,10 +6,12 @@ import SwiftUI
 /// Remote rather than touch.
 ///
 /// While the controls are hidden the whole picture is one focused surface:
-/// click or swipe left and right to skip 10 seconds, up and down to change
-/// channel (live), select to bring up the controls, Play/Pause to pause, Menu
-/// to close. Clicks and swipes both arrive as focus moves, so the surface is
-/// ringed by four invisible targets: moving onto one does its action and
+/// click or swipe left and right to scrub (a movie or episode goes further
+/// with each press in a row, 10 s up to 5 minutes, and seeks once the presses
+/// stop; a channel skips 10 s), up and down to change channel (live), select
+/// to bring up the controls, Play/Pause to pause, Menu to close. Clicks and
+/// swipes both arrive as focus moves, so the surface is ringed by four
+/// invisible targets: moving onto one does its action and
 /// hands focus straight back to the picture. A skip shows the timeline without taking focus off the picture,
 /// so a run of skips stays a run of skips. Select moves focus into the
 /// controls (−10, play, +10, the live pills, the channel pills, tracks), where
@@ -137,11 +139,11 @@ struct TVPlayerScreen: View {
         switch direction {
         case .left:
             guard model.canSeek else { return model.showControls() }
-            model.skip(by: -10)
+            model.scrub(forward: false)
             model.showControls()
         case .right:
             guard model.canSeek, !(model.item.isLive && model.isAtLiveEdge) else { return model.showControls() }
-            model.skip(by: 10)
+            model.scrub(forward: true)
             model.showControls()
         case .up:
             // Channel up is the next number, as on every remote (LIV-5).
@@ -381,12 +383,19 @@ private struct TVPlayerCenterControls: View {
     @ViewBuilder
     private var centre: some View {
         if model.state.isOpening {
-            ProgressView()
-                .scaleEffect(1.6)
-                .tint(.white)
-                .frame(width: 136, height: 136)
-                .background(Circle().fill(.black.opacity(0.45)))
-                .accessibilityLabel(Text("Loading"))
+            // A button that does nothing, so select on the picture has
+            // somewhere to put focus while the stream opens; a bare spinner
+            // left focus nowhere, and only Menu got out.
+            Button {} label: {
+                ProgressView()
+                    .scaleEffect(1.6)
+                    .tint(.white)
+                    .frame(width: 136, height: 136)
+            }
+            .buttonStyle(TVPlayerGlassButtonStyle(shape: .circle))
+            .focused(focus, equals: .playPause)
+            .disabled(!isInteractive)
+            .accessibilityLabel(Text("Loading"))
         } else if model.state == .ended {
             TVPlayerCircleButton(systemName: "arrow.counterclockwise", label: "Play again", diameter: 136, iconSize: 52) {
                 model.play()
@@ -426,7 +435,7 @@ private struct TVPlayerBottomBar: View {
                 liveRow
             }
             if timeline.showsBar {
-                TVPlayerProgressBar(timeline: timeline)
+                TVPlayerProgressBar(timeline: timeline, preview: seekPreview)
                     .accessibilityElement()
                     .accessibilityLabel(Text(model.item.isLive ? "Playback position, live" : "Playback position"))
                     .accessibilityValue(Text(timeline.positionLabel))
@@ -471,6 +480,13 @@ private struct TVPlayerBottomBar: View {
         }
     }
 
+    /// "+1:30 · 23:41" over the knob while a run of presses carries it.
+    private var seekPreview: String? {
+        guard !model.item.isLive, let pending = model.pendingSeek, abs(pending.offset) >= 1 else { return nil }
+        let sign = pending.offset < 0 ? "\u{2212}" : "+"
+        return sign + HearthFormat.timecode(pending.offset) + " · " + HearthFormat.timecode(pending.target)
+    }
+
     private var liveRow: some View {
         HStack(spacing: 20) {
             if model.isAtLiveEdge {
@@ -510,10 +526,12 @@ private struct TVPlayerBottomBar: View {
     }
 }
 
-/// The bar of mockup 06, display only: on the TV the remote skips, it
-/// doesn't drag.
+/// The bar of mockup 06, display only: on the TV the remote's presses carry
+/// the knob, with how far and where to above it.
 private struct TVPlayerProgressBar: View {
     let timeline: PlaybackTimeline
+    var preview: String?
+    @State private var previewSize = CGSize(width: 260, height: 50)
 
     var body: some View {
         GeometryReader { proxy in
@@ -531,6 +549,23 @@ private struct TVPlayerProgressBar: View {
                     .offset(x: width * timeline.position - 12)
             }
             .frame(width: width, height: proxy.size.height)
+            .overlay(alignment: .topLeading) {
+                if let preview {
+                    Text(preview)
+                        .font(.hearthMono(26, relativeTo: .callout))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.black.opacity(0.75)))
+                        .fixedSize()
+                        .onGeometryChange(for: CGSize.self) { $0.size } action: { previewSize = $0 }
+                        .offset(
+                            x: min(max(width * timeline.position - previewSize.width / 2, 0), max(width - previewSize.width, 0)),
+                            y: -previewSize.height - 10
+                        )
+                        .accessibilityHidden(true)
+                }
+            }
         }
         .frame(height: 28)
     }
