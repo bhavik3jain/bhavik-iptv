@@ -6,8 +6,8 @@ import SwiftUI
 // running, or the first import failed. Each replaces the sections under the
 // header and sits in the middle of the remaining screen.
 
-/// What stands in for the screen while `HomeStatus` isn't `.ready`, on Home
-/// (the Mac) and in front of Live TV (iOS).
+/// What stands in for Home's sections while `HomeStatus` isn't `.ready`
+/// (the Apple TV has its own, in HomeTV.swift).
 struct HomeStartState: View {
     let status: HomeStatus
     let canManageHousehold: Bool

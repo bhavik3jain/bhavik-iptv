@@ -19,7 +19,7 @@ enum RouteAccess {
         case .household: canSeeHousehold(session)
         case .profileEditor, .sourceEditor: session.canManageHousehold
         case .settings: session.canOpenSettings
-        case .movie, .series, .channel, .liveGuide, .search, .downloads: true
+        case .movie, .series, .channel, .liveGuide, .search, .downloads, .myList: true
         }
     }
 
@@ -50,8 +50,8 @@ final class AppNavigation {
         var path: [HearthRoute] = []
     }
 
-    /// Where this window opens, and where a profile switch lands: Home on the
-    /// Mac and the TV, Live TV on iOS (`AppTab.phoneStart`).
+    /// Where this window opens, and where a profile switch lands: Home, on
+    /// iOS too since 2026-11-08 (`AppTab.phoneStart`).
     let startTab: AppTab
     var selection: AppTab
     var paths: [AppTab: [HearthRoute]] = [:]
@@ -84,10 +84,11 @@ final class AppNavigation {
             get: { self.sheet?.path ?? [] },
             set: { newPath in
                 guard var sheet = self.sheet else { return }
-                if let last = newPath.last, newPath.count > sheet.path.count, case .liveGuide = last {
-                    // The guide is a tab, not a page: close the sheet and go there.
+                if let last = newPath.last, newPath.count > sheet.path.count, let tab = Self.tab(for: last) {
+                    // The guide and My List are tabs, not pages: close the
+                    // sheet and go there.
                     self.sheet = nil
-                    self.select(.live)
+                    self.select(tab)
                     return
                 }
                 sheet.path = newPath
@@ -96,18 +97,19 @@ final class AppNavigation {
         )
     }
 
-    /// A `NavigationLink(value:)` lands here. Two routes aren't pages of a
-    /// stack: the live guide switches to the Live TV tab, and Settings opens
-    /// in a sheet — so they come off the path again.
+    /// A `NavigationLink(value:)` lands here. Some routes aren't pages of a
+    /// stack: the live guide and My List switch to their tabs, at the root
+    /// (Home's "See all"), and Settings opens in a sheet — so they come off
+    /// the path again.
     private func setPath(_ newPath: [HearthRoute], for tab: AppTab) {
         let old = paths[tab] ?? []
         var kept = newPath
         if newPath.count > old.count, let last = newPath.last {
             switch last {
-            case .liveGuide:
+            case .liveGuide, .myList:
                 kept.removeLast()
                 paths[tab] = kept
-                select(.live)
+                open(last, gateShowing: false)
                 return
             case .settings:
                 kept.removeLast()
@@ -149,14 +151,15 @@ final class AppNavigation {
     /// is no stack, so the route opens in a sheet.
     func open(_ route: HearthRoute, gateShowing: Bool) {
         switch route {
-        case .liveGuide:
-            if selection != .live, !unsavedChanges.isEmpty {
-                heldSelection = .live
+        case .liveGuide, .myList:
+            guard let tab = Self.tab(for: route) else { return }
+            if selection != tab, !unsavedChanges.isEmpty {
+                heldSelection = tab
                 return
             }
             sheet = nil
-            paths[.live] = []
-            selection = .live
+            paths[tab] = []
+            selection = tab
         case .settings:
             openSettings()
         default:
@@ -167,6 +170,16 @@ final class AppNavigation {
             } else {
                 paths[selection, default: []].append(route)
             }
+        }
+    }
+
+    /// The routes that are tabs rather than pages: opening one shows that
+    /// tab at its root.
+    static func tab(for route: HearthRoute) -> AppTab? {
+        switch route {
+        case .liveGuide: .live
+        case .myList: .myList
+        default: nil
         }
     }
 
@@ -248,6 +261,10 @@ struct RouteDestination: View {
             SettingsView()
         case .downloads:
             DownloadsView()
+        case .myList:
+            // Like the guide: normally a tab switch, reached only as a
+            // sheet's root.
+            MyListView()
         }
     }
 }

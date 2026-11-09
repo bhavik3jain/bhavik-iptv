@@ -12,12 +12,12 @@ import SettingsFeature
 import SwiftUI
 
 /// The iPhone, iPad and iPhone Duo root (mockup 02). "Who's watching?" until
-/// a profile is chosen (PRF-2); then four tabs — Live TV, which is Home here,
-/// Movies, Shows, My List — each with its own navigation stack.
-/// `.sidebarAdaptable` turns the tab bar into a sidebar wherever the width is
-/// regular: iPad and iPhone Duo's inner display (MAC-6), where Search,
-/// Household and Settings join it. One per window: each window keeps its own
-/// tabs and stacks.
+/// a profile is chosen (PRF-2); then five tabs — Home (the profile's
+/// favorites), Live TV, Movies, Shows, My List — each with its own navigation
+/// stack. `.sidebarAdaptable` turns the tab bar into a sidebar wherever the
+/// width is regular: iPad and iPhone Duo's inner display (MAC-6), where
+/// Search, Household and Settings join it. One per window: each window keeps
+/// its own tabs and stacks.
 struct PhoneRootView: View {
     let model: AppModel
     let services: AppServices
@@ -44,9 +44,9 @@ struct PhoneRootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { services.playback.lastSceneID = sceneID }
         }
-        // A tab this window doesn't have (no Home on iOS, `-OpenTab home`
-        // included; Downloads is a sidebar row; Household and Settings leave
-        // with a Kids or Guest profile) falls back to Live TV.
+        // A tab this window doesn't have (Downloads, Search, Household and
+        // Settings are sidebar rows; Household and Settings leave with a Kids
+        // or Guest profile) falls back to Home.
         .onChange(of: navigation.selection, initial: true) { _, _ in
             navigation.keepSelection(in: availableTabs)
         }
@@ -56,7 +56,7 @@ struct PhoneRootView: View {
     /// alone doesn't keep them out of a compact tab bar: with eight tabs the
     /// iPhone folds the extras into "More" and My List disappears behind it.
     /// So they exist only while there is a sidebar (regular width: iPad,
-    /// iPhone Duo opened); on the phone they're reached from Live TV's search
+    /// iPhone Duo opened); on the phone they're reached from Home's search
     /// button and the profile menu.
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private var hasSidebar: Bool { horizontalSizeClass == .regular }
@@ -153,20 +153,10 @@ struct TabRoot: View {
                 ProfileSwitcherMenu(style: .header)
             }
         case .live:
-            #if os(iOS)
-            // Home on iOS: Live TV, with a first run's states in front of it.
-            // Home's own screen, with its Continue watching and Up next, is
-            // the Mac's and the TV's.
-            LiveHomeView {
-                ProfileSwitcherMenu(style: .header)
-            } liveTV: {
-                LiveTVView {
-                    ProfileSwitcherMenu(style: .header)
-                }
-            }
-            #else
+            // Home leads on iOS again (2026-11-08), with the profile menu and
+            // search in its header, so Live TV is its own titled screen as on
+            // the Mac (mockup 03).
             LiveTVView()
-            #endif
         case .movies:
             MoviesView()
         case .shows:

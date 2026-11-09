@@ -12,12 +12,6 @@ import Testing
         #expect(HomeLayoutMetrics.gutter(layout: .sidebar, width: 1600) == 32)
     }
 
-    @Test func theHeroPosterSitsBesideTheTextOnceThereIsRoom() {
-        #expect(!HomeLayoutMetrics.heroShowsSidePoster(layout: .compact, contentWidth: 2000))
-        #expect(!HomeLayoutMetrics.heroShowsSidePoster(layout: .sidebar, contentWidth: 519))
-        #expect(HomeLayoutMetrics.heroShowsSidePoster(layout: .sidebar, contentWidth: 520))
-    }
-
     @Test func homeStopsGrowingAtAReadableWidth() {
         #expect(HomeLayoutMetrics.readableWidth == 1120)
     }

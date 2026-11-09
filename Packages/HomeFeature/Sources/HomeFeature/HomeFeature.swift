@@ -8,11 +8,14 @@ import SwiftUI
 // Services come from the environment: CatalogService, HouseholdStore and
 // ProfileSession (injected by the app), plus Core's \.play and \.openRoute.
 
-/// Home for the current profile on the Mac and the Apple TV (mockup 02,
-/// HOME-1): Continue watching, favorite channels with what's on, up next in
-/// shows, new movies. The header holds the profile switcher, AirPlay and
-/// search; the app passes the switcher in so Home never imports
-/// ProfilesFeature. iOS has `LiveHomeView` instead.
+/// Home for the current profile (mockup 02, HOME-1). On the iPhone, iPad,
+/// iPhone Duo and Mac it's the profile's favorites (the owner, 2026-11-08):
+/// favorite channels with what's on, then My List's movies and shows, each
+/// with "See all", and friendly how-tos where nothing's saved yet. The
+/// header holds the profile switcher, AirPlay and search, then the time of
+/// day and a count of what's saved; the app passes the switcher in so Home
+/// never imports ProfilesFeature. The Apple TV keeps its own Home, with
+/// Continue watching and Up next (`HomeTVContent`).
 ///
 /// Pass `EmptyView` where the switcher lives elsewhere (the Mac sidebar,
 /// PRF-8): the header then shows a "Home" title in its place.
@@ -33,11 +36,11 @@ public struct HomeView<ProfileSwitcher: View>: View {
     /// "Pin your favorite channels" at a profile that has some.
     @State private var hasLoaded = false
     /// The width Home lays out in (after the readable-width cap), for the
-    /// gutters, the sidebar hero and how many poster columns fit.
+    /// gutters and how many cards and poster columns fit.
     @State private var contentWidth: CGFloat = 0
-    /// Shows whose episodes Home has asked for this session. A show the
-    /// provider sends no episodes for stays "needing" them; without this it
-    /// would be asked again on every change.
+    /// Shows whose episodes the TV's Up next has asked for this session. A
+    /// show the provider sends no episodes for stays "needing" them; without
+    /// this it would be asked again on every change.
     @State private var episodeFetchesTried: Set<ItemKey> = []
 
     public var body: some View {
@@ -58,8 +61,13 @@ public struct HomeView<ProfileSwitcher: View>: View {
     private var touchBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: HearthMetrics.sectionSpacing) {
-                HomeHeader(profileSwitcher: profileSwitcher, greeting: greeting)
-                    .padding(.horizontal, gutter)
+                HomeHeader(
+                    profileSwitcher: profileSwitcher,
+                    greeting: greeting,
+                    salutation: greeting == nil && showsIntro ? HomeGreeting.salutation(at: .now) : nil,
+                    summary: showsIntro ? HomeSummary.text(snapshot.counts, isGuest: session.isGuest) : nil
+                )
+                .padding(.horizontal, gutter)
                 content
             }
             .padding(.top, 8)
@@ -87,6 +95,10 @@ public struct HomeView<ProfileSwitcher: View>: View {
         return HomeGreeting.text(name: session.currentProfile?.name, at: .now)
     }
 
+    /// The greeting and the count under the header, once there's a Home to
+    /// greet: not over a first run's states.
+    private var showsIntro: Bool { status == .ready && hasLoaded }
+
     // MARK: Content
 
     @ViewBuilder
@@ -105,37 +117,44 @@ public struct HomeView<ProfileSwitcher: View>: View {
         let profileID = session.currentProfile?.id
         let canKeepLists = !session.isGuest && profileID != nil
 
-        if let item = snapshot.continueWatching {
-            ContinueWatchingHero(
-                item: item,
-                showsSidePoster: HomeLayoutMetrics.heroShowsSidePoster(layout: layout, contentWidth: contentWidth),
-                profileID: canKeepLists ? profileID : nil
-            )
-            .padding(.horizontal, gutter)
+        ForEach(HomePlan.sections(snapshot.counts, isGuest: session.isGuest), id: \.self) { section in
+            switch section {
+            case .favoriteChannels, .favoriteChannelsHint:
+                // With no favorites the section draws its own how-to card.
+                FavoriteChannelsSection(
+                    channels: snapshot.favoriteChannels,
+                    catalogRevision: catalog.revision,
+                    layout: layout,
+                    gutter: gutter,
+                    contentWidth: contentWidth,
+                    profileID: canKeepLists ? profileID : nil,
+                    isGuest: session.isGuest,
+                    syncStatus: store.syncStatus
+                )
+            case .myListMovies:
+                myListShelf(String(localized: "Movies on My List", bundle: .module), posters: snapshot.myListMovies, profileID: canKeepLists ? profileID : nil)
+            case .myListShows:
+                myListShelf(String(localized: "Shows on My List", bundle: .module), posters: snapshot.myListShows, profileID: canKeepLists ? profileID : nil)
+            case .myListHint:
+                MyListHintSection(gutter: gutter)
+            case .welcome:
+                HomeWelcomeCard()
+                    .padding(.horizontal, gutter)
+            }
         }
+    }
 
-        FavoriteChannelsSection(
-            channels: snapshot.favoriteChannels,
-            catalogRevision: catalog.revision,
+    private func myListShelf(_ title: String, posters: [HomePoster], profileID: UUID?) -> some View {
+        PosterShelf(
+            title: title,
+            items: posters,
             layout: layout,
             gutter: gutter,
             contentWidth: contentWidth,
-            profileID: canKeepLists ? profileID : nil,
-            isGuest: session.isGuest,
-            syncStatus: store.syncStatus
-        )
-
-        if !snapshot.upNext.isEmpty {
-            PosterShelf(
-                title: String(localized: "Up next in your shows", bundle: .module),
-                items: snapshot.upNext,
-                layout: layout,
-                gutter: gutter,
-                contentWidth: contentWidth,
-                maxRows: nil
-            ) { item in
-                UpNextTile(item: item, profileID: canKeepLists ? profileID : nil)
-            }
+            maxRows: HomeShelf.gridRows,
+            seeAll: .myList
+        ) { poster in
+            HomePosterTile(poster: poster, profileID: profileID)
         }
     }
 
@@ -152,15 +171,16 @@ public struct HomeView<ProfileSwitcher: View>: View {
     }
 
     private func reload() {
-        let next = HomeLoader(catalog: catalog, store: store).load(profileID: session.currentProfile?.id)
+        let next = HomeLoader(catalog: catalog, store: store).load(profileID: session.currentProfile?.id, layout: layout)
         if next != snapshot { snapshot = next }
         hasLoaded = true
     }
 
-    /// SER-2 needs each show's episodes; a show this device never opened has
-    /// none cached. One at a time, so a Stalker portal sees a trickle rather
-    /// than a burst. Each landing bumps the catalog's revision, Home re-reads,
-    /// and this task restarts with whatever is still missing.
+    /// The TV's Up next (SER-2) needs each show's episodes; a show this
+    /// device never opened has none cached. One at a time, so a Stalker portal
+    /// sees a trickle rather than a burst. Each landing bumps the catalog's
+    /// revision, Home re-reads, and this task restarts with whatever is still
+    /// missing. Elsewhere nothing needs episodes, so this does nothing.
     private func fetchMissingEpisodes() async {
         for series in snapshot.seriesNeedingEpisodes where !episodeFetchesTried.contains(series.key) {
             do {
@@ -169,7 +189,7 @@ public struct HomeView<ProfileSwitcher: View>: View {
                 return
             } catch {
                 // Offline or a provider hiccup: the show just stays out of
-                // Up next until the next launch tries again.
+                // the TV's Up next until the next launch tries again.
             }
             if Task.isCancelled { return }
             episodeFetchesTried.insert(series.key)
