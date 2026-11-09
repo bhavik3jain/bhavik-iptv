@@ -247,3 +247,17 @@ extension HouseholdStore {
         )
     }
 }
+
+#if DEBUG
+extension HouseholdStore {
+    /// The demo's other devices (`-SeedContinueOffers YES`): a row as another
+    /// device of the household writes it, which this device doesn't count as
+    /// its own. It never heartbeats, so it goes stale in 15 minutes.
+    @discardableResult
+    public func seedPlaybackFromAnotherDevice(profileID: UUID, sourceID: UUID, itemKey: String, title: String, deviceName: String, startedAt: Date) -> UUID {
+        let id = startPlayback(profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, deviceName: deviceName, startedAt: startedAt)
+        ownPlaybacks[id] = nil
+        return id
+    }
+}
+#endif

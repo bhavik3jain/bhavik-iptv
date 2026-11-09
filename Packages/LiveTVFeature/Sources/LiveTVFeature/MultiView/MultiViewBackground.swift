@@ -68,6 +68,14 @@ public final class MultiViewBackground {
         session = nil
     }
 
+    /// Tiles another device took over (Continue on Apple TV) stop here, and
+    /// with none left the background session ends. Nil when nothing was.
+    public func releaseTilesTakenOver(store: HouseholdStore) -> PlaybackTakeover? {
+        guard let session, let takeover = session.releaseTilesTakenOver(store: store) else { return nil }
+        if session.occupants.isEmpty { stop(store: store) }
+        return takeover
+    }
+
     /// The app went behind the TV's Home screen, where its tiles would hold
     /// every stream for nobody (`MultiViewSession.suspend`).
     public func suspend(store: HouseholdStore) {
