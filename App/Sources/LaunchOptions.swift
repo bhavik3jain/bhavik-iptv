@@ -105,6 +105,9 @@ struct LaunchOptions: Equatable, Sendable {
     var sourceProbe: String?
     /// `-InitializeCloudKitSchema YES`.
     var initializeCloudKitSchema = false
+    /// `-SeedContinueOffers YES`: with the demo, other devices "playing" for
+    /// Bhavik, for Continue on Apple TV's offers on the TV's Home.
+    var seedContinueOffers = false
 
     static let empty = LaunchOptions()
 
@@ -131,6 +134,7 @@ struct LaunchOptions: Equatable, Sendable {
         autoPlay = values["AutoPlay"].flatMap { AutoPlay(rawValue: $0.lowercased()) }
         sourceProbe = values["SourceProbe"].flatMap(Self.nonEmpty)
         initializeCloudKitSchema = Self.flag(values["InitializeCloudKitSchema"])
+        seedContinueOffers = Self.flag(values["SeedContinueOffers"])
     }
 
     private init() {}

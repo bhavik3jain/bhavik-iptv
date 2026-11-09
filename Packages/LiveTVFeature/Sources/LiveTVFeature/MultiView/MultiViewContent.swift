@@ -41,6 +41,8 @@ struct MultiViewContent: View {
     @State private var multiView = MultiViewSession()
     @State private var picker: PickerRequest?
     @State private var cache = GuideProgrammeCache()
+    /// The device that took every tile over (Continue on Apple TV).
+    @State private var takenOverBy: String?
 
     private static let spacing: CGFloat = 12
 
@@ -101,6 +103,19 @@ struct MultiViewContent: View {
             // A different profile mustn't inherit the last one's tiles (or
             // its who's-watching rows).
             multiView.closeAll(store: store)
+        }
+        .onChange(of: store.revision) { _, _ in
+            // Another device carried these tiles on: they stop here.
+            guard let takeover = multiView.releaseTilesTakenOver(store: store) else { return }
+            if multiView.occupants.isEmpty { takenOverBy = takeover.deviceName }
+        }
+        .alert(
+            takenOverBy.map { String(localized: "Playing on \($0)") } ?? "",
+            isPresented: Binding(get: { takenOverBy != nil }, set: { if !$0 { takenOverBy = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) { takenOverBy = nil }
+        } message: {
+            Text("Multi-view carried on there, so it stopped here.")
         }
     }
 

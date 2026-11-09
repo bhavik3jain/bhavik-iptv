@@ -127,17 +127,23 @@ final class PlaybackCoordinator {
     var notice: PlaybackNotice?
     /// The window that asked for multi-view from the player.
     var multiViewSceneID: UUID?
-    /// The live channel the TV's player was showing, which multi-view opens
-    /// with. Nil from anything but a channel.
-    var multiViewStartingChannelKey: String?
+    /// What the TV's multi-view opens with, in tile order: the live channel
+    /// its player was showing, or another device's tiles carried on here
+    /// (`continueHere`). Empty from anything else.
+    var multiViewStartingChannelKeys: [String] = []
 
     /// The window most recently used, for plays a launch argument starts.
     @ObservationIgnored var lastSceneID: UUID?
 
-    private let catalog: CatalogService
-    private let store: HouseholdStore
-    private let session: ProfileSession
+    let catalog: CatalogService
+    let store: HouseholdStore
+    let session: ProfileSession
     private let downloads: DownloadCenter
+    /// Watches for another device carrying on what plays here.
+    @ObservationIgnored private var takeoverWatch: Task<Void, Never>?
+    /// After carrying on a movie or episode: the other device's last
+    /// position, when it lands (`followHandoffPosition`).
+    @ObservationIgnored var handoffFollow: Task<Void, Never>?
     /// The who's-watching row of each running download (DL-2), by item key.
     @ObservationIgnored private var downloadRows: [String: UUID] = [:]
     @ObservationIgnored private var downloadHeartbeat: Task<Void, Never>?
@@ -159,6 +165,9 @@ final class PlaybackCoordinator {
         multiViewBackground.onOpening = { [weak self] in
             guard let self, self.backgroundPlayerID != nil else { return }
             self.closeCurrent()
+        }
+        takeoverWatch = observeChanges(of: { store.revision }) { [weak self] _ in
+            self?.stopWhatAnotherDeviceTookOver()
         }
     }
 
@@ -198,7 +207,7 @@ final class PlaybackCoordinator {
         if backgroundPlayerID != nil {
             backgroundPlayerID = nil
         } else if multiViewBackground.isRunning {
-            multiViewStartingChannelKey = nil
+            multiViewStartingChannelKeys = []
             multiViewSceneID = sceneID
         }
     }
@@ -372,9 +381,9 @@ final class PlaybackCoordinator {
                 // On the TV the channel comes along: picking it again with a
                 // remote is the long way round. Its stream is given back
                 // first, so it counts against its source only once.
-                self.multiViewStartingChannelKey = layout == .tv
-                    ? playerSession.flatMap { $0.items.context(for: $0.model.item.id)?.channel?.key.rawValue }
-                    : nil
+                self.multiViewStartingChannelKeys = layout == .tv
+                    ? playerSession.flatMap { $0.items.context(for: $0.model.item.id)?.channel?.key.rawValue }.map { [$0] } ?? []
+                    : []
                 self.closeCurrent()
                 self.multiViewSceneID = scene
             }
@@ -554,7 +563,8 @@ final class PlaybackCoordinator {
             downloadRows[record.id] = store.startPlayback(
                 profileID: profileID,
                 sourceID: record.sourceID,
-                itemKey: record.id,
+                // Marked, so no device offers to carry a download on.
+                itemKey: PlaybackRowKey.download(record.id),
                 title: String(localized: "Downloading \(record.title)"),
                 deviceName: DeviceName.current
             )

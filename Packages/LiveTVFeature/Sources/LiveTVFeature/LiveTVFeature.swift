@@ -59,10 +59,12 @@ public struct ChannelDetailView: View {
 /// On the Apple TV it is the remote's own screen (`TVMultiViewContent`),
 /// opened full screen from the guide or the player; `startingChannelKey` is
 /// the channel to bring along, and Menu calls `onClose` as it leaves.
+/// `startingChannelKeys` opens it with several, in tile order: another
+/// device's multi-view carried on here (Continue on Apple TV).
 public struct MultiViewScreen: View {
     let showsModePicker: Bool
     let onShowGuide: (() -> Void)?
-    let startingChannelKey: String?
+    let startingChannelKeys: [String]
 
     @Environment(\.hearthLayout) private var layout
 
@@ -74,15 +76,23 @@ public struct MultiViewScreen: View {
         self.init(showsModePicker: true, onShowGuide: onClose, startingChannelKey: startingChannelKey)
     }
 
+    public init(startingChannelKeys: [String], onClose: @escaping () -> Void) {
+        self.init(showsModePicker: true, onShowGuide: onClose, startingChannelKeys: startingChannelKeys)
+    }
+
     init(showsModePicker: Bool, onShowGuide: (() -> Void)?, startingChannelKey: String? = nil) {
+        self.init(showsModePicker: showsModePicker, onShowGuide: onShowGuide, startingChannelKeys: startingChannelKey.map { [$0] } ?? [])
+    }
+
+    init(showsModePicker: Bool, onShowGuide: (() -> Void)?, startingChannelKeys: [String]) {
         self.showsModePicker = showsModePicker
         self.onShowGuide = onShowGuide
-        self.startingChannelKey = startingChannelKey
+        self.startingChannelKeys = startingChannelKeys
     }
 
     public var body: some View {
         if layout == .tv {
-            TVMultiViewContent(startingChannelKey: startingChannelKey, onClose: onShowGuide)
+            TVMultiViewContent(startingChannelKeys: startingChannelKeys, onClose: onShowGuide)
         } else {
             MultiViewContent(showsModePicker: showsModePicker, onShowGuide: onShowGuide)
         }

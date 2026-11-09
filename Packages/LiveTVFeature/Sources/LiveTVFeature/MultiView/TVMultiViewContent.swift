@@ -29,8 +29,9 @@ private struct TVPickerRequest: Identifiable {
 /// their own: a dismissing cover handed focus to the guide behind multi-view,
 /// out of sight, where the next press would act on a screen nobody can see.
 struct TVMultiViewContent: View {
-    /// The channel to open with, from the player or the guide.
-    let startingChannelKey: String?
+    /// The channels to open with, in tile order: the player's or the
+    /// guide's one, or another device's multi-view (Continue on Apple TV).
+    let startingChannelKeys: [String]
     /// Menu left the screen; nil dismisses it.
     let onClose: (() -> Void)?
 
@@ -48,6 +49,8 @@ struct TVMultiViewContent: View {
     @State private var lastFocus: TVMultiViewFocus?
     @State private var didStart = false
     @State private var isConfirmingLeave = false
+    /// The device that took every tile over (Continue on Apple TV).
+    @State private var takenOverBy: String?
     /// The white ring on the focused tile, until the remote goes quiet.
     @State private var showsTileFocus = true
     /// Counts remote presses that reach this screen; each restarts the wait.
@@ -107,6 +110,22 @@ struct TVMultiViewContent: View {
                 guard !Task.isCancelled else { return }
                 await multiView.upkeep(now: .now, catalog: catalog, store: store)
             }
+        }
+        .onChange(of: store.revision) { _, _ in
+            // Another device carried these tiles on: they stop here.
+            guard let takeover = multiView.releaseTilesTakenOver(store: store) else { return }
+            if multiView.occupants.isEmpty {
+                picker = nil
+                takenOverBy = takeover.deviceName
+            }
+        }
+        .alert(
+            takenOverBy.map { String(localized: "Playing on \($0)") } ?? "",
+            isPresented: Binding(get: { takenOverBy != nil }, set: { if !$0 { takenOverBy = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel, action: leave)
+        } message: {
+            Text("Multi-view carried on there, so it stopped here.")
         }
         .onAppear(perform: start)
         .onDisappear {
@@ -309,7 +328,8 @@ struct TVMultiViewContent: View {
     // MARK: Actions
 
     /// The stored layout, and the channel it was opened with, if its source
-    /// has room for it.
+    /// has room for it. Several channels (another device's multi-view) take
+    /// as many tiles, in order, as their sources have room for.
     private func start() {
         guard !didStart else { return }
         didStart = true
@@ -321,13 +341,15 @@ struct TVMultiViewContent: View {
             lastFocus = focus
             return
         }
-        if let stored = MultiViewArrangement(rawValue: arrangementRaw) {
+        if let carried = MultiViewHandoff.arrangement(forChannels: startingChannelKeys.count) {
+            multiView.setArrangement(carried, store: store)
+        } else if let stored = MultiViewArrangement(rawValue: arrangementRaw) {
             multiView.setArrangement(stored, store: store)
         }
-        if let startingChannelKey,
-           let channel = catalog.channel(ItemKey(rawValue: startingChannelKey)),
-           let tile = multiView.firstEmptyVisibleTileID,
-           MultiViewStart.canPlay(sourceID: channel.sourceID, states: multiView.streamStates(catalog: catalog, store: store)) {
+        for key in startingChannelKeys {
+            guard let channel = catalog.channel(ItemKey(rawValue: key)),
+                  let tile = multiView.firstEmptyVisibleTileID,
+                  MultiViewStart.canPlay(sourceID: channel.sourceID, states: multiView.streamStates(catalog: catalog, store: store)) else { continue }
             play(channel, inTile: tile)
         }
         focus = initialFocus

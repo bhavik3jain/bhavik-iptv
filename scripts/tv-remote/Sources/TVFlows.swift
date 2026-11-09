@@ -208,6 +208,37 @@ final class TVFlows: XCTestCase {
         press(.menu)
     }
 
+    // MARK: Continue on Apple TV
+
+    /// What another device plays for this profile waits on Home with the
+    /// remote already on it, and carries on here: the MacBook's three
+    /// channels open in multi-view, and its card goes, since its rows ended.
+    func testContinueHereCarriesAnotherDevicesMultiViewOn() throws {
+        relaunch(adding: ["-SeedContinueOffers", "YES"])
+        let offers = app.buttons.matching(NSPredicate(format: "label == 'Continue here'"))
+        let macBook = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'MacBook Pro'")).firstMatch
+        XCTAssertTrue(macBook.waitForExistence(timeout: 20), "The MacBook's multi-view should be offered")
+        XCTAssertEqual(offers.count, 2, "The iPhone's movie and the MacBook's multi-view")
+
+        press(.down)
+        expectFocus("Continue here") // the iPhone's movie, the newest
+        press(.down)
+        expectFocus("Continue here") // the MacBook's multi-view
+        press(.select)
+
+        XCTAssertTrue(app.staticTexts["Multi-view"].waitForExistence(timeout: 5), "Multi-view should open")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertFalse(app.focusDescription.contains("Add a channel"), "The tiles should be filled, found \(app.focusDescription)")
+
+        press(.menu)
+        expectFocus("Keep Playing in Background")
+        moveFocus(to: "Stop Multi-view")
+        press(.select)
+        expectFocus("Continue here", timeout: 5) // back on Home, on the iPhone's card
+        XCTAssertFalse(macBook.exists, "The MacBook's offer should be gone")
+        XCTAssertEqual(offers.count, 1)
+    }
+
     // MARK: Layout
 
     /// The backdrop sits behind the scroll view, which used to be only as
@@ -225,6 +256,14 @@ final class TVFlows: XCTestCase {
     }
 
     // MARK: Getting around
+
+    /// The demo again, with more launch arguments.
+    private func relaunch(adding arguments: [String]) {
+        app.terminate()
+        app.launchArguments += arguments
+        app.launch()
+        expectFocus("Home")
+    }
 
     private func press(_ button: XCUIRemote.Button, times: Int = 1) {
         for _ in 0..<times {
