@@ -25,7 +25,7 @@ Hearth (working title) — an IPTV player for Stalker portals, Xtream logins and
 - Features ask `@Environment(\.hearthLayout)` — `.compact`, `.sidebar` or `.tv` — never the platform, the idiom, the orientation or `UIScreen.main`. `.sidebar` is the Mac, iPad and iPhone Duo's inner display, `.tv` the Apple TV; the app sets it once with `.hearthLayoutFromSizeClass()`.
 - `App/Sources` is the composition root and may use `#if os(...)` directly. Kits may too (PlayerKit's engine views, HouseholdKit's one nudge).
 - `if #available(iOS 26, *)` doesn't gate macOS: write `#available(iOS 26, macOS 26, *)`.
-- iOS has no Home tab: it opens on Live TV, with Live TV, Movies, Shows and My List (`AppTab.primary`, the owner's call on 2026-11-01). The Mac and Apple TV keep Home. Sidebar-only tabs (Search, Household, Settings) are added only at regular width — `.tabPlacement(.sidebarOnly)` alone still folds them into a "More" tab on the phone once there are more than five.
+- iOS opens on Home, with Home, Live TV, Movies, Shows and My List (`AppTab.primary`, five; the owner's call on 2026-11-08, after a week of opening on Live TV). Home on iPhone, iPad and Mac is the profile's favorites: no Continue watching or Up next (the owner asked for them off the Mac); only the Apple TV's Home keeps those (`HomeLoader.load(profileID:layout:)`). Sidebar-only tabs (Search, Household, Settings) are added only at regular width — `.tabPlacement(.sidebarOnly)` alone still folds them into a "More" tab on the phone once there are more than five.
 
 ## iPhone Duo
 

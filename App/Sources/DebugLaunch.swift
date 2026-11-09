@@ -150,6 +150,13 @@ enum DebugLaunch {
         let catalog = services.catalog
         let store = services.store
         guard let owner = store.profiles.first(where: { $0.name == "Bhavik" }) else { return }
+        // Four streams in use (three tiles and the movie) need a source that
+        // allows four, or the TV, taking over the three, could fill only the
+        // one the movie leaves of the demo's usual two.
+        if var demo = store.sources.first(where: { $0.id == SourceConfiguration.stub().id }), demo.maxStreams < 4 {
+            demo.maxStreams = 4
+            store.updateSource(demo)
+        }
         let anchor = Date.now.addingTimeInterval(-120)
         for (slot, channel) in catalog.channels(applyingFilter: false).prefix(3).enumerated() {
             store.seedPlaybackFromAnotherDevice(
