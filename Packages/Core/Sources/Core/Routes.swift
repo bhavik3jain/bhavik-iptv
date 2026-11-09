@@ -21,6 +21,9 @@ public enum HearthRoute: Hashable, Sendable {
     /// What's saved on this device (DL-1): a tab on the Mac and in the
     /// iPad's sidebar, a page from My List on the phone.
     case downloads
+    /// The profile's My List. A tab on every platform, so like `liveGuide`
+    /// it switches tabs rather than pushing a page (Home's "See all").
+    case myList
 }
 
 /// A request to play something, made by any feature and carried out by the

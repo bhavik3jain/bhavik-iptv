@@ -262,8 +262,8 @@ extension CatalogService {
                 signedIn.insert(sourceID)
                 adopt(state, sourceID: sourceID)
                 // A new catalog: searches are asked of the provider again,
-                // in case one landed in the old generation mid-import.
-                providerSearchedQueries.removeAll()
+                // so a held title that wasn't found gets another look.
+                providerSearchedPages.removeAll()
                 catalogDidChange()
                 // The old rows are already out of every query; a cleanup
                 // that fails is finished by the next import's first step.

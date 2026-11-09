@@ -36,10 +36,14 @@ extension CatalogService {
     /// live catalog and My List, Continue watching and its page show it with
     /// its name and artwork, and it plays. `CatalogImporter.keepUnlisted`
     /// keeps it over later refreshes. A list kept whole is left alone: a
-    /// title missing from it is gone. Each query goes to a provider once per
-    /// catalog, as a typed search's does, so calling this again costs
-    /// nothing. Returns how many titles the searches added (the held ones
-    /// and anything else they found); `revision` bumps when any were.
+    /// title missing from it is gone. The held title's own key is known, so
+    /// each search goes on page after page (`heldSearchPageLimit`) until that
+    /// key turns up: on a portal of 162,000 titles a film's name matches its
+    /// versions in several languages, more than a typed search's two pages.
+    /// Each page goes to a provider once per catalog, as a typed search's
+    /// does, so calling this again costs nothing. Returns how many titles the
+    /// searches added (the held ones and anything else they found);
+    /// `revision` bumps when any were.
     @discardableResult
     public func resolveHeldItems(_ items: [HeldItem]) async -> Int {
         let wanted = heldItemsToLookUp(items)
@@ -53,7 +57,9 @@ extension CatalogService {
             for query in HeldTitleSearch.queries(for: item.title) {
                 // An earlier item's search may have brought this one too.
                 if queryContains(item.key) || Task.isCancelled { break }
-                added += await searchProviders(query, showingProgress: false)
+                added += await searchProviders(query, showingProgress: false, pageLimit: Self.heldSearchPageLimit) {
+                    self.queryContains(item.key)
+                }
             }
         }
         return added
@@ -68,17 +74,26 @@ extension CatalogService {
     /// The name to write on a household row for a key, so another device can
     /// search for it: the movie's or show's, and for an episode its show's.
     /// Read whatever the current profile's rules hide, since it's written
-    /// down, not shown. Nil when the catalog doesn't hold it.
+    /// down, not shown. When the catalog no longer holds it, the name it was
+    /// dropped under (`RemovedItem`, kept 180 days for FAV-2), folded as
+    /// search keys are ("greys anatomy english tv series"): builds before
+    /// 112 dropped every title past the first pages at the daily refresh,
+    /// before favorites carried names, and those favorites had nothing to be
+    /// searched by on any device. Nil when the catalog knows neither.
     public func heldTitle(for key: ItemKey) -> String? {
-        let row: NSManagedObject?
+        let titleKey: ItemKey?
+        let entity: String
         switch key.kind {
-        case .movie?: row = liveRow(CatalogModel.Entity.movie, key: key)
-        case .series?: row = liveRow(CatalogModel.Entity.series, key: key)
-        case .episode?: row = key.seriesKey.flatMap { liveRow(CatalogModel.Entity.series, key: $0) }
-        case .channel?, nil: row = nil
+        case .movie?: titleKey = key; entity = CatalogModel.Entity.movie
+        case .series?: titleKey = key; entity = CatalogModel.Entity.series
+        case .episode?: titleKey = key.seriesKey; entity = CatalogModel.Entity.series
+        case .channel?, nil: return nil
         }
-        let name = row?.string("name").trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return name.isEmpty ? nil : name
+        guard let titleKey, let sourceID = titleKey.sourceID, source(sourceID) != nil else { return nil }
+        let name = liveRow(entity, key: titleKey)?.string("name").trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !name.isEmpty { return name }
+        let remembered = removedNameKey(for: titleKey) ?? ""
+        return SearchKey.normalize(remembered).count >= 2 ? remembered : nil
     }
 
     /// The movies and shows worth searching for, once each, in order: not in
@@ -127,9 +142,23 @@ extension CatalogService {
 /// search doesn't match: on the owner's portal the whole name found nothing
 /// and "Greys Anatomy" found the show first, among ten (2026-11-07). So the
 /// name's longest plain part goes first, and the whole name follows for a
-/// portal that only matches that.
+/// portal that only matches that. Last comes the plain part's most
+/// distinctive word: a name remembered only in its folded form ("greys
+/// anatomy english tv series", `heldTitle(for:)`) has no separators left and
+/// matches nothing whole, and one word matches the portal's spelling however
+/// its punctuation goes.
 enum HeldTitleSearch {
     static let separators = [" - ", " – ", " — ", " | ", "|", " (", " [", ")", "]"]
+
+    /// Folded words providers add to names (languages, kinds, quality),
+    /// never the word to search a title by.
+    static let labels: Set<String> = [
+        "english", "hindi", "tamil", "telugu", "malayalam", "kannada", "punjabi", "bengali", "marathi", "gujarati",
+        "urdu", "arabic", "french", "german", "spanish", "italian", "turkish", "russian", "portuguese", "dutch",
+        "polish", "korean", "japanese", "chinese", "persian", "multi", "multisub", "dubbed", "dual", "audio",
+        "subbed", "subs", "subtitles", "vostfr", "series", "season", "episode", "episodes", "movie", "movies",
+        "film", "films", "quality", "excellent", "cinema", "version", "extended", "uncut",
+    ]
 
     static func queries(for title: String) -> [String] {
         let full = title.split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -141,7 +170,26 @@ enum HeldTitleSearch {
         let core = parts
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)) }
             .max { SearchKey.normalize($0).count < SearchKey.normalize($1).count } ?? ""
-        guard SearchKey.normalize(core).count >= 2, core != full else { return [full] }
-        return [core, full]
+        let plain = SearchKey.normalize(core).count >= 2 ? core : full
+        var queries = plain == full ? [full] : [core, full]
+        if let word = distinctiveWord(in: plain), !queries.contains(where: { SearchKey.normalize($0) == SearchKey.normalize(word) }) {
+            queries.append(word)
+        }
+        return queries
+    }
+
+    /// The longest word of at least four letters that isn't a label or a
+    /// number (a year, "1080p"); the first of equals. Nil when none is.
+    static func distinctiveWord(in name: String) -> String? {
+        var best: Substring?
+        var bestLength = 0
+        for word in name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+            let folded = SearchKey.normalize(String(word))
+            guard folded.count >= 4, folded.count > bestLength,
+                  !folded.contains(where: \.isNumber), !labels.contains(folded) else { continue }
+            best = word
+            bestLength = folded.count
+        }
+        return best.map(String.init)
     }
 }

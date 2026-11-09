@@ -4,10 +4,12 @@ import HouseholdKit
 import SwiftUI
 
 /// Home on the Apple TV (mockup 02 at ten feet, HOME-1): the greeting and
-/// profile switcher, the Continue watching hero with Resume in focus first,
-/// then shelves the remote walks down — favorite channels (select plays,
-/// long-press for the channel's page or to unfavorite), up next in your
-/// shows, new in Movies. Reads the same `HomeSnapshot` as the phone.
+/// profile switcher, what another device is playing for this profile now
+/// ("Continue from <device>", `TVContinueOffers`), the Continue watching hero
+/// with Resume in focus first, then shelves the remote walks down — favorite
+/// channels (select plays, long-press for the channel's page or to
+/// unfavorite), up next in your shows, new in Movies. Reads the same
+/// `HomeSnapshot` as the phone.
 struct HomeTVContent<ProfileSwitcher: View>: View {
     let snapshot: HomeSnapshot
     let status: HomeStatus
@@ -18,6 +20,12 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
     @Environment(ProfileSession.self) private var session
     @Environment(HouseholdStore.self) private var store
     @FocusState private var focus: HomeTVFocus?
+    /// Offers put away with "Not now", until Home goes.
+    @State private var hiddenOffers: Set<String> = []
+    /// Rows go stale with time alone, so the offers are read again each
+    /// minute as well as when the store changes.
+    @State private var offerClock = Date.now
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView {
@@ -29,9 +37,35 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
         }
         .scrollClipDisabled()
         .hearthScreenBackground()
-        // Down from the tab bar lands on Resume, not on the profile menu in
-        // the far corner that the focus engine finds first.
-        .defaultFocus($focus, .resume, priority: .userInitiated)
+        // Down from the tab bar lands on Resume (or on carrying on what
+        // another device is playing), not on the profile menu in the far
+        // corner that the focus engine finds first.
+        .defaultFocus($focus, offerCards.first.map { .continueOffer($0.id) } ?? .resume, priority: .userInitiated)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                offerClock = .now
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Back from the TV's Home screen: rows that went stale meanwhile
+            // go now, not at the next minute.
+            if phase == .active { offerClock = .now }
+        }
+    }
+
+    /// What other devices are playing for this profile, as cards this TV
+    /// can play.
+    private var offerCards: [ContinueOfferCard] {
+        guard status == .ready, let profileID = session.currentProfile?.id else { return [] }
+        let date = max(offerClock, .now)
+        _ = catalog.revision
+        _ = store.revision
+        let offers = store.continueOffers(profileID: profileID, deviceName: DeviceName.current, now: date)
+            .filter { !hiddenOffers.contains($0.id) }
+        guard !offers.isEmpty else { return [] }
+        let lookup = ContinueOfferLookup.live(catalog: catalog, store: store, profileID: profileID, at: date)
+        return ContinueOfferCards.cards(offers, lookup: lookup, at: date)
     }
 
     private var header: some View {
@@ -78,8 +112,13 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
     @ViewBuilder
     private var sections: some View {
         let profileID = session.isGuest ? nil : session.currentProfile?.id
+        let cards = offerCards
 
-        if let item = snapshot.continueWatching {
+        if !cards.isEmpty {
+            TVContinueOffers(cards: cards, focus: $focus) { hiddenOffers.insert($0) }
+        }
+
+        if let item = snapshot.continueWatching, !ContinueOfferCards.heroIsCovered(heroItemKey: item.itemKey, by: cards) {
             TVContinueHero(item: item, profileID: profileID, focus: $focus)
         }
 
@@ -127,6 +166,8 @@ struct TVNoSourcesNotice {
 /// Where the remote starts on Home.
 enum HomeTVFocus: Hashable {
     case resume
+    /// "Continue here" on another device's offer, by the offer's id.
+    case continueOffer(String)
 }
 
 /// The hero: the backdrop full width, the title and episode over it, Resume

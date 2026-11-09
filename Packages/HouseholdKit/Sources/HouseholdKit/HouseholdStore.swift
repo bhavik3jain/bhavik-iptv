@@ -535,12 +535,18 @@ public final class HouseholdStore {
     public func favorites(profileID: UUID, kind: FavoriteKind) -> [FavoriteRecord] {
         guard let profile = profileEntity(profileID), profile.kind != .guest else { return [] }
         let removed = removedSourceIDs()
-        let rows = live(profile.favorites).filter { (FavoriteKind(rawValue: $0.kindRaw) ?? .channel) == kind }
-        return Dictionary(grouping: rows, by: \.itemKey)
-            .compactMap { _, group in FoldRules.favoriteKeeper(group.map(\.foldRow)).map { group[$0] } }
+        return foldedFavorites(of: profile, kind: kind)
             .filter { favorite in ItemKeyHint.sourceID(of: favorite.itemKey).map { !removed.contains($0) } ?? true }
             .map(\.record)
             .sorted(by: Self.favoriteOrder)
+    }
+
+    /// One row per item key (a duplicate a fold hasn't reached counts once),
+    /// removed sources' rows included, unordered.
+    private func foldedFavorites(of profile: ProfileEntity, kind: FavoriteKind) -> [FavoriteEntity] {
+        let rows = live(profile.favorites).filter { (FavoriteKind(rawValue: $0.kindRaw) ?? .channel) == kind }
+        return Dictionary(grouping: rows, by: \.itemKey)
+            .compactMap { _, group in FoldRules.favoriteKeeper(group.map(\.foldRow)).map { group[$0] } }
     }
 
     public func isFavorite(profileID: UUID, itemKey: String) -> Bool {
@@ -569,12 +575,28 @@ public final class HouseholdStore {
 
     /// Moves within one profile's list of one kind, writing only the moved
     /// rows: each gets a sort order between its new neighbours (FAV-1).
+    /// The offsets are in `favorites(profileID:kind:)`; a screen that shows
+    /// fewer rows than that uses `moveFavorites(profileID:kind:shownIDs:…)`.
     public func moveFavorites(profileID: UUID, kind: FavoriteKind, fromOffsets: IndexSet, toOffset: Int) {
-        let ordered = favorites(profileID: profileID, kind: kind)
-        guard !ordered.isEmpty, let profile = profileEntity(profileID) else { return }
-        let writes = FractionalOrder.writes(orders: ordered.map(\.sortOrder), fromOffsets: fromOffsets, toOffset: toOffset)
+        let shown = favorites(profileID: profileID, kind: kind).map(\.id)
+        moveFavorites(profileID: profileID, kind: kind, shownIDs: shown, fromOffsets: fromOffsets, toOffset: toOffset)
+    }
+
+    /// Moves within the list as a screen shows it, writing only the moved
+    /// rows (FAV-1). `shownIDs` are the favorites' ids in the order shown,
+    /// and the offsets are that list's, as `onMove` gives them. A screen may
+    /// leave rows out — titles a profile's rules hide, titles still loading,
+    /// a removed source's favorites — and those keep their places: the moved
+    /// rows land just before the shown row that follows them.
+    public func moveFavorites(profileID: UUID, kind: FavoriteKind, shownIDs: [UUID], fromOffsets: IndexSet, toOffset: Int) {
+        guard let profile = profileEntity(profileID), profile.kind != .guest else { return }
+        // The whole list, removed sources' rows included, so a move never
+        // lands on a hidden row's sort order or renumbers past one.
+        let rows = foldedFavorites(of: profile, kind: kind)
+        let ordered = rows.map(\.record).sorted(by: Self.favoriteOrder)
+        guard let move = FractionalOrder.offsets(in: ordered.map(\.id), shown: shownIDs, fromOffsets: fromOffsets, toOffset: toOffset) else { return }
+        let writes = FractionalOrder.writes(orders: ordered.map(\.sortOrder), fromOffsets: move.fromOffsets, toOffset: move.toOffset)
         guard !writes.isEmpty else { return }
-        let rows = live(profile.favorites)
         for (index, sortOrder) in writes {
             let id = ordered[index].id
             if let row = rows.first(where: { $0.id == id }) { set(row, \.sortOrder, sortOrder) }
@@ -746,10 +768,18 @@ public final class HouseholdStore {
     /// Writes the row at play. Returns its id for heartbeats and stop.
     @discardableResult
     public func startPlayback(profileID: UUID, sourceID: UUID, itemKey: String, title: String, deviceName: String) -> UUID {
+        startPlayback(profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, deviceName: deviceName, startedAt: .now)
+    }
+
+    /// Writes the row at play with the start time given: multi-view writes
+    /// its tiles' in slot order, which is how another device taking it over
+    /// lays them out in the same order (`ContinueOfferRules`).
+    @discardableResult
+    public func startPlayback(profileID: UUID, sourceID: UUID, itemKey: String, title: String, deviceName: String, startedAt: Date) -> UUID {
         let id = UUID()
         guard let household = currentHouseholdEntity() else { return id }
         let now = Date.now
-        let record = PlaybackRecord(id: id, deviceName: deviceName, profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, startedAt: now, lastSeenAt: now)
+        let record = PlaybackRecord(id: id, deviceName: deviceName, profileID: profileID, sourceID: sourceID, itemKey: itemKey, title: title, startedAt: startedAt, lastSeenAt: now)
         insertPlayback(record, into: household)
         ownPlaybacks[id] = record
         commit("start playback")
@@ -761,13 +791,17 @@ public final class HouseholdStore {
     /// When the row is gone although this device never stopped it — another
     /// device purged it while this one was offline past the 15 minutes — it
     /// is written again under the same id, so the stream shows (and counts
-    /// against the limit) once more (HH-5, HH-6).
+    /// against the limit) once more (HH-5, HH-6). Not when another device
+    /// took it over (`takeover(ofPlaybacks:)`): that one is playing it now.
     public func heartbeat(playbackID: UUID) {
         if let row = playbackEntity(playbackID) {
             row.lastSeenAt = .now
-        } else if var record = ownPlaybacks[playbackID], let household = currentHouseholdEntity() {
+            ownPlaybacks[playbackID]?.lastSeenAt = row.lastSeenAt
+        } else if var record = ownPlaybacks[playbackID], let household = currentHouseholdEntity(),
+                  takeover(ofPlaybacks: [playbackID]) == nil {
             record.lastSeenAt = .now
             insertPlayback(record, into: household)
+            ownPlaybacks[playbackID] = record
             Logger.household.notice("Heartbeat: wrote this device's purged playback row again")
         } else {
             return

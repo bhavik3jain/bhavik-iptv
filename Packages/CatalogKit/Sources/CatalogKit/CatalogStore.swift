@@ -11,6 +11,8 @@ import Foundation
 final class CatalogStore: Sendable {
     let container: NSPersistentContainer
     let isInMemory: Bool
+    /// Whose turn it is to write (`write(_:)`).
+    let writes = WriteQueue()
 
     private init(container: NSPersistentContainer, isInMemory: Bool) {
         self.container = container

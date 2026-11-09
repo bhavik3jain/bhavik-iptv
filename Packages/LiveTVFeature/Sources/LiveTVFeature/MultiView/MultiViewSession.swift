@@ -45,6 +45,11 @@ final class MultiViewSession {
     private(set) var expanded: Expanded?
     @ObservationIgnored private var lastHeartbeat = Date.now
     @ObservationIgnored private var suspended: Suspended?
+    /// When this run's first tile started. Each tile's who's-watching row
+    /// starts at it plus its slot (`MultiViewHandoff.rowStart`), so the rows
+    /// sort in slot order and another device carrying the tiles on lays them
+    /// out the same way (Continue on Apple TV).
+    @ObservationIgnored private var anchor: Date?
 
     /// The tiles closed when the app went to the background.
     private struct Suspended {
@@ -115,8 +120,17 @@ final class MultiViewSession {
         stopRow(ofTile: id, store: store)
         let item = LivePlayerItems.live(channel, programme: programme, catalog: catalog)
         model.play(item, inTile: id)
+        let anchor = self.anchor ?? .now
+        self.anchor = anchor
         let playbackID = profileID.map {
-            store.startPlayback(profileID: $0, sourceID: channel.sourceID, itemKey: channel.key.rawValue, title: item.title, deviceName: DeviceName.current)
+            store.startPlayback(
+                profileID: $0,
+                sourceID: channel.sourceID,
+                itemKey: channel.key.rawValue,
+                title: item.title,
+                deviceName: DeviceName.current,
+                startedAt: MultiViewHandoff.rowStart(anchor: anchor, slot: id)
+            )
         }
         occupants[id] = Occupant(channel: channel, playbackID: playbackID)
         if arrangement == .one { focusTileID = id }
@@ -141,6 +155,21 @@ final class MultiViewSession {
         }
         model.closeAll()
         suspended = nil
+        anchor = nil
+    }
+
+    /// Tiles another device took over (Continue on Apple TV) close here: it
+    /// ended their rows and plays their channels now, so their streams are
+    /// its. Call when the household store changes. Nil when nothing was.
+    func releaseTilesTakenOver(store: HouseholdStore) -> PlaybackTakeover? {
+        guard let takeover = store.takeover(ofPlaybacks: ownPlaybackIDs) else { return nil }
+        let ended = occupants.filter { $0.value.playbackID.map(takeover.endedIDs.contains) ?? false }.keys
+        if let expanded, ended.contains(expanded.tileID) { collapse() }
+        for id in ended.sorted() {
+            clear(tile: id, store: store)
+        }
+        if occupants.isEmpty { anchor = nil }
+        return takeover
     }
 
     /// The app went to the background: every stream goes back, as nobody can

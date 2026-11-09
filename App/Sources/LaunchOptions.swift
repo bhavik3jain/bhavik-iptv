@@ -13,12 +13,13 @@ enum AppTab: String, Hashable, CaseIterable, Sendable {
     case household
     case settings
 
-    /// The tabs of the phone's tab bar, and the top of the iPad and iPhone
-    /// Duo sidebar. Home on iOS is Live TV and nothing else (the owner's call,
-    /// 2026-11-01), so there's no Home tab beside it.
-    static let primary: [AppTab] = [.live, .movies, .shows, .myList]
+    /// The five tabs of the phone's tab bar (mockup 02), and the top of the
+    /// iPad and iPhone Duo sidebar. Home is the profile's favorites (the
+    /// owner's call, 2026-11-08, after a week of Live TV as Home); five is the
+    /// most a phone shows before folding tabs into "More".
+    static let primary: [AppTab] = [.home, .live, .movies, .shows, .myList]
     /// Where an iOS window opens, and where a profile switch lands.
-    static let phoneStart: AppTab = .live
+    static let phoneStart: AppTab = .home
     /// The Mac sidebar's sections, in ⌘1–⌘6 order (mockup 07).
     static let macSections: [AppTab] = [.home, .live, .movies, .shows, .myList, .downloads]
     /// The Apple TV's top tab bar: Search at the leading end, where tvOS
@@ -104,6 +105,9 @@ struct LaunchOptions: Equatable, Sendable {
     var sourceProbe: String?
     /// `-InitializeCloudKitSchema YES`.
     var initializeCloudKitSchema = false
+    /// `-SeedContinueOffers YES`: with the demo, other devices "playing" for
+    /// Bhavik, for Continue on Apple TV's offers on the TV's Home.
+    var seedContinueOffers = false
 
     static let empty = LaunchOptions()
 
@@ -130,6 +134,7 @@ struct LaunchOptions: Equatable, Sendable {
         autoPlay = values["AutoPlay"].flatMap { AutoPlay(rawValue: $0.lowercased()) }
         sourceProbe = values["SourceProbe"].flatMap(Self.nonEmpty)
         initializeCloudKitSchema = Self.flag(values["InitializeCloudKitSchema"])
+        seedContinueOffers = Self.flag(values["SeedContinueOffers"])
     }
 
     private init() {}

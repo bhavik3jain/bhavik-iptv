@@ -3,9 +3,10 @@ import Core
 import HouseholdKit
 import SwiftUI
 
-/// A titled shelf of posters. On the phone it is the mockup's sideways row;
-/// in the sidebar layout (iPad, Mac, iPhone Duo open) it wraps into a grid,
-/// since a wide screen of one sideways row hides most of it off the edge.
+/// A titled shelf of posters with "See all". On the phone it is the mockup's
+/// sideways row; in the sidebar layout (iPad, Mac, iPhone Duo open) it wraps
+/// into a grid, since a wide screen of one sideways row hides most of it off
+/// the edge.
 struct PosterShelf<Item: Identifiable, Tile: View>: View {
     let title: String
     let items: [Item]
@@ -14,6 +15,8 @@ struct PosterShelf<Item: Identifiable, Tile: View>: View {
     let contentWidth: CGFloat
     /// The grid stops after this many rows; nil shows everything.
     let maxRows: Int?
+    /// Where "See all" goes; nil for no link.
+    let seeAll: HearthRoute?
     @ViewBuilder let tile: (Item) -> Tile
 
     /// The mockup's 108-pt posters, growing with Dynamic Type because the
@@ -23,8 +26,10 @@ struct PosterShelf<Item: Identifiable, Tile: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title)
-                .padding(.horizontal, gutter)
+            SectionHeader(title) {
+                if let seeAll { SeeAllLink(route: seeAll) }
+            }
+            .padding(.horizontal, gutter)
             if layout == .sidebar {
                 grid
             } else {
@@ -66,11 +71,38 @@ struct PosterShelf<Item: Identifiable, Tile: View>: View {
     }
 }
 
-/// A show in "Up next in your shows" (SER-2): the poster opens the show, the
-/// line under it plays the episode that's next.
-struct UpNextTile: View {
-    let item: UpNextItem
-    /// The profile whose progress the menu may change; nil for a Guest.
+/// A section's "See all", to the tab that lists everything (Live TV, My
+/// List). The visible words stay the label, for Voice Control; the hint says
+/// where it goes.
+struct SeeAllLink: View {
+    let route: HearthRoute
+
+    var body: some View {
+        NavigationLink(value: route) {
+            Text("See all", bundle: .module)
+                .font(.hearthText(14, relativeTo: .callout))
+                .foregroundStyle(HearthColor.accent)
+                .frame(minWidth: HearthMetrics.minimumHitTarget, minHeight: HearthMetrics.minimumHitTarget, alignment: .trailing)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(Text(hint))
+    }
+
+    private var hint: String {
+        switch route {
+        case .liveGuide: String(localized: "Opens Live TV", bundle: .module)
+        case .myList: String(localized: "Opens My List", bundle: .module)
+        default: ""
+        }
+    }
+}
+
+/// A movie or show on a My List shelf: the poster and its name open the
+/// title's page; the menu plays a movie or takes it off My List.
+struct HomePosterTile: View {
+    let poster: HomePoster
+    /// The profile whose My List the menu may change; nil for a Guest.
     let profileID: UUID?
 
     @Environment(HouseholdStore.self) private var store
@@ -78,59 +110,64 @@ struct UpNextTile: View {
     @Environment(\.openRoute) private var openRoute
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            NavigationLink(value: HearthRoute.series(itemKey: item.seriesKey)) {
-                PosterTile(title: item.seriesName, url: item.posterURL, badge: item.badge, progress: item.progress)
-            }
-            .buttonStyle(.hearthTile)
-            .accessibilityHint(Text("Opens the show", bundle: .module))
-
-            Button {
-                play(item.playIntent)
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(HearthColor.onAccent)
-                        .frame(width: 18, height: 18)
-                        .background(Circle().fill(HearthColor.accent))
-                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-                    Text(item.caption)
-                        .font(.hearthCaption)
-                        .foregroundStyle(HearthColor.textSecondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+        NavigationLink(value: poster.route) {
+            VStack(alignment: .leading, spacing: 6) {
+                PosterTile(title: poster.title, url: poster.posterURL, badge: poster.badge, progress: poster.progress)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(poster.title)
+                        .font(.hearthText(13, weight: .medium, relativeTo: .footnote))
+                        .foregroundStyle(HearthColor.textPrimary)
+                        .lineLimit(1)
+                    if let caption = poster.caption {
+                        Text(caption)
+                            .font(.hearthCaption)
+                            .foregroundStyle(HearthColor.textSecondary)
+                            .lineLimit(1)
+                    }
                 }
-                .frame(maxWidth: .infinity, minHeight: HearthMetrics.minimumHitTarget, alignment: .topLeading)
-                .contentShape(Rectangle())
+                .padding(.horizontal, 2)
             }
-            .buttonStyle(.hearthTile)
-            .accessibilityLabel(Text("Play \(item.badge), \(item.caption)", bundle: .module))
+            .contentShape(Rectangle())
+            // One element inside the link, so it keeps the link's action.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(poster.title))
+            .accessibilityValue(Text(spokenValue))
         }
+        .buttonStyle(.hearthTile)
+        .accessibilityHint(Text(poster.kind == .movie ? String(localized: "Opens the movie", bundle: .module) : String(localized: "Opens the show", bundle: .module)))
         .contextMenu { menu }
+    }
+
+    /// "2019, 25% watched", "S2 E5".
+    private var spokenValue: String {
+        var parts = [poster.caption, poster.badge].compactMap { $0 }
+        if let progress = poster.progress {
+            parts.append(String(localized: "\(progress.formatted(.percent.precision(.fractionLength(0)))) watched", bundle: .module))
+        }
+        return parts.joined(separator: ", ")
     }
 
     @ViewBuilder
     private var menu: some View {
-        Button {
-            play(item.playIntent)
-        } label: {
-            Label(item.resumePosition == nil ? String(localized: "Play \(item.badge)", bundle: .module) : String(localized: "Resume \(item.badge)", bundle: .module), systemImage: "play.fill")
+        if poster.kind == .movie {
+            Button {
+                play(PlayIntent(itemKey: poster.itemKey, kind: .movie, title: poster.title, artworkURL: poster.posterURL, startPosition: poster.resumePosition))
+            } label: {
+                Label(poster.resumePosition == nil ? String(localized: "Play", bundle: .module) : String(localized: "Resume", bundle: .module), systemImage: "play.fill")
+            }
         }
         Button {
-            openRoute(.series(itemKey: item.seriesKey))
+            openRoute(poster.route)
         } label: {
-            Label(String(localized: "Go to show", bundle: .module), systemImage: "info.circle")
+            Label(poster.kind == .movie ? String(localized: "Movie details", bundle: .module) : String(localized: "Go to show", bundle: .module), systemImage: "info.circle")
         }
         if let profileID {
             Divider()
-            // Marking it watched moves the shelf on to the episode after.
-            Button {
-                store.setWatched(true, profileID: profileID, itemKey: item.episodeKey)
+            Button(role: .destructive) {
+                store.toggleFavorite(profileID: profileID, itemKey: poster.itemKey, kind: poster.favoriteKind)
             } label: {
-                Label(String(localized: "Mark \(item.badge) as watched", bundle: .module), systemImage: "checkmark.circle")
+                Label(String(localized: "Remove from My List", bundle: .module), systemImage: "heart.slash")
             }
         }
     }
 }
-

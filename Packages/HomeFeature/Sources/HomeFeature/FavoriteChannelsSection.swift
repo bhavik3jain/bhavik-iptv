@@ -4,10 +4,10 @@ import HouseholdKit
 import SwiftUI
 
 /// "Favorite channels" (HOME-1, mockup 02): the profile's favorites as
-/// now-playing cards, synced across the household's devices. A card plays the
-/// channel live, with the favorites as the channel up/down list; its menu
-/// unfavorites it or opens the channel's page. Logos fall back to monogram
-/// tiles (LIV-7, inside `ChannelNowCard`).
+/// now-playing cards, in the profile's order, synced across the household's
+/// devices. A card plays the channel live, with the favorites as the channel
+/// up/down list; its menu unfavorites it or opens the channel's page. Logos
+/// fall back to monogram tiles (LIV-7, inside `ChannelNowCard`).
 ///
 /// On the phone the cards are the mockup's sideways row. In the sidebar
 /// layout, once three or more fit across, they wrap into two rows instead:
@@ -55,7 +55,8 @@ struct FavoriteChannelsSection: View {
     // MARK: Header
 
     /// `SectionHeader`'s look, with the sync chip beside the title as in the
-    /// mockup (SectionHeader only has a trailing slot).
+    /// mockup (SectionHeader only has a trailing slot), and "See all" to Live
+    /// TV like My List's shelves.
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
             Text("Favorite channels", bundle: .module)
@@ -66,17 +67,7 @@ struct FavoriteChannelsSection: View {
                 StatusChip(chip.title, systemImage: chip.systemImage)
             }
             Spacer(minLength: 8)
-            NavigationLink(value: HearthRoute.liveGuide) {
-                Text("Guide", bundle: .module)
-                    .font(.hearthText(14, relativeTo: .callout))
-                    .foregroundStyle(HearthColor.accent)
-                    .frame(minWidth: HearthMetrics.minimumHitTarget, minHeight: HearthMetrics.minimumHitTarget, alignment: .trailing)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            // The visible word stays the label (Voice Control users say what
-            // they see); the hint says where it goes.
-            .accessibilityHint(Text("Opens the guide", bundle: .module))
+            SeeAllLink(route: .liveGuide)
         }
     }
 
@@ -204,48 +195,17 @@ private struct FavoritesHintCard: View {
     let isGuest: Bool
 
     var body: some View {
-        NavigationLink(value: HearthRoute.liveGuide) {
-            HStack(spacing: 14) {
-                Image(systemName: isGuest ? "tv" : "heart")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(HearthColor.accent)
-                    .frame(width: HearthMetrics.minimumHitTarget, height: HearthMetrics.minimumHitTarget)
-                    .background(Circle().fill(HearthColor.surfaceRaised))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.hearthHeadline)
-                        .foregroundStyle(HearthColor.textPrimary)
-                    Text(message)
-                        .font(.hearthFootnote)
-                        .foregroundStyle(HearthColor.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(HearthColor.glyphMuted)
-                    .accessibilityHidden(true)
-            }
-            .hearthCard(padding: 16)
-            .contentShape(RoundedRectangle(cornerRadius: HearthMetrics.cardRadius, style: .continuous))
-        }
-        .buttonStyle(.hearthTile)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(Text("Opens the guide", bundle: .module))
-    }
-
-    private var title: String {
-        isGuest
-            ? String(localized: "Browse live TV", bundle: .module)
-            : String(localized: "Pin your favorite channels", bundle: .module)
-    }
-
-    private var message: String {
-        isGuest
-            ? String(localized: "Guest profiles don't keep favorites. Open the guide to see what's on now.", bundle: .module)
-            : String(localized: "Tap the heart on a channel in the guide and it shows up here with what's on.", bundle: .module)
+        HomeHintCard(
+            systemName: isGuest ? "tv" : "heart",
+            title: isGuest
+                ? String(localized: "Browse live TV", bundle: .module)
+                : String(localized: "Pin your favorite channels", bundle: .module),
+            message: isGuest
+                ? String(localized: "Guest profiles don't keep favorites. Open the guide to see what's on now.", bundle: .module)
+                : String(localized: "Tap the heart on a channel in the guide and it shows up here with what's on.", bundle: .module),
+            route: .liveGuide,
+            hint: String(localized: "Opens the guide", bundle: .module)
+        )
     }
 }
 

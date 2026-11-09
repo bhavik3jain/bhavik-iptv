@@ -10,7 +10,7 @@ import Testing
 /// Every route, one of each case.
 let allRoutes: [HearthRoute] = [
     .movie(itemKey: "m"), .series(itemKey: "s"), .channel(itemKey: "c"), .liveGuide, .search(query: "news"),
-    .household, .profileEditor(profileID: nil), .sourceEditor(sourceID: nil), .settings,
+    .household, .profileEditor(profileID: nil), .sourceEditor(sourceID: nil), .settings, .downloads, .myList,
 ]
 
 @MainActor
@@ -49,7 +49,7 @@ let allRoutes: [HearthRoute] = [
         for route in blocked {
             #expect(!RouteAccess.allows(route, session: kids), "\(route)")
         }
-        let watchable: [HearthRoute] = [.movie(itemKey: "m"), .series(itemKey: "s"), .channel(itemKey: "c"), .liveGuide, .search(query: "")]
+        let watchable: [HearthRoute] = [.movie(itemKey: "m"), .series(itemKey: "s"), .channel(itemKey: "c"), .liveGuide, .search(query: ""), .myList]
         for route in watchable {
             #expect(RouteAccess.allows(route, session: kids), "\(route)")
         }
@@ -87,18 +87,30 @@ let allRoutes: [HearthRoute] = [
 }
 
 @Suite struct AppTabTests {
-    /// Home on iOS is Live TV, so no second tab shows the same screen.
-    @Test func thePhonesTabsInOrderWithLiveTVFirst() {
-        #expect(AppTab.primary == [.live, .movies, .shows, .myList])
+    /// Home is back on iOS (2026-11-08), first, and the phone opens on it.
+    @Test func thePhonesFiveTabsInOrderWithHomeFirst() {
+        #expect(AppTab.primary == [.home, .live, .movies, .shows, .myList])
         #expect(AppTab.primary.first == AppTab.phoneStart)
+        #expect(AppTab.phoneStart == .home)
     }
 
-    /// ⌘1–⌘6: the Mac keeps Home ahead of the phone's tabs, then Downloads.
+    /// Past five a phone folds tabs into "More": Search, Household and
+    /// Settings stay sidebar rows.
+    @Test func thePhonesTabBarHasNoMore() {
+        #expect(AppTab.primary.count <= 5)
+        #expect(!AppTab.primary.contains(.search))
+        #expect(!AppTab.primary.contains(.household))
+        #expect(!AppTab.primary.contains(.settings))
+        #expect(!AppTab.primary.contains(.downloads))
+    }
+
+    /// ⌘1–⌘6: the phone's five, then Downloads.
     @Test func theMacSectionsInShortcutOrder() {
-        #expect(AppTab.macSections == [.home] + AppTab.primary + [.downloads])
+        #expect(AppTab.macSections == [.home, .live, .movies, .shows, .myList, .downloads])
+        #expect(AppTab.macSections == AppTab.primary + [.downloads])
     }
 
-    /// The change to iOS's tabs leaves the TV's alone.
+    /// The changes to iOS's tabs leave the TV's alone.
     @Test func theTVKeepsHomeBesideLiveTV() {
         #expect(AppTab.tv == [.search, .home, .live, .movies, .shows, .myList, .settings])
     }
@@ -138,9 +150,8 @@ let allRoutes: [HearthRoute] = [
         #expect(navigation.paths.isEmpty)
     }
 
-    /// A profile switch on iOS lands on Live TV, the first and only "home".
     @Test func resetReturnsToTheStartTab() {
-        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        let navigation = AppNavigation(startTab: .live)
         navigation.select(.shows)
         navigation.open(show, gateShowing: false)
         navigation.reset()
@@ -148,12 +159,30 @@ let allRoutes: [HearthRoute] = [
         #expect(navigation.paths.isEmpty)
     }
 
-    /// `-OpenTab home` on iOS, where there's no Home tab, opens Live TV.
-    @Test func aTabTheWindowDoesntHaveFallsBackToTheStartTab() {
+    /// A profile switch on iOS lands on Home.
+    @Test func aProfileSwitchOnThePhoneLandsOnHome() {
         let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.select(.movies)
+        navigation.reset()
+        #expect(navigation.selection == .home)
+    }
+
+    /// `-OpenTab home` works on iOS: Home is one of the phone's tabs.
+    @Test func openTabHomeStaysOnHomeOnThePhone() {
+        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.select(.movies)
         navigation.select(.home)
         navigation.keepSelection(in: Set(AppTab.primary))
-        #expect(navigation.selection == .live)
+        #expect(navigation.selection == .home)
+    }
+
+    /// A sidebar-only tab on a phone (`-OpenTab search`, a Kids profile's
+    /// Settings) falls back to Home.
+    @Test func aTabTheWindowDoesntHaveFallsBackToTheStartTab() {
+        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.select(.search)
+        navigation.keepSelection(in: Set(AppTab.primary))
+        #expect(navigation.selection == .home)
     }
 
     @Test func aTabTheWindowHasStaysSelected() {
@@ -163,11 +192,31 @@ let allRoutes: [HearthRoute] = [
         #expect(navigation.selection == .myList)
     }
 
-    @Test func theLiveGuideRouteOpensTheFirstTabOnIOS() {
+    @Test func theLiveGuideRouteOpensLiveTVOnIOS() {
         let navigation = AppNavigation(startTab: AppTab.phoneStart)
         navigation.select(.movies)
         navigation.open(.liveGuide, gateShowing: false)
-        #expect(navigation.selection == AppTab.phoneStart)
+        #expect(navigation.selection == .live)
+    }
+
+    /// Home's "See all" under My List's shelves: My List is a tab, so it
+    /// switches there, at the list itself.
+    @Test func openingMyListSwitchesToItsTabAtTheRoot() {
+        let navigation = AppNavigation(startTab: AppTab.phoneStart)
+        navigation.paths[.myList] = [movie]
+        navigation.open(.household, gateShowing: true)
+        navigation.open(.myList, gateShowing: false)
+        #expect(navigation.selection == .myList)
+        #expect(navigation.paths[.myList] == [])
+        #expect(navigation.sheet == nil)
+    }
+
+    @Test func routesThatAreTabs() {
+        #expect(AppNavigation.tab(for: .liveGuide) == .live)
+        #expect(AppNavigation.tab(for: .myList) == .myList)
+        for route in allRoutes where route != .liveGuide && route != .myList {
+            #expect(AppNavigation.tab(for: route) == nil, "\(route)")
+        }
     }
 
     @Test func openPushesOntoTheSelectedTabsStack() {
@@ -223,9 +272,9 @@ let allRoutes: [HearthRoute] = [
         #expect(navigation.sheet == nil)
     }
 
-    /// A NavigationLink to the guide or Settings lands on the path binding;
-    /// neither stays there.
-    @Test func linksToTheGuideOrSettingsComeOffThePath() {
+    /// A NavigationLink to the guide, My List or Settings lands on the path
+    /// binding; none stays there.
+    @Test func linksToTheGuideMyListOrSettingsComeOffThePath() {
         let navigation = AppNavigation()
         let home = navigation.path(for: .home)
         home.wrappedValue = [movie]
@@ -235,9 +284,41 @@ let allRoutes: [HearthRoute] = [
         #expect(navigation.paths[.home] == [movie])
         #expect(navigation.selection == .live)
 
+        navigation.select(.home)
+        home.wrappedValue = [movie, .myList]
+        #expect(navigation.paths[.home] == [movie])
+        #expect(navigation.selection == .myList)
+
+        navigation.select(.home)
         home.wrappedValue = [movie, .settings]
         #expect(navigation.paths[.home] == [movie])
         #expect(navigation.sheet?.root == .settings)
+    }
+
+    /// "See all" shows the whole list or guide, not a page left open there.
+    @Test func aSeeAllLinkOpensTheTabAtItsRoot() {
+        let navigation = AppNavigation()
+        navigation.paths[.myList] = [show]
+        navigation.paths[.live] = [.channel(itemKey: "c1")]
+        let home = navigation.path(for: .home)
+        home.wrappedValue = [.myList]
+        #expect(navigation.selection == .myList)
+        #expect(navigation.paths[.myList] == [])
+        #expect(navigation.paths[.home] == [])
+
+        navigation.select(.home)
+        home.wrappedValue = [.liveGuide]
+        #expect(navigation.selection == .live)
+        #expect(navigation.paths[.live] == [])
+    }
+
+    /// Unsaved typing holds a "See all" like any other tab switch.
+    @Test func unsavedTypingHoldsASeeAll() {
+        let navigation = AppNavigation()
+        navigation.unsavedChanges.mark(UUID(), hasChanges: true)
+        navigation.path(for: .home).wrappedValue = [.myList]
+        #expect(navigation.selection == .home)
+        #expect(navigation.heldSelection == .myList)
     }
 
     @Test func goingBackShortensThePath() {
@@ -257,6 +338,14 @@ let allRoutes: [HearthRoute] = [
         navigation.sheetPath.wrappedValue = [show, .liveGuide]
         #expect(navigation.sheet == nil)
         #expect(navigation.selection == .live)
+    }
+
+    @Test func aMyListLinkInsideASheetClosesIt() {
+        let navigation = AppNavigation()
+        navigation.open(.household, gateShowing: true)
+        navigation.sheetPath.wrappedValue = [.myList]
+        #expect(navigation.sheet == nil)
+        #expect(navigation.selection == .myList)
     }
 
     @Test func theSheetPathIsIgnoredWithNoSheet() {

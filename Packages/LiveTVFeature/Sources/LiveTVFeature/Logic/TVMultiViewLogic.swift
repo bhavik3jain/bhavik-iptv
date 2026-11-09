@@ -116,6 +116,29 @@ enum MultiViewStart {
     }
 }
 
+/// Multi-view's side of Continue on Apple TV: the tiles' who's-watching
+/// rows written in slot order, and the arrangement another device's tiles
+/// open in here.
+enum MultiViewHandoff {
+    /// A row's start: the run's anchor plus ten milliseconds a slot. CloudKit
+    /// keeps dates to the millisecond, so the order survives the trip, and
+    /// the rows still say when the multi-view started.
+    static func rowStart(anchor: Date, slot: Int) -> Date {
+        anchor.addingTimeInterval(Double(max(slot, 0)) * 0.01)
+    }
+
+    /// As many tiles as channels carried over, up to four; nil for one or
+    /// none, which keeps the stored arrangement.
+    static func arrangement(forChannels count: Int) -> MultiViewArrangement? {
+        switch count {
+        case ..<2: nil
+        case 2: .two
+        case 3: .three
+        default: .four
+        }
+    }
+}
+
 /// Which tiles reopen when the app comes back from the background, having
 /// given their streams back: in slot order, as many as each source still has
 /// room for, since someone else may have taken them meanwhile.

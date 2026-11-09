@@ -38,6 +38,7 @@ enum DebugLaunch {
         // The rest needs the catalog, which imports in the background.
         Task {
             if seeded { await finishDemoSeed(services) }
+            if seeded, launch.seedContinueOffers { seedContinueOffers(services) }
             if let route = launch.openRoute {
                 await openRoute(route, model: model, catalog: services.catalog)
             }
@@ -88,7 +89,8 @@ enum DebugLaunch {
     }
 
     /// Once the demo catalog is in: the Kids profile's categories, a few
-    /// favorite channels and some progress, so Home has content (mockup 02).
+    /// favorite channels, some progress and a My List of movies and shows,
+    /// so Home has content (mockup 02).
     private static func finishDemoSeed(_ services: AppServices) async {
         let catalog = services.catalog
         let store = services.store
@@ -114,12 +116,17 @@ enum DebugLaunch {
             store.saveProgress(profileID: owner.id, itemKey: movie.key.rawValue, kind: .movie,
                                position: duration * (index == 0 ? 0.4 : 0.15), duration: duration)
         }
-        if let movie = movies.dropFirst(2).first {
+        // My List: the first movie started, the others not, so Home shows
+        // both kinds of poster.
+        for movie in [movies.first, movies.dropFirst(2).first, movies.dropFirst(3).first].compactMap({ $0 })
+        where !store.isFavorite(profileID: owner.id, itemKey: movie.key.rawValue) {
             store.toggleFavorite(profileID: owner.id, itemKey: movie.key.rawValue, kind: .movie)
         }
         let shows = catalog.series(limit: 3)
         for (index, show) in shows.enumerated() {
-            if index == 0 { store.toggleFavorite(profileID: owner.id, itemKey: show.key.rawValue, kind: .series) }
+            if index < 2, !store.isFavorite(profileID: owner.id, itemKey: show.key.rawValue) {
+                store.toggleFavorite(profileID: owner.id, itemKey: show.key.rawValue, kind: .series)
+            }
             guard let episodes = try? await catalog.episodes(for: show), !episodes.isEmpty else { continue }
             // Salt & Signal-style: partway through an episode a little way in.
             let ordered = episodes.sorted { ($0.season, $0.number) < ($1.season, $1.number) }
@@ -132,6 +139,38 @@ enum DebugLaunch {
             )
         }
         print("[DebugLaunch] Seeded favorites and progress")
+    }
+
+    // MARK: -SeedContinueOffers YES
+
+    /// Bhavik's other devices, as their rows would arrive through iCloud: a
+    /// MacBook with three channels in multi-view, and an iPhone with the
+    /// movie Home's Continue watching shows. They go stale in 15 minutes.
+    private static func seedContinueOffers(_ services: AppServices) {
+        let catalog = services.catalog
+        let store = services.store
+        guard let owner = store.profiles.first(where: { $0.name == "Bhavik" }) else { return }
+        // Four streams in use (three tiles and the movie) need a source that
+        // allows four, or the TV, taking over the three, could fill only the
+        // one the movie leaves of the demo's usual two.
+        if var demo = store.sources.first(where: { $0.id == SourceConfiguration.stub().id }), demo.maxStreams < 4 {
+            demo.maxStreams = 4
+            store.updateSource(demo)
+        }
+        let anchor = Date.now.addingTimeInterval(-120)
+        for (slot, channel) in catalog.channels(applyingFilter: false).prefix(3).enumerated() {
+            store.seedPlaybackFromAnotherDevice(
+                profileID: owner.id, sourceID: channel.sourceID, itemKey: channel.key.rawValue, title: channel.name,
+                deviceName: "MacBook Pro", startedAt: anchor.addingTimeInterval(Double(slot) * 0.01)
+            )
+        }
+        if let movie = catalog.movies(limit: 1).first {
+            store.seedPlaybackFromAnotherDevice(
+                profileID: owner.id, sourceID: movie.sourceID, itemKey: movie.key.rawValue, title: movie.name,
+                deviceName: "Bhavik's iPhone", startedAt: .now.addingTimeInterval(-60)
+            )
+        }
+        print("[DebugLaunch] Seeded other devices' playback for Continue on Apple TV")
     }
 
     // MARK: -SelectProfile <name>

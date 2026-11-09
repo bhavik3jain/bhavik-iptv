@@ -153,7 +153,7 @@ struct WindowPresentations: ViewModifier {
             }
             #endif
             .hearthFullScreenCover(isPresented: multiViewShowing) {
-                MultiViewSheet(startingChannelKey: playback.multiViewStartingChannelKey) { playback.multiViewSceneID = nil }
+                MultiViewSheet(startingChannelKeys: playback.multiViewStartingChannelKeys) { playback.multiViewSceneID = nil }
                     .environment(services.catalog)
                     .environment(services.store)
                     .environment(services.session)
@@ -195,6 +195,9 @@ struct WindowPresentations: ViewModifier {
                 }
             }
             .environment(\.play, playAction)
+            .environment(\.continueHere, ContinueHereAction { [playback, sceneID, layout] request in
+                playback.continueHere(request, sceneID: sceneID, layout: layout)
+            })
             .environment(\.openRoute, OpenRouteAction { [navigation, session] route in
                 navigation.open(route, gateShowing: session.needsProfileSelection)
             })
@@ -289,12 +292,12 @@ extension View {
 /// with a way back. On the TV the way back is the remote's Menu, and the
 /// screen draws its own bar.
 private struct MultiViewSheet: View {
-    let startingChannelKey: String?
+    let startingChannelKeys: [String]
     let onDone: () -> Void
 
     var body: some View {
         #if os(tvOS)
-        MultiViewScreen(startingChannelKey: startingChannelKey, onClose: onDone)
+        MultiViewScreen(startingChannelKeys: startingChannelKeys, onClose: onDone)
         #else
         NavigationStack {
             MultiViewScreen()

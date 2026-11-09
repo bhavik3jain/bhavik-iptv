@@ -4,8 +4,8 @@ import HouseholdKit
 import Testing
 @testable import HomeFeature
 
-/// `LiveHomeView` shows Live TV only when `HomeStatus` is `.ready`, so which
-/// sources count decides what a first run sees on iOS.
+/// Home draws its sections only when `HomeStatus` is `.ready`, so which
+/// sources count decides what a first run sees.
 @Suite struct HomeStatusSourcesTests {
     let a = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
     let b = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!

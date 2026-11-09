@@ -63,9 +63,10 @@ public final class CatalogService {
     @ObservationIgnored var backgroundRunner: Task<Void, Never>?
     /// Categories with a page on its way from the provider (`loadMore`).
     @ObservationIgnored var loadingMoreCategories: Set<String> = []
-    /// Queries already asked of the providers since the last catalog
-    /// refresh (`searchProviders`), by normalised text.
-    @ObservationIgnored var providerSearchedQueries: Set<String> = []
+    /// How many leading pages of each query the providers were asked since
+    /// the last catalog refresh (`searchProviders`), by normalised text;
+    /// `Int.max` once a provider said it had no more.
+    @ObservationIgnored var providerSearchedPages: [String: Int] = [:]
     /// Provider searches on their way; Search shows that it's still asking.
     public internal(set) var providerSearchesRunning = 0
     /// Held titles being asked for now (observed: `isLookingUp(_:)`).
