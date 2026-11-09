@@ -105,6 +105,11 @@ struct CatalogImporter: Sendable {
         var seriesCount = 0
         var browseCursors: [String: BrowseCursor] = [:]
         var listedCategories: [RemoteCategory] = []
+        // Lists kept a page per category: the old catalog's other titles
+        // move over at the swap. Lists answered with nothing: left as they
+        // were (`keepsAsItWas`).
+        var keptInPart: [String] = []
+        var leftAsTheyWere: [ContentKind] = []
         if capabilities.hasMovies {
             let movies = try await importList(
                 kind: .vod,
@@ -122,11 +127,15 @@ struct CatalogImporter: Sendable {
                 },
                 row: { movie, position in RowWriter.movie(movie, position: position, sourceID: sourceID, generation: generation) }
             )
-            movieCount = movies.count
-            browseCursors.merge(movies.cursors) { _, new in new }
-            listedCategories += movies.categories
-            if !movies.cursors.isEmpty {
-                try await keepUnlisted(CatalogModel.Entity.movie, from: live, into: generation)
+            if Self.keepsAsItWas(movies, kind: .vod, previous: previous, sourceID: sourceID) {
+                leftAsTheyWere.append(.vod)
+                movieCount = previous.movieCount
+                browseCursors.merge(Self.cursors(previous.browseCursors, kind: .vod, sourceID: sourceID)) { _, new in new }
+            } else {
+                movieCount = movies.count
+                browseCursors.merge(movies.cursors) { _, new in new }
+                listedCategories += movies.categories
+                if !movies.cursors.isEmpty { keptInPart.append(CatalogModel.Entity.movie) }
             }
         }
 
@@ -147,11 +156,15 @@ struct CatalogImporter: Sendable {
                 },
                 row: { series, position in RowWriter.series(series, position: position, sourceID: sourceID, generation: generation) }
             )
-            seriesCount = shows.count
-            browseCursors.merge(shows.cursors) { _, new in new }
-            listedCategories += shows.categories
-            if !shows.cursors.isEmpty {
-                try await keepUnlisted(CatalogModel.Entity.series, from: live, into: generation)
+            if Self.keepsAsItWas(shows, kind: .series, previous: previous, sourceID: sourceID) {
+                leftAsTheyWere.append(.series)
+                seriesCount = previous.seriesCount
+                browseCursors.merge(Self.cursors(previous.browseCursors, kind: .series, sourceID: sourceID)) { _, new in new }
+            } else {
+                seriesCount = shows.count
+                browseCursors.merge(shows.cursors) { _, new in new }
+                listedCategories += shows.categories
+                if !shows.cursors.isEmpty { keptInPart.append(CatalogModel.Entity.series) }
             }
         }
         try await insert(CatalogModel.Entity.category, listedCategories) { category, _ in
@@ -162,6 +175,8 @@ struct CatalogImporter: Sendable {
         await progress.update(0.97, String(localized: "Finishing"), force: true)
 
         // The swap: from here on the new generation is the catalog.
+        let kept = keptInPart + leftAsTheyWere.map { $0 == .vod ? CatalogModel.Entity.movie : CatalogModel.Entity.series }
+        let carriedKinds = leftAsTheyWere
         var state = previous
         state.generation = generation
         state.catalogRefreshedAt = now
@@ -172,7 +187,17 @@ struct CatalogImporter: Sendable {
         state.browseCursors = browseCursors
         let swapped = state
         let cursorData = try? JSONEncoder().encode(browseCursors)
+        // One write, so nothing lands between the copy and the swap: a page
+        // browsed or a search answered while this refresh ran went into the
+        // old catalog before this (and is copied) or goes into the new one
+        // after it (`CatalogWriter.append` asks the store which is live).
         try await store.write { context in
+            for entity in kept {
+                try Self.keepUnlisted(entity, sourceID: sourceID, from: live, into: generation, in: context)
+            }
+            for kind in carriedKinds {
+                try Self.keepCategories(kind, sourceID: sourceID, from: live, into: generation, in: context)
+            }
             try SourceStateRow.update(sourceID, in: context) { row in
                 row.setValue(swapped.generation, forKey: "generation")
                 row.setValue(now, forKey: "catalogRefreshedAt")
@@ -303,10 +328,12 @@ struct CatalogImporter: Sendable {
     /// What `importList` wrote: how many titles the provider says it has,
     /// the cursors of categories left to load as they're browsed, and the
     /// categories worth listing.
-    private struct ListOutcome: Sendable {
+    struct ListOutcome: Sendable {
         var count: Int
         var cursors: [String: BrowseCursor]
         var categories: [RemoteCategory]
+        /// Titles actually written into the new generation.
+        var stored: Int
     }
 
     /// Movies or shows: the whole list when it's small enough
@@ -334,7 +361,7 @@ struct CatalogImporter: Sendable {
         }
         func importEverything() async throws -> ListOutcome {
             let count = try await importPaged(entity: entity, label: label, slice: slice, categories: categories, progress: progress, fetch: fetch, id: id, filed: filed, row: row)
-            return ListOutcome(count: count, cursors: [:], categories: categories)
+            return ListOutcome(count: count, cursors: [:], categories: categories, stored: count)
         }
         if let whole, whole.totalItems.map({ $0 <= Self.fullImportLimit }) ?? true {
             return try await importEverything()
@@ -347,7 +374,7 @@ struct CatalogImporter: Sendable {
             let items = whole.items.filter { seen.insert(id($0)).inserted }
             try await insert(entity, items, row: row)
             await progress.update(slice.upperBound, "\(label): \(items.count.formatted())", force: true)
-            return ListOutcome(count: items.count, cursors: [:], categories: categories)
+            return ListOutcome(count: items.count, cursors: [:], categories: categories, stored: items.count)
         }
 
         let firsts = try await firstPages(categories, fetch: fetch, progress: progress, label: label, slice: slice)
@@ -373,7 +400,7 @@ struct CatalogImporter: Sendable {
         }
         try await insert(entity, items, row: row)
         await progress.update(slice.upperBound, "\(label): \(items.count.formatted())", force: true)
-        return ListOutcome(count: max(items.count, remoteTotal), cursors: cursors, categories: kept)
+        return ListOutcome(count: max(items.count, remoteTotal), cursors: cursors, categories: kept, stored: items.count)
     }
 
     /// A list imported a page per category holds only part of the
@@ -384,42 +411,81 @@ struct CatalogImporter: Sendable {
     /// refresh — from My List ("No longer available"), from the page open on
     /// it, and from search until the next launch asked again. The owner's
     /// Grey's Anatomy, found by search and in My List, went that way.
-    /// Returns how many rows came along.
+    /// Runs inside the swap's write (see `importCatalog`), so nothing written
+    /// to the old catalog can land after the copy. Returns how many rows came
+    /// along.
     @discardableResult
-    private func keepUnlisted(_ entity: String, from live: Int64, into generation: Int64) async throws -> Int {
-        let sourceID = self.sourceID
-        return try await store.write { context in
-            let listed = Set(try Fetch.strings("remoteID", from: entity, where: Where.generation(generation, of: sourceID), in: context))
-            let last = NSFetchRequest<NSDictionary>(entityName: entity)
-            last.resultType = .dictionaryResultType
-            last.propertiesToFetch = ["position"]
-            last.predicate = Where.generation(generation, of: sourceID)
-            last.sortDescriptors = [NSSortDescriptor(key: "position", ascending: false)]
-            last.fetchLimit = 1
-            let base = Int((try context.fetch(last).first?["position"] as? Int64) ?? -1) + 1
+    static func keepUnlisted(_ entity: String, sourceID: UUID, from live: Int64, into generation: Int64, in context: NSManagedObjectContext) throws -> Int {
+        let listed = Set(try Fetch.strings("remoteID", from: entity, where: Where.generation(generation, of: sourceID), in: context))
+        let last = NSFetchRequest<NSDictionary>(entityName: entity)
+        last.resultType = .dictionaryResultType
+        last.propertiesToFetch = ["position"]
+        last.predicate = Where.generation(generation, of: sourceID)
+        last.sortDescriptors = [NSSortDescriptor(key: "position", ascending: false)]
+        last.fetchLimit = 1
+        let base = Int((try context.fetch(last).first?["position"] as? Int64) ?? -1) + 1
 
-            // Every attribute (a dictionary fetch with no properties named).
-            let previous = NSFetchRequest<NSDictionary>(entityName: entity)
-            previous.resultType = .dictionaryResultType
-            previous.predicate = Where.generation(live, of: sourceID)
-            previous.sortDescriptors = [NSSortDescriptor(key: "position", ascending: true)]
-            var seen = listed
-            var kept: [[String: Any]] = []
-            for case let row as [String: Any] in try context.fetch(previous) {
-                guard let remoteID = row["remoteID"] as? String, seen.insert(remoteID).inserted else { continue }
-                var copy = row
-                copy["generation"] = generation
-                copy["position"] = Int64(base + kept.count)
-                kept.append(copy)
-            }
-            var start = 0
-            while start < kept.count {
-                let end = min(start + Batch.chunkSize, kept.count)
-                try Batch.insert(entity, Array(kept[start..<end]), into: context)
-                start = end
-            }
-            return kept.count
+        // Every attribute (a dictionary fetch with no properties named).
+        let previous = NSFetchRequest<NSDictionary>(entityName: entity)
+        previous.resultType = .dictionaryResultType
+        previous.predicate = Where.generation(live, of: sourceID)
+        previous.sortDescriptors = [NSSortDescriptor(key: "position", ascending: true)]
+        var seen = listed
+        var kept: [[String: Any]] = []
+        for case let row as [String: Any] in try context.fetch(previous) {
+            guard let remoteID = row["remoteID"] as? String, seen.insert(remoteID).inserted else { continue }
+            var copy = row
+            copy["generation"] = generation
+            copy["position"] = Int64(base + kept.count)
+            kept.append(copy)
         }
+        var start = 0
+        while start < kept.count {
+            let end = min(start + Batch.chunkSize, kept.count)
+            try Batch.insert(entity, Array(kept[start..<end]), into: context)
+            start = end
+        }
+        return kept.count
+    }
+
+    /// A movie or show list the provider answered with nothing at all, when
+    /// the last catalog kept it a page per category. That isn't the
+    /// provider's list: a big portal holds thousands, and a Stalker portal
+    /// answers a session another sign-in from the same MAC ended (the
+    /// household's iPhone, Mac and Apple TV share one) with empty lists. Taken
+    /// at its word, the refresh kept none of the list's titles and stopped
+    /// treating it as kept in part, so My List read "Unavailable" for every
+    /// movie (or show) in it and nothing was searched for. Such a list keeps
+    /// its titles, categories and cursors from the last catalog instead. A
+    /// list that was kept whole is the provider's whole list, empty or not.
+    static func keepsAsItWas(_ outcome: ListOutcome, kind: ContentKind, previous: PersistedSourceState, sourceID: UUID) -> Bool {
+        outcome.stored == 0 && !cursors(previous.browseCursors, kind: kind, sourceID: sourceID).isEmpty
+    }
+
+    /// The cursors of one kind's categories.
+    static func cursors(_ cursors: [String: BrowseCursor], kind: ContentKind, sourceID: UUID) -> [String: BrowseCursor] {
+        let prefix = CategoryKey.make(source: sourceID, kind: kind.rawValue, remoteID: "")
+        return cursors.filter { $0.key.hasPrefix(prefix) }
+    }
+
+    /// One kind's categories, copied from the last catalog into the new one
+    /// (a list left as it was, `keepsAsItWas`).
+    static func keepCategories(_ kind: ContentKind, sourceID: UUID, from live: Int64, into generation: Int64, in context: NSManagedObjectContext) throws {
+        let entity = CatalogModel.Entity.category
+        let request = NSFetchRequest<NSDictionary>(entityName: entity)
+        request.resultType = .dictionaryResultType
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            Where.generation(live, of: sourceID),
+            NSPredicate(format: "kindRaw == %@", kind.rawValue),
+        ])
+        let listed = Set(try Fetch.strings("categoryKey", from: entity, where: Where.generation(generation, of: sourceID), in: context))
+        let rows = try context.fetch(request).compactMap { $0 as? [String: Any] }.compactMap { row -> [String: Any]? in
+            guard let key = row["categoryKey"] as? String, !listed.contains(key) else { return nil }
+            var copy = row
+            copy["generation"] = generation
+            return copy
+        }
+        try Batch.insert(entity, rows, into: context)
     }
 
     /// Page 0 of every category, `firstPageConcurrency` at a time, in the
