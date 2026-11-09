@@ -28,6 +28,82 @@ import Testing
     }
 }
 
+/// Moves made on a list that leaves some rows out (My List, Live TV's
+/// favorites), mapped onto the whole list.
+@Suite struct ShownListMoveTests {
+    /// The whole list, and what a screen shows of it: `h1` and `h2` are
+    /// hidden (a profile's rules, a title still loading, a removed source).
+    let all = ["a", "h1", "b", "h2", "c"]
+    let shown = ["a", "b", "c"]
+
+    /// The whole list after a move on the shown one.
+    func moved(_ from: IndexSet, _ to: Int) -> [String]? {
+        FractionalOrder.offsets(in: all, shown: shown, fromOffsets: from, toOffset: to)
+            .map { FractionalOrder.moved(all, fromOffsets: $0.fromOffsets, toOffset: $0.toOffset) }
+    }
+
+    @Test func withNothingHiddenTheOffsetsAreTheSame() {
+        let items = ["a", "b", "c", "d"]
+        for (from, to) in [(IndexSet([3]), 1), ([0], 4), ([0, 2], 4), ([2], 0)] {
+            let mapped = FractionalOrder.offsets(in: items, shown: items, fromOffsets: from, toOffset: to)
+            #expect(mapped.map { FractionalOrder.moved(items, fromOffsets: $0.fromOffsets, toOffset: $0.toOffset) }
+                == FractionalOrder.moved(items, fromOffsets: from, toOffset: to))
+        }
+    }
+
+    @Test func aMoveUpLandsJustBeforeTheShownRowItPassed() {
+        // c before b: c lands after h1, which stays behind a.
+        #expect(moved([2], 1) == ["a", "h1", "c", "b", "h2"])
+        #expect(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [2], toOffset: 1)?.fromOffsets == [4])
+        #expect(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [2], toOffset: 1)?.toOffset == 2)
+    }
+
+    @Test func aMoveDownPastHiddenRowsKeepsThemInPlace() {
+        // a between b and c: past h1 and h2, both still where they were
+        // relative to b and c.
+        #expect(moved([0], 2) == ["h1", "b", "h2", "a", "c"])
+    }
+
+    @Test func firstAndLastPositions() {
+        #expect(moved([2], 0) == ["c", "a", "h1", "b", "h2"])
+        // To the end: after c, the last shown row.
+        #expect(moved([0], 3) == ["h1", "b", "h2", "c", "a"])
+        #expect(moved([1], 3) == ["a", "h1", "h2", "c", "b"])
+    }
+
+    @Test func aMoveThatChangesNothingShownIsNoMove() {
+        #expect(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [1], toOffset: 1) == nil)
+        #expect(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [1], toOffset: 2) == nil)
+        #expect(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [0, 1], toOffset: 2) == nil)
+        #expect(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [9], toOffset: 0) == nil)
+    }
+
+    @Test func severalRowsMoveTogether() {
+        // a and c to the top of nothing else: before b.
+        #expect(moved([0, 2], 1) == ["h1", "a", "c", "b", "h2"])
+        #expect(moved([0, 1], 3) == ["h1", "h2", "c", "a", "b"])
+    }
+
+    @Test func aShownRowTheListNoLongerHoldsIsSkipped() {
+        // "gone" was deleted by a sync while the screen showed it.
+        let shown = ["a", "gone", "b", "c"]
+        // c before "gone": lands before b, the next row the list holds.
+        let mapped = FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [3], toOffset: 1)
+        #expect(mapped.map { FractionalOrder.moved(all, fromOffsets: $0.fromOffsets, toOffset: $0.toOffset) } == ["a", "h1", "c", "b", "h2"])
+        // Moving "gone" itself moves nothing.
+        #expect(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [1], toOffset: 4) == nil)
+    }
+
+    /// The sort orders written for a move past hidden rows sit between the
+    /// moved row's new neighbours in the whole list, never on a hidden row's.
+    @Test func theWrittenOrderFallsBetweenTheWholeListsNeighbours() throws {
+        let orders: [Double] = [1, 2, 3, 4, 5]  // a, h1, b, h2, c
+        let move = try #require(FractionalOrder.offsets(in: all, shown: shown, fromOffsets: [2], toOffset: 1))
+        // c between h1 (2) and b (3).
+        #expect(FractionalOrder.writes(orders: orders, fromOffsets: move.fromOffsets, toOffset: move.toOffset) == [4: 2.5])
+    }
+}
+
 @Suite struct ItemKeyHintTests {
     @Test func readsSourceKindAndEpisode() {
         let source = TestKeys.sourceA

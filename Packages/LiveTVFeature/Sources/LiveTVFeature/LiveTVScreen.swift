@@ -334,10 +334,11 @@ struct LiveTVScreen: View {
                             select(chip)
                         }
                         .id(chip.id)
-                    }
-                    if content.chip == .favorites, keepsFavorites, content.channels.count > 1 {
-                        IconCircleButton(systemName: "arrow.up.arrow.down", label: String(localized: "Reorder favorites"), size: 36) {
-                            showsFavoritesOrder = true
+                        // Right beside Favorites, the first chip, where it's
+                        // on screen: after the last category it sat a long
+                        // scroll away on a portal with dozens of them.
+                        if chip == .favorites, showsReorderFavorites {
+                            reorderFavoritesButton
                         }
                     }
                 }
@@ -349,6 +350,18 @@ struct LiveTVScreen: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Categories"))
+    }
+
+    /// Favorite channels can be put in order (FAV-1) while they're shown.
+    private var showsReorderFavorites: Bool {
+        content.chip == .favorites && keepsFavorites && content.channels.count > 1
+    }
+
+    private var reorderFavoritesButton: some View {
+        IconCircleButton(systemName: "arrow.up.arrow.down", label: String(localized: "Reorder favorites"), size: 36) {
+            showsFavoritesOrder = true
+        }
+        .help(Text("Reorder favorites"))
     }
 
     private func select(_ chip: LiveChip) {

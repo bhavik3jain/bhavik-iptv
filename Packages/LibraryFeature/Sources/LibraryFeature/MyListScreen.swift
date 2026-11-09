@@ -56,9 +56,15 @@ struct MyListScreen: View {
     @Environment(\.hearthLayout) private var layout
 
     @State private var pendingRemoval: FavoriteRecord?
+    /// How this device sorts My List; the profile's own order by default.
+    @AppStorage("myList.sort") private var sortRaw = MyListSort.custom.rawValue
+    @State private var showsOrderSheet = false
     private var metrics = PosterGridMetrics()
 
     private var isTV: Bool { layout == .tv }
+
+    /// The TV can't change the order, and follows the profile's.
+    private var sort: MyListSort { isTV ? .custom : MyListSort(rawValue: sortRaw) ?? .custom }
 
     var body: some View {
         let _ = (catalog.revision, store.revision)
@@ -116,12 +122,65 @@ struct MyListScreen: View {
         }
     }
 
+    /// The sort, and Reorder My List for the profile's own order (FAV-3),
+    /// beside the title as on Movies and Shows. Not for a Guest, who keeps
+    /// no list.
+    @ViewBuilder
+    private var orderMenu: some View {
+        if let profile = session.currentProfile, !profile.isGuest {
+            Menu {
+                Picker(selection: Binding(get: { sort }, set: { sortRaw = $0.rawValue })) {
+                    ForEach(MyListSort.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                } label: {
+                    Text("Sort by", bundle: .module)
+                }
+                .pickerStyle(.inline)
+                Button {
+                    // Reordering sets the profile's order: show it.
+                    sortRaw = MyListSort.custom.rawValue
+                    showsOrderSheet = true
+                } label: {
+                    Label(String(localized: "Reorder My List…", bundle: .module), systemImage: "line.3.horizontal")
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(HearthColor.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(HearthColor.surface))
+                    .contentShape(Circle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel(Text("Sort and reorder", bundle: .module))
+            .accessibilityValue(Text(sort.title))
+        }
+    }
+
+    @ViewBuilder
+    private var orderSheet: some View {
+        if let profile = session.currentProfile, !profile.isGuest {
+            MyListOrderSheet(
+                profileID: profile.id,
+                movies: entries(profileID: profile.id, kind: .movie),
+                shows: entries(profileID: profile.id, kind: .series)
+            )
+        }
+    }
+
     private var touchBody: some View {
         let gutter = libraryGutter(layout)
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                LibraryTitleRow(title: String(localized: "My List", bundle: .module)) { downloadsLink }
-                    .padding(.top, 4)
+                LibraryTitleRow(title: String(localized: "My List", bundle: .module)) {
+                    orderMenu
+                    downloadsLink
+                }
+                .padding(.top, 4)
                 content
             }
             .padding(.horizontal, gutter)
@@ -131,6 +190,7 @@ struct MyListScreen: View {
         }
         .scrollRevealedTitle(String(localized: "My List", bundle: .module))
         .hearthScreenBackground()
+        .sheet(isPresented: $showsOrderSheet) { orderSheet }
     }
 
     /// An empty state in the layout's size.
@@ -187,10 +247,10 @@ struct MyListScreen: View {
             }
         } else {
             if !visibleMovies.isEmpty {
-                section(String(localized: "Movies", bundle: .module), entries: visibleMovies)
+                section(String(localized: "Movies", bundle: .module), entries: sort.sorted(visibleMovies))
             }
             if !visibleShows.isEmpty {
-                section(String(localized: "Shows", bundle: .module), entries: visibleShows)
+                section(String(localized: "Shows", bundle: .module), entries: sort.sorted(visibleShows))
             }
             if pendingCount > 0 {
                 pendingNote(count: pendingCount)

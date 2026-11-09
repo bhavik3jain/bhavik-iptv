@@ -120,6 +120,85 @@ private final class ChangeFlag: @unchecked Sendable {
         #expect(changed.map(\.itemKey) == [TestKeys.channel("d")])
     }
 
+    /// My List leaves out titles a profile's rules hide and titles still
+    /// loading, so its offsets aren't the store's: a move is given with the
+    /// ids shown, and the rows left out keep their places.
+    @Test func aMoveOnAShorterListMovesTheRowShown() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        for id in ["a", "hidden", "b", "loading", "c"] {
+            store.toggleFavorite(profileID: profile, itemKey: TestKeys.movie(id), kind: .movie)
+        }
+        let before = store.favorites(profileID: profile, kind: .movie)
+        let byKey = Dictionary(uniqueKeysWithValues: before.map { ($0.itemKey, $0.id) })
+        let shown = ["a", "b", "c"].map { byKey[TestKeys.movie($0)]! }
+
+        // c to the top: shown offset 2 to 0. On the whole list offset 2 is
+        // "b", which is what the offsets alone would have moved.
+        store.moveFavorites(profileID: profile, kind: .movie, shownIDs: shown, fromOffsets: [2], toOffset: 0)
+        var keys = store.favorites(profileID: profile, kind: .movie).map(\.itemKey)
+        #expect(keys == ["c", "a", "hidden", "b", "loading"].map { TestKeys.movie($0) })
+
+        // a to the end of what's shown (c, a, b → c, b, a): just after b,
+        // so "hidden" stays between c and b and "loading" stays last.
+        let shownNow = ["c", "a", "b"].map { byKey[TestKeys.movie($0)]! }
+        store.moveFavorites(profileID: profile, kind: .movie, shownIDs: shownNow, fromOffsets: [1], toOffset: 3)
+        keys = store.favorites(profileID: profile, kind: .movie).map(\.itemKey)
+        #expect(keys == ["c", "hidden", "b", "a", "loading"].map { TestKeys.movie($0) })
+
+        // Each move wrote one row.
+        let after = store.favorites(profileID: profile, kind: .movie)
+        let changed = after.filter { row in before.first { $0.id == row.id }?.sortOrder != row.sortOrder }
+        #expect(Set(changed.map(\.itemKey)) == [TestKeys.movie("c"), TestKeys.movie("a")])
+    }
+
+    /// A move between two rows whose gap is used up renumbers the whole
+    /// list, rows left out included, and keeps them in place.
+    @Test func aRenumberingMoveKeepsRowsLeftOutInPlace() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        let ids = (0..<4).map { _ in UUID() }
+        store.simulateImport { store in
+            // a, hidden, b, c — with no room left between hidden and b.
+            for (index, order) in [1, 2, 2 + 1e-12, 3].enumerated() {
+                store.importFavorite(profileID: profile, itemKey: TestKeys.movie(["a", "hidden", "b", "c"][index]), kind: .movie, sortOrder: order, addedAt: .now, id: ids[index])
+            }
+        }
+        // c up between a and b lands just before b, which on the whole list
+        // is between hidden and b: no Double fits, so everything is
+        // renumbered.
+        store.moveFavorites(profileID: profile, kind: .movie, shownIDs: [ids[0], ids[2], ids[3]], fromOffsets: [2], toOffset: 1)
+        let after = store.favorites(profileID: profile, kind: .movie)
+        #expect(after.map(\.itemKey) == ["a", "hidden", "c", "b"].map { TestKeys.movie($0) })
+        #expect(after.map(\.sortOrder) == [0, 1, 2, 3])
+    }
+
+    /// SRC-9 hides a removed source's favorites. Moving the rest mustn't
+    /// give a moved row a hidden row's sort order, or the hidden row comes
+    /// back somewhere else when the source does.
+    @Test func movesWhileASourceIsRemovedKeepItsFavoritesInPlace() throws {
+        let store = try makeStore()
+        let profile = store.firstProfile.id
+        store.addSource(SourceTests.stalker())
+        store.addSource(SourceTests.stalker(name: "Other", id: TestKeys.sourceB))
+        let away = TestKeys.channel("away", source: TestKeys.sourceB)
+        store.toggleFavorite(profileID: profile, itemKey: TestKeys.channel("a"), kind: .channel)
+        store.toggleFavorite(profileID: profile, itemKey: away, kind: .channel)
+        store.toggleFavorite(profileID: profile, itemKey: TestKeys.channel("b"), kind: .channel)
+        store.toggleFavorite(profileID: profile, itemKey: TestKeys.channel("c"), kind: .channel)
+        store.removeSource(id: TestKeys.sourceB)
+        #expect(store.favorites(profileID: profile, kind: .channel).map(\.itemKey) == ["a", "b", "c"].map { TestKeys.channel($0) })
+
+        // c between a and b, with the offsets Live TV's sheet gives.
+        store.moveFavorites(profileID: profile, kind: .channel, fromOffsets: [2], toOffset: 1)
+        #expect(store.favorites(profileID: profile, kind: .channel).map(\.itemKey) == ["a", "c", "b"].map { TestKeys.channel($0) })
+
+        store.restoreSource(id: TestKeys.sourceB)
+        let restored = store.favorites(profileID: profile, kind: .channel)
+        #expect(restored.map(\.itemKey) == [TestKeys.channel("a"), away, TestKeys.channel("c"), TestKeys.channel("b")])
+        #expect(Set(restored.map(\.sortOrder)).count == restored.count)
+    }
+
     @Test func rewriteItemKeysRenamesAndFolds() throws {
         let store = try makeStore()
         let profile = store.firstProfile.id

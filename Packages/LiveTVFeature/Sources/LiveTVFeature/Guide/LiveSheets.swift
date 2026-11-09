@@ -135,11 +135,13 @@ private struct SearchKeyID: Hashable {
 }
 
 /// Favorite channels in the profile's own order (FAV-1): drag to reorder,
-/// swipe or Delete to remove. Each move writes only the moved row
-/// (`HouseholdStore.moveFavorites`), so a reorder syncs as one small change.
+/// remove with Delete or a row's menu. Each move writes only the moved row
+/// (`HouseholdStore.moveFavorites`), so a reorder syncs as one small change,
+/// and every device, the Apple TV included, shows the new order.
 /// Favorites whose channel isn't in the catalog right now (a source
-/// refreshing, a channel the profile can't see) stay in the list, so the
-/// order around them is kept.
+/// refreshing, a channel gone from the provider) stay in the list, so the
+/// order around them is kept; channels the profile's rules hide are left
+/// off and keep their places (`FavoriteChannelRow`).
 struct FavoritesOrderSheet: View {
     @Environment(HouseholdStore.self) private var store
     @Environment(CatalogService.self) private var catalog
@@ -149,18 +151,20 @@ struct FavoritesOrderSheet: View {
     var body: some View {
         // The store's queries aren't observable themselves: reading its
         // revision redraws the list after a move, a removal or a sync.
-        let _ = store.revision
+        let _ = (store.revision, catalog.revision)
         let profileID = session.currentProfile?.id
         let favorites = profileID.map { store.favorites(profileID: $0, kind: .channel) } ?? []
-        let channels = Dictionary(
+        let visible = Dictionary(
             catalog.channels(keys: favorites.map { ItemKey(rawValue: $0.itemKey) }).map { ($0.key.rawValue, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        let rows = FavoriteChannelRow.rows(favorites: favorites, visible: visible) { catalog.contains(ItemKey(rawValue: $0)) }
+        let ids = rows.map(\.id)
         NavigationStack {
             List {
                 Section {
-                    ForEach(Array(favorites.enumerated()), id: \.element.id) { index, favorite in
-                        let channel = channels[favorite.itemKey]
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        let channel = row.channel
                         HStack(spacing: 12) {
                             ChannelLogo(name: channel?.name ?? "?", url: channel?.logoURL, size: 36)
                             VStack(alignment: .leading, spacing: 2) {
@@ -174,42 +178,64 @@ struct FavoritesOrderSheet: View {
                                 }
                             }
                             Spacer(minLength: 0)
-                            Image(systemName: "line.3.horizontal")
-                                .foregroundStyle(HearthColor.glyphMuted)
-                                .accessibilityHidden(true)
+                            ReorderGrip()
                         }
                         .padding(.vertical, 4)
                         .listRowBackground(HearthColor.surface)
                         .accessibilityElement(children: .combine)
                         .accessibilityActions {
                             if index > 0 {
-                                Button("Move up") { move(profileID, from: index, to: index - 1) }
+                                Button("Move up") { move(profileID, ids, from: index, to: index - 1) }
                             }
-                            if index < favorites.count - 1 {
-                                Button("Move down") { move(profileID, from: index, to: index + 2) }
+                            if index < rows.count - 1 {
+                                Button("Move down") { move(profileID, ids, from: index, to: index + 2) }
                             }
-                            Button("Remove from favorites") { remove(profileID, favorite) }
+                            Button("Remove from favorites") { remove(profileID, row.favorite) }
+                        }
+                        // The Mac has no swipe or edit mode: its moves to
+                        // either end and its removal are here.
+                        .contextMenu {
+                            if index > 0 {
+                                Button {
+                                    move(profileID, ids, from: index, to: 0)
+                                } label: {
+                                    Label("Move to Top", systemImage: "arrow.up.to.line")
+                                }
+                            }
+                            if index < rows.count - 1 {
+                                Button {
+                                    move(profileID, ids, from: index, to: rows.count)
+                                } label: {
+                                    Label("Move to Bottom", systemImage: "arrow.down.to.line")
+                                }
+                            }
+                            Button(role: .destructive) {
+                                remove(profileID, row.favorite)
+                            } label: {
+                                Label("Remove from favorites", systemImage: "heart.slash")
+                            }
                         }
                     }
                     .onMove { from, to in
                         guard let profileID else { return }
-                        store.moveFavorites(profileID: profileID, kind: .channel, fromOffsets: from, toOffset: to)
+                        store.moveFavorites(profileID: profileID, kind: .channel, shownIDs: ids, fromOffsets: from, toOffset: to)
                     }
                     .onDelete { offsets in
-                        for index in offsets where favorites.indices.contains(index) {
-                            remove(profileID, favorites[index])
+                        for index in offsets where rows.indices.contains(index) {
+                            remove(profileID, rows[index].favorite)
                         }
                     }
                 } footer: {
-                    Text("Drag to set the order your favorite channels show in.")
+                    Text("Drag to set the order your favorite channels show in, on every device in the household.")
                         .font(.hearthFootnote)
                         .foregroundStyle(HearthColor.textSecondary)
                 }
             }
+            .hearthAlwaysReordering()
             .hearthScrollContentBackgroundHidden()
             .hearthScreenBackground()
             .overlay {
-                if favorites.isEmpty {
+                if rows.isEmpty {
                     EmptyStateView(systemName: "heart", title: String(localized: "No favorite channels yet"))
                 }
             }
@@ -224,9 +250,9 @@ struct FavoritesOrderSheet: View {
         .liveSheetFrame(idealWidth: 480, idealHeight: 600)
     }
 
-    private func move(_ profileID: UUID?, from: Int, to: Int) {
+    private func move(_ profileID: UUID?, _ ids: [UUID], from: Int, to: Int) {
         guard let profileID else { return }
-        store.moveFavorites(profileID: profileID, kind: .channel, fromOffsets: IndexSet(integer: from), toOffset: to)
+        store.moveFavorites(profileID: profileID, kind: .channel, shownIDs: ids, fromOffsets: IndexSet(integer: from), toOffset: to)
     }
 
     private func remove(_ profileID: UUID?, _ favorite: FavoriteRecord) {

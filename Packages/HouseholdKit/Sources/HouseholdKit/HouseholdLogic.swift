@@ -167,6 +167,48 @@ enum FractionalOrder {
         }
         return result
     }
+
+    /// A move made on a list that shows only some of the items, as offsets
+    /// in the whole list, for `writes(orders:fromOffsets:toOffset:)`.
+    ///
+    /// Screens rarely show a profile's whole list: My List leaves out what
+    /// the profile's rules hide and what's still loading, Live TV the
+    /// channels the profile can't see, and every screen the favorites of a
+    /// removed source (SRC-9). `onMove`'s offsets are the shown list's, so
+    /// using them on the whole list moves the wrong row.
+    ///
+    /// The moved items land just before the shown item that follows them
+    /// once moved, or just after the one before them when they end up last,
+    /// so the items left out keep their places among the rest. Ids in
+    /// `shown` that `all` doesn't hold (a row deleted by a sync meanwhile)
+    /// are ignored. nil when the move changes nothing.
+    ///
+    /// - Parameters:
+    ///   - all: Every item's id, in the list's order.
+    ///   - shown: The ids on screen, in the order shown (the same order as
+    ///     in `all`, with some left out).
+    static func offsets<ID: Hashable>(in all: [ID], shown: [ID], fromOffsets: IndexSet, toOffset: Int) -> (fromOffsets: IndexSet, toOffset: Int)? {
+        let reordered = moved(shown, fromOffsets: fromOffsets, toOffset: toOffset)
+        guard reordered != shown else { return nil }
+        var position: [ID: Int] = [:]
+        for (index, id) in all.enumerated() where position[id] == nil {
+            position[id] = index
+        }
+        let moving = Set(fromOffsets.filter { $0 < shown.count }.map { shown[$0] })
+        let from = IndexSet(moving.compactMap { position[$0] })
+        guard !from.isEmpty, let firstMoved = reordered.firstIndex(where: moving.contains) else { return nil }
+        // The moved block is contiguous from `firstMoved`: the first shown
+        // item after it that isn't moving is the one it now sits before.
+        if let next = reordered[firstMoved...].first(where: { !moving.contains($0) && position[$0] != nil }),
+           let index = position[next] {
+            return (from, index)
+        }
+        if let previous = reordered[..<firstMoved].last(where: { position[$0] != nil }),
+           let index = position[previous] {
+            return (from, index + 1)
+        }
+        return nil
+    }
 }
 
 /// What HouseholdKit reads from a CatalogKit item key without importing
