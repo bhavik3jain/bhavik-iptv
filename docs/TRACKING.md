@@ -13,7 +13,7 @@ Specs live in [docs/handoff](handoff/README.md): the [handoff](handoff/docs/1-Ha
 | Branch | `main` on GitHub. Work lands through pull requests with the Tests workflow (packages + iOS, Mac, Apple TV builds). `main` isn't protected, so nothing holds a merge for Tests |
 | Toolchain | Xcode 27.1 (27A9275), Swift 6.4, iOS 27.1 SDK; deployment iOS 18 / macOS 15 / tvOS 18 |
 | Bundle ids | `com.bhavikjain.hearth` (release), `com.bhavikjain.hearth.dev` (Debug) · iCloud `iCloud.com.bhavikjain.hearth` · team Y4M3S6H4NK |
-| TestFlight | **Latest upload: build 114** of iOS, Mac and Apple TV (run `42546128702`, from `a1e78ed`, 2026-11-09): PR #19, the owner's 2026-11-08 list. Build 113 (run `42499664259`, from `11ecc1f`, 2026-11-08) carried scrubbing and faster show starts. Build 112 (run `42414386261`, from `dfc770f`, 2026-11-07) carried every episode playing and searched shows kept. Uploads go through the `TestFlight` workflow; the iCloud schema, `title` included, is deployed to Production |
+| TestFlight | **Latest upload: build 115** of iOS, Mac and Apple TV (run `43055409791`, from `50570f4`, 2026-11-11): PR #20, the owner's 2026-11-10 list and the Mac's missing My List titles. Build 114 (run `42546128702`, from `a1e78ed`, 2026-11-09) carried PR #19, the owner's 2026-11-08 list. Build 113 (run `42499664259`, from `11ecc1f`, 2026-11-08) carried scrubbing and faster show starts. Build 112 (run `42414386261`, from `dfc770f`, 2026-11-07) carried every episode playing and searched shows kept. Uploads go through the `TestFlight` workflow; the iCloud schema, `title` included, is deployed to Production |
 | Real portal | The owner's Stalker portal works in the iPhone simulator and on TestFlight: live, movies, shows and provider search |
 | Apple TV | On TestFlight and on the owner's Apple TV. Build 106 failed there with "The catalog couldn't be opened: The file couldn't be saved"; since build 107 its stores live in Caches, and **the owner confirmed on build 108 that the portal's channels load** (2026-11-01). Multi-view hasn't been reported on the device yet |
 
@@ -71,13 +71,13 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 | 17 | Downloads | `Packages/DownloadKit`, Library's download buttons and screen | DL-1, DL-2 | ☑ merged (PR #6); unverified on hardware |
 | 18 | iOS Home: just Live TV | `Packages/HomeFeature`, `App/Sources/PhoneRootView.swift` | Owner's request, 2026-11-01 | ☑ merged (PR #9); replaced by 19 |
 | 19 | Home is favorites (iOS, iPad, Mac) | `Packages/HomeFeature`, `App/Sources/PhoneRootView.swift`, `AppNavigation.swift` | Owner's request, 2026-11-08 | ☑ merged (PR #19), build 114 |
-| 20 | My List titles wrongly "Unavailable" | `Packages/CatalogKit` (refresh swap, writes, held-title search) | Owner's report, 2026-11-08 | ◐ merged (PR #19), build 114; the Mac's missing titles found (2026-11-11): searched by a label, fixed on `owner-list-2026-11-10` |
+| 20 | My List titles wrongly "Unavailable" | `Packages/CatalogKit` (refresh swap, writes, held-title search) | Owner's report, 2026-11-08 | ◐ merged (PR #19, PR #20), build 115; the Mac's missing titles were searched by a label (2026-11-11); to confirm on the owner's Mac |
 | 21 | Ordering My List and favorite channels | `Packages/LibraryFeature` (`MyListOrdering`), LiveTVFeature's favorites sheet, `HouseholdStore.moveFavorites(…shownIDs:…)`, Core's reorder shims | Owner's request, 2026-11-08 | ☑ merged (PR #19), build 114 |
 | 22 | iPhone player rotate button | `Packages/PlayerKit` (`PlayerRotation`, `PlayerOrientationLock`), `App/Sources/AppDelegate.swift` | Owner's request, 2026-11-08 | ☑ merged (PR #19), build 114; the lock case untested in the simulator |
 | 23 | Continue on Apple TV (phase 1) | `HouseholdKit/ContinueHere.swift`, `App/Sources/ContinueHere.swift`, HomeFeature's `ContinueHereTV`, multi-view tile rows | Owner's idea, 2026-11-08; [design](designs/continue-on-tv.md) | ◐ merged (PR #19), build 114; needs the owner's answers to the design's questions |
-| 24 | Apple TV: Profiles tab and where down lands | `App/Sources/TVRootView.swift`, `AppTab.profiles`, ProfilesFeature's `ProfilePickerView`, HomeFeature's `HomeTVLanding`, LibraryFeature's TV grid | Owner's report, 2026-11-10 | ◐ on `owner-list-2026-11-10`; simulator and remote flows |
-| 25 | Continue watching in Movies and Shows | LibraryFeature's `LibraryContinue`, `CatalogGridScreen` | Owner's request, 2026-11-10 | ◐ on `owner-list-2026-11-10`; simulator |
-| 26 | An empty answer isn't believed at once | CatalogKit (`searchProviders`, `loadMore`, `loadEpisodes`, the importer's first pages) | Owner's report, 2026-11-10 | ◐ on `owner-list-2026-11-10`; tests and the real portal |
+| 24 | Apple TV: Profiles tab and where down lands | `App/Sources/TVRootView.swift`, `AppTab.profiles`, ProfilesFeature's `ProfilePickerView`, HomeFeature's `HomeTVLanding`, LibraryFeature's TV grid | Owner's report, 2026-11-10 | ☑ merged (PR #20), build 115; simulator and remote flows, not yet the owner's Apple TV |
+| 25 | Continue watching in Movies and Shows | LibraryFeature's `LibraryContinue`, `CatalogGridScreen` | Owner's request, 2026-11-10 | ☑ merged (PR #20), build 115 |
+| 26 | An empty answer isn't believed at once | CatalogKit (`searchProviders`, `loadMore`, `loadEpisodes`, the importer's first pages) | Owner's report, 2026-11-10 | ☑ merged (PR #20), build 115; tests and the real portal |
 
 ## Next up
 
@@ -309,4 +309,5 @@ Status: ☐ not started · ◐ in progress · ☑ done · ⚠ blocked
 - Tests: CatalogKit `aNameIsSearchedByItsTitleNotItsLongestTag` (14 names; 13 fail with the longest-part rule) and `aMovieNamedShorterThanItsTagsIsFound` (the fake answers "ENGLISH MOVIES" and the whole name with nothing, as the portal does; fails with the old rule); LibraryFeature `anUnavailableTileSaysWhichTitle`.
 - **Checked.** `AllPackageTests` on the iPhone 18 Pro Max simulator: 1,397 passed, none failed; the Mac app builds unsigned.
 - **Not checked:** the fix on the owner's Mac itself. It reaches the Mac through TestFlight; at its first launch the Mac searches again and should fill those tiles in.
+- Merged with the 2026-11-10 work (PR #20, `50570f4`) after its three checks passed; TestFlight run `43055409791` uploaded iOS, Mac and Apple TV build 115. The Apple TV job's first attempt failed in `exportArchive` ("The network connection was lost", then "No profiles for 'com.bhavikjain.hearth' were found"); rerunning that job alone uploaded it.
 
