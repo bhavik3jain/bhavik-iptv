@@ -16,6 +16,13 @@ import Testing
         #expect(ProfileCaption.text(for: home.kid, isWatchingNow: true, latestProgress: progress(.movie), isLastUsedHere: true) == "Kids profile")
     }
 
+    /// The Apple TV's Profiles tab: the profile in use says so, whatever
+    /// else is true of it.
+    @Test func theProfileInUseSaysSoOnTheProfilesTab() {
+        #expect(ProfileCaption.text(for: home.gran, isWatchingNow: true, latestProgress: progress(.episode), isLastUsedHere: true, isCurrent: true) == "Current profile")
+        #expect(ProfileCaption.text(for: home.kid, isWatchingNow: false, latestProgress: nil, isLastUsedHere: false, isCurrent: true) == "Current profile")
+    }
+
     @Test func watchingNowComesFirst() {
         #expect(ProfileCaption.text(for: home.gran, isWatchingNow: true, latestProgress: progress(.episode), isLastUsedHere: true) == "Watching now")
     }

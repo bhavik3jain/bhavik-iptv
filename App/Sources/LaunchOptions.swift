@@ -12,6 +12,9 @@ enum AppTab: String, Hashable, CaseIterable, Sendable {
     case search
     case household
     case settings
+    /// The Apple TV's profiles: who's watching, at the trailing end of its
+    /// tab bar.
+    case profiles
 
     /// The five tabs of the phone's tab bar (mockup 02), and the top of the
     /// iPad and iPhone Duo sidebar. Home is the profile's favorites (the
@@ -23,8 +26,11 @@ enum AppTab: String, Hashable, CaseIterable, Sendable {
     /// The Mac sidebar's sections, in ⌘1–⌘6 order (mockup 07).
     static let macSections: [AppTab] = [.home, .live, .movies, .shows, .myList, .downloads]
     /// The Apple TV's top tab bar: Search at the leading end, where tvOS
-    /// apps keep it; no Downloads; Household inside Settings.
-    static let tv: [AppTab] = [.search, .home, .live, .movies, .shows, .myList, .settings]
+    /// apps keep it, and the profiles at the trailing end, in line with the
+    /// tabs (the owner, 2026-11-10: a profile menu between the bar and Home's
+    /// first row pulled the remote into the far corner on the way up and
+    /// down); no Downloads; Household inside Settings.
+    static let tv: [AppTab] = [.search, .home, .live, .movies, .shows, .myList, .settings, .profiles]
 
     var title: String {
         switch self {
@@ -37,6 +43,7 @@ enum AppTab: String, Hashable, CaseIterable, Sendable {
         case .search: String(localized: "Search")
         case .household: String(localized: "Household")
         case .settings: String(localized: "Settings")
+        case .profiles: String(localized: "Profiles")
         }
     }
 
@@ -51,6 +58,7 @@ enum AppTab: String, Hashable, CaseIterable, Sendable {
         case .search: "magnifyingglass"
         case .household: "person.2"
         case .settings: "gearshape"
+        case .profiles: "person.crop.circle"
         }
     }
 }

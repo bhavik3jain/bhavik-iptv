@@ -27,6 +27,31 @@ public struct WhoIsWatchingView: View {
     }
 }
 
+/// Switching profile from inside the app: the Apple TV's Profiles tab, at
+/// the trailing end of its tab bar. The same row of profiles as "Who's
+/// watching?", with the one in use in focus; choosing another (after its
+/// PIN, PRF-3, and an adult's when leaving Kids, PRF-4) selects it, and
+/// choosing the one in use calls `onChosen` so the app can go back to Home.
+/// Elsewhere it draws the phone's "Who's watching?".
+public struct ProfilePickerView: View {
+    let onChosen: () -> Void
+    let onManageHousehold: () -> Void
+    @Environment(\.hearthLayout) private var layout
+
+    public init(onChosen: @escaping () -> Void = {}, onManageHousehold: @escaping () -> Void = {}) {
+        self.onChosen = onChosen
+        self.onManageHousehold = onManageHousehold
+    }
+
+    public var body: some View {
+        if layout == .tv {
+            WhoIsWatchingTVScreen(mode: .switching(onChosen: onChosen), onManageHousehold: onManageHousehold)
+        } else {
+            WhoIsWatchingScreen(onManageHousehold: onManageHousehold)
+        }
+    }
+}
+
 /// The current profile's avatar, name and a chevron; a menu of the other
 /// profiles, Manage household and Settings (PRF-8). Live TV's header on the
 /// phone, the top of the Mac sidebar (`style: .sidebar`).

@@ -39,6 +39,16 @@ import Testing
         entries.map { $0.sortName ?? "–" }
     }
 
+    /// The Mac's My List showed eight nameless "Unavailable" tiles whose
+    /// favorites all carried names (2026-11-11): a tile says which title it
+    /// can't find.
+    @Test func anUnavailableTileSaysWhichTitle() {
+        let named = Self.entry("ironman", name: "", order: 1, minutesAgo: 1, status: .unavailable, syncedTitle: "Iron Man - DISNEY+ | ENGLISH MOVIES")
+        #expect(named.unavailableTitle == "Iron Man - DISNEY+ | ENGLISH MOVIES")
+        let nameless = Self.entry("gone", name: "", order: 2, minutesAgo: 1, status: .unavailable)
+        #expect(nameless.unavailableTitle == "Unavailable")
+    }
+
     @Test func myOrderIsTheProfilesOrder() {
         #expect(MyListSort.custom.sorted(entries) == entries)
     }

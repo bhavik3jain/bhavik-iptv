@@ -74,6 +74,15 @@ extension MyListEntry {
     }
 }
 
+extension MyListEntry {
+    /// What an unavailable tile is called: the name synced with the favorite,
+    /// so the list says which title it can't find here, not just that one is
+    /// missing (the Mac's eight "Unavailable" movies, 2026-11-11).
+    var unavailableTitle: String {
+        sortName ?? String(localized: "Unavailable", bundle: .module)
+    }
+}
+
 /// One row of Reorder My List: every title on the list that this profile may
 /// see, including those still loading here and those no longer offered, so
 /// the order around them is set too and they keep their places.

@@ -173,6 +173,13 @@ struct TabRoot: View {
             RouteDestination(route: .household)
         case .settings:
             RouteDestination(route: .settings)
+        case .profiles:
+            // The Apple TV's profiles tab; choosing the profile already in
+            // use goes back to Home (another one resets to Home by itself).
+            ProfilePickerView(
+                onChosen: { navigation.select(.home) },
+                onManageHousehold: { navigation.open(.household, gateShowing: false) }
+            )
         }
     }
 }

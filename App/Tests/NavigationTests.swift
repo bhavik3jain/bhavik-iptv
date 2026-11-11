@@ -110,18 +110,19 @@ let allRoutes: [HearthRoute] = [
         #expect(AppTab.macSections == AppTab.primary + [.downloads])
     }
 
-    /// The changes to iOS's tabs leave the TV's alone.
+    /// The changes to iOS's tabs leave the TV's alone; its profiles sit at
+    /// the trailing end of the bar, in line with the tabs (2026-11-10).
     @Test func theTVKeepsHomeBesideLiveTV() {
-        #expect(AppTab.tv == [.search, .home, .live, .movies, .shows, .myList, .settings])
+        #expect(AppTab.tv == [.search, .home, .live, .movies, .shows, .myList, .settings, .profiles])
     }
 
     @Test func everyTabInSidebarOrder() {
-        #expect(AppTab.allCases == [.home, .live, .movies, .shows, .myList, .downloads, .search, .household, .settings])
+        #expect(AppTab.allCases == [.home, .live, .movies, .shows, .myList, .downloads, .search, .household, .settings, .profiles])
     }
 
     /// `-OpenTab` and saved selections read these.
     @Test func rawValuesAreStable() {
-        #expect(AppTab.allCases.map(\.rawValue) == ["home", "live", "movies", "shows", "mylist", "downloads", "search", "household", "settings"])
+        #expect(AppTab.allCases.map(\.rawValue) == ["home", "live", "movies", "shows", "mylist", "downloads", "search", "household", "settings", "profiles"])
     }
 
     @Test func everyTabHasATitleAndItsOwnSymbol() {

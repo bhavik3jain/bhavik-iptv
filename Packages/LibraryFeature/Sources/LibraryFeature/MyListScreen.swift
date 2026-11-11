@@ -95,7 +95,7 @@ struct MyListScreen: View {
                 remove(favorite)
             }
         } message: { _ in
-            Text("Its provider no longer offers it.", bundle: .module)
+            Text("It can't be found on its provider from this device.", bundle: .module)
         }
     }
 
@@ -293,10 +293,10 @@ struct MyListScreen: View {
                 LibraryPosterLink(entry: item)
             }
         case .unavailable where isTV:
-            TVCard(width: HearthTVMetrics.posterWidth, title: String(localized: "Unavailable", bundle: .module), caption: String(localized: "No longer offered", bundle: .module)) {
+            TVCard(width: HearthTVMetrics.posterWidth, title: entry.unavailableTitle, caption: String(localized: "Can't be found here", bundle: .module)) {
                 pendingRemoval = entry.favorite
             } artwork: {
-                TVPosterArtwork(title: String(localized: "Unavailable", bundle: .module), url: nil)
+                TVPosterArtwork(title: entry.unavailableTitle, url: nil)
                     .opacity(0.5)
             }
             .accessibilityHint(Text("Removes it from My List", bundle: .module))
@@ -305,9 +305,9 @@ struct MyListScreen: View {
                 pendingRemoval = entry.favorite
             } label: {
                 PosterCell(
-                    title: String(localized: "Unavailable", bundle: .module),
+                    title: entry.unavailableTitle,
                     url: nil,
-                    caption: String(localized: "No longer offered", bundle: .module),
+                    caption: String(localized: "Can't be found here", bundle: .module),
                     decoration: PosterDecoration(badge: nil, progress: nil),
                     isUnavailable: true
                 )

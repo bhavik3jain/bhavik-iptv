@@ -277,9 +277,13 @@ struct PINSetupState: Equatable {
 
 /// The grey line under a profile on "Who's watching?": what kind of profile
 /// it is for Kids and Guests (that is what someone choosing needs to know),
-/// otherwise what it was last doing.
+/// otherwise what it was last doing. On the Apple TV's Profiles tab the
+/// profile in use says so first.
 enum ProfileCaption {
-    static func text(for profile: ProfileRecord, isWatchingNow: Bool, latestProgress: ProgressRecord?, isLastUsedHere: Bool) -> String? {
+    static func text(for profile: ProfileRecord, isWatchingNow: Bool, latestProgress: ProgressRecord?, isLastUsedHere: Bool, isCurrent: Bool = false) -> String? {
+        if isCurrent {
+            return String(localized: "Current profile", bundle: .module, comment: "Caption under the profile in use, on the Apple TV's Profiles tab")
+        }
         switch profile.kind {
         case .guest:
             return String(localized: "Keeps no history", bundle: .module, comment: "Caption under the Guest profile (PRF-5)")

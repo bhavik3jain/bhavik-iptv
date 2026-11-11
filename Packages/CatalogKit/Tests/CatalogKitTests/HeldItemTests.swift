@@ -90,7 +90,9 @@ import Testing
         let (service, fake) = await Self.service(fixture)
         let key = ItemKey.series(source: fake.configuration.id, id: "s1")
         #expect(await service.resolveHeldItems([HeldItem(key: key, title: decorated)]) == 1)
-        #expect(fake.calls.filter { $0.hasPrefix("search(") && $0.hasSuffix(",0)") } == ["search(Grey's Anatomy,0)", "search(\(decorated),0)"])
+        // The plain part's nothing is asked twice before it's believed
+        // (EmptyAnswerTests).
+        #expect(fake.calls.filter { $0.hasPrefix("search(") && $0.hasSuffix(",0)") } == ["search(Grey's Anatomy,0)", "search(Grey's Anatomy,0)", "search(\(decorated),0)"])
     }
 
     /// A plain name is one query.
@@ -110,6 +112,49 @@ import Testing
         #expect(HeldTitleSearch.queries(for: "Grey's Anatomy") == ["Grey's Anatomy", "Anatomy"])
         #expect(HeldTitleSearch.queries(for: "x").isEmpty)
         #expect(HeldTitleSearch.queries(for: "").isEmpty)
+    }
+
+    /// The Mac's My List read "Unavailable" for these (2026-11-11): each was
+    /// searched by its longest part, a label the portal answers with nothing.
+    @Test(arguments: [
+        ("Iron Man - DISNEY+ | ENGLISH MOVIES", "Iron Man"),
+        ("Inception - PRIME VIDEO | ENGLISH MOVIES", "Inception"),
+        ("Black Panther - DISNEY+ | ENGLISH MOVIES", "Black Panther"),
+        ("Oppenheimer - ENGLISH | LATEST MOVIES", "Oppenheimer"),
+        ("The Avengers - ENGLISH | OLD COLLECTION", "The Avengers"),
+        ("Suits - ENGLISH | TV SERIES", "Suits"),
+        ("The Pitt - HBO | ENGLISH SERIES", "The Pitt"),
+        ("The Resident - HULU | ENGLISH SERIES", "The Resident"),
+        ("Greys Anatomy - APPLE TV+ | ENGLISH SERIES", "Greys Anatomy"),
+        ("Avatar: The Last Airbender - KIDS | TV SERIES", "Avatar: The Last Airbender"),
+        ("Mousetrap (Eng Subtitle)", "Mousetrap"),
+        ("SUITS - ENGLISH | TV SERIES", "SUITS"),
+        ("UP - DISNEY+ | ENGLISH MOVIES", "UP"),
+        ("CRUNCHYROLL | Frieren", "Frieren"),
+    ])
+    func aNameIsSearchedByItsTitleNotItsLongestTag(name: String, title: String) {
+        #expect(HeldTitleSearch.queries(for: name).first == title)
+        #expect(HeldTitleSearch.queries(for: name).dropFirst().first == name)
+    }
+
+    /// The owner's portal: a decorated name, its trailing labels and the
+    /// whole name find nothing; the title finds it.
+    @Test func aMovieNamedShorterThanItsTagsIsFound() async throws {
+        var fixture = CatalogBrowseTests.hugeCatalog()
+        let decorated = "Iron Man - DISNEY+ | ENGLISH MOVIES"
+        fixture.movies = fixture.movies.map { movie in
+            var movie = movie
+            if movie.id == "m9" { movie.name = decorated }
+            return movie
+        }
+        fixture.unmatchedQueries = [decorated, "ENGLISH MOVIES"]
+        let (service, fake) = await Self.service(fixture)
+        let key = ItemKey.movie(source: fake.configuration.id, id: "m9")
+        #expect(!service.contains(key))
+
+        #expect(await service.resolveHeldItems([HeldItem(key: key, title: decorated)]) == 1)
+        #expect(service.movie(key)?.name == decorated)
+        #expect(fake.callCount("search(ENGLISH MOVIES") == 0)
     }
 
     @Test func aMovieInProgressElsewhereResolvesAndPlays() async throws {
@@ -151,12 +196,13 @@ import Testing
         #expect(await service.resolveHeldItems([gone]) == 0)
         #expect(await service.resolveHeldItems([gone]) == 0)
         // The name, then its word "Nothing": two pages each, the last page
-        // saying there's no more.
-        #expect(fake.callCount("search(") == 4)
+        // saying there's no more, and each answer of nothing asked twice
+        // before it's believed (EmptyAnswerTests).
+        #expect(fake.callCount("search(") == 8)
         // A new catalog asks again.
         await service.refresh(sourceID: fake.configuration.id, force: true)
         _ = await service.resolveHeldItems([gone])
-        #expect(fake.callCount("search(") == 8)
+        #expect(fake.callCount("search(") == 16)
     }
 
     @Test func aSearchThatFailedIsAskedAgain() async throws {

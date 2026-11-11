@@ -27,6 +27,39 @@ final class TVFlows: XCTestCase {
         expectFocus("Resume")
     }
 
+    /// Up from Home's first row goes back to the tab, not to a profile menu
+    /// in the far corner of Home's header (the owner, 2026-11-10).
+    func testUpFromResumeGoesBackToTheHomeTab() throws {
+        press(.down)
+        expectFocus("Resume")
+        press(.up)
+        expectFocus("Home")
+    }
+
+    /// Down from Shows lands on Continue watching, not the nearest chip.
+    func testDownFromTheShowsTabLandsOnContinueWatching() throws {
+        press(.right, times: 3)
+        expectFocus("Shows")
+        press(.down)
+        expectFocus("Resume S1 E4")
+    }
+
+    /// Profiles are the last tab: the profile in use takes focus, and
+    /// choosing another switches to it on Home. Anya has nothing saved, and
+    /// down from the tab bar still has somewhere to land.
+    func testTheProfilesTabSwitchesProfile() throws {
+        press(.right, times: 6)
+        expectFocus("Profiles: Bhavik")
+        press(.down)
+        expectFocus("Current profile")
+        press(.right)
+        expectFocus("Anya")
+        press(.select)
+        expectFocus("Home")
+        press(.down)
+        expectFocus("Open the guide")
+    }
+
     func testDownFromTheLiveTVTabLandsOnWhatIsOnNow() throws {
         press(.right)
         expectFocus("Live TV")
@@ -124,8 +157,8 @@ final class TVFlows: XCTestCase {
         expectFocus("Keep Playing in Background")
         moveFocus(to: "Stop Multi-view")
         press(.select)
-        // Back where the way back was pressed: Settings, the last tab.
-        expectFocus("Switch profile")
+        // Back where the way back was pressed: Profiles, the last tab.
+        expectFocus("Current profile")
         XCTAssertFalse(app.buttons["Return to Cityline News"].exists)
     }
 
@@ -246,7 +279,10 @@ final class TVFlows: XCTestCase {
     func testAMoviesPageSpansTheScreen() throws {
         press(.right, times: 2)
         expectFocus("Movies")
-        press(.down, times: 2)
+        // Continue watching, the chips, then the grid, whose third poster
+        // hasn't been started, so its page offers Play.
+        press(.down, times: 3)
+        press(.right, times: 2)
         press(.select)
         expectFocus("Play")
         let page = app.scrollViews.containing(.button, identifier: "Play").firstMatch
@@ -292,6 +328,7 @@ final class TVFlows: XCTestCase {
         var presses = 0
         while !app.focusDescription.contains("Return to"), presses < 14 {
             let onTabBar = ["Search", "Home", "Live TV", "Movies", "Shows", "My List", "Settings"].contains(app.focusDescription)
+                || app.focusDescription.hasPrefix("Profiles")
             press(onTabBar ? .right : .up)
             presses += 1
         }
