@@ -3,8 +3,9 @@ import Core
 import HouseholdKit
 import SwiftUI
 
-/// Home on the Apple TV (mockup 02 at ten feet, HOME-1): the greeting and
-/// profile switcher, what another device is playing for this profile now
+/// Home on the Apple TV (mockup 02 at ten feet, HOME-1): the greeting (the
+/// profiles have their own tab at the end of the tab bar, so nothing sits
+/// between the bar and the first row), what another device is playing for this profile now
 /// ("Continue from <device>", `TVContinueOffers`), the Continue watching hero
 /// with Resume in focus first, then shelves the remote walks down — favorite
 /// channels (select plays, long-press for the channel's page or to
@@ -14,6 +15,10 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
     let snapshot: HomeSnapshot
     let status: HomeStatus
     let hasLoaded: Bool
+    /// Not drawn on the TV: a menu at the header's far end was where the
+    /// remote went on the way up from Home's first row, and down from the
+    /// tab bar's right half (the owner, 2026-11-10). The TV's Profiles tab
+    /// switches profile instead.
     let profileSwitcher: ProfileSwitcher
 
     @Environment(CatalogService.self) private var catalog
@@ -37,10 +42,10 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
         }
         .scrollClipDisabled()
         .hearthScreenBackground()
-        // Down from the tab bar lands on Resume (or on carrying on what
-        // another device is playing), not on the profile menu in the far
-        // corner that the focus engine finds first.
-        .defaultFocus($focus, offerCards.first.map { .continueOffer($0.id) } ?? .resume, priority: .userInitiated)
+        // Down from the tab bar lands on the first thing to watch: carrying
+        // on what another device plays, Resume, or the first favorite
+        // channel, wherever along the bar it starts.
+        .defaultFocus($focus, HomeTVLanding.target(offerID: offerCards.first?.id, hasHero: showsHero, hasChannels: status == .ready && !snapshot.favoriteChannels.isEmpty), priority: .userInitiated)
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
@@ -69,16 +74,19 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 32) {
-            Text(HomeGreeting.text(name: session.currentProfile?.name, at: .now))
-                .font(.hearthTVTitle)
-                .tracking(-0.6)
-                .foregroundStyle(HearthColor.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 0)
-            profileSwitcher
-        }
-        .hearthFocusSection()
+        Text(HomeGreeting.text(name: session.currentProfile?.name, at: .now))
+            .font(.hearthTVTitle)
+            .tracking(-0.6)
+            .foregroundStyle(HearthColor.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+    }
+
+    /// The Continue watching hero shows (another device's offer for the same
+    /// title covers it).
+    private var showsHero: Bool {
+        guard status == .ready, hasLoaded, let item = snapshot.continueWatching else { return false }
+        return !ContinueOfferCards.heroIsCovered(heroItemKey: item.itemKey, by: offerCards)
     }
 
     @ViewBuilder
@@ -122,7 +130,7 @@ struct HomeTVContent<ProfileSwitcher: View>: View {
             TVContinueHero(item: item, profileID: profileID, focus: $focus)
         }
 
-        TVFavoriteChannelsShelf(channels: snapshot.favoriteChannels, catalogRevision: catalog.revision, profileID: profileID, isGuest: session.isGuest)
+        TVFavoriteChannelsShelf(channels: snapshot.favoriteChannels, catalogRevision: catalog.revision, profileID: profileID, isGuest: session.isGuest, focus: $focus)
 
         if !snapshot.upNext.isEmpty {
             TVShelf(String(localized: "Up next in your shows", bundle: .module)) {
@@ -168,6 +176,20 @@ enum HomeTVFocus: Hashable {
     case resume
     /// "Continue here" on another device's offer, by the offer's id.
     case continueOffer(String)
+    /// The first favorite channel, when there's nothing to continue.
+    case firstChannel
+}
+
+/// Where down from the tab bar lands on the TV's Home: the first thing to
+/// watch, top to bottom. With none of them (no favorites yet) the focus
+/// engine's own pick stands, which on that Home is the way to the guide.
+enum HomeTVLanding {
+    static func target(offerID: String?, hasHero: Bool, hasChannels: Bool) -> HomeTVFocus? {
+        if let offerID { return .continueOffer(offerID) }
+        if hasHero { return .resume }
+        if hasChannels { return .firstChannel }
+        return nil
+    }
 }
 
 /// The hero: the backdrop full width, the title and episode over it, Resume
@@ -293,6 +315,7 @@ private struct TVFavoriteChannelsShelf: View {
     let catalogRevision: Int
     let profileID: UUID?
     let isGuest: Bool
+    var focus: FocusState<HomeTVFocus?>.Binding
 
     @Environment(CatalogService.self) private var catalog
     @Environment(HouseholdStore.self) private var store
@@ -314,6 +337,12 @@ private struct TVFavoriteChannelsShelf: View {
                         ? String(localized: "Open the Live TV guide to find something on now.", bundle: .module)
                         : String(localized: "In the Live TV guide, press and hold a channel and choose Favorite. Favorites follow this profile to every device.", bundle: .module)
                 )
+                // Somewhere for down from the tab bar to land on a Home with
+                // nothing saved yet, and the way the notice points.
+                NavigationLink(value: HearthRoute.liveGuide) {
+                    Label(String(localized: "Open the guide", bundle: .module), systemImage: "tv")
+                }
+                .buttonStyle(.hearthTV)
             }
         } else {
             TimelineView(.everyMinute) { context in
@@ -321,7 +350,12 @@ private struct TVFavoriteChannelsShelf: View {
                 let queue = channels.map(\.key.rawValue)
                 TVShelf(String(localized: "Favorite channels", bundle: .module)) {
                     ForEach(channels.prefix(FavoriteChannelsSection.rowLimit)) { channel in
-                        card(channel, queue: queue, at: context.date)
+                        if channel.id == channels.first?.id {
+                            card(channel, queue: queue, at: context.date)
+                                .focused(focus, equals: .firstChannel)
+                        } else {
+                            card(channel, queue: queue, at: context.date)
+                        }
                     }
                 } accessory: {
                     NavigationLink(value: HearthRoute.liveGuide) {

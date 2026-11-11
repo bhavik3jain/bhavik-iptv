@@ -87,7 +87,8 @@ struct GridEntry: Identifiable, Equatable {
 }
 
 /// Movies or shows by category as a poster grid (VOD-1, SER-1): a large
-/// title with the sort menu, a search field, category chips, and posters
+/// title with the sort menu, a search field, Continue watching for this
+/// half of the library (`LibraryContinue`), category chips, and posters
 /// that grow a page at a time. Its empty states come from the sources'
 /// refresh states, so a first-run import reads as "Loading…" rather than
 /// "No movies". Typing searches this shelf (the catalog's search, and the
@@ -111,6 +112,14 @@ struct CatalogGridScreen: View {
     @State private var hasLoaded = false
     /// The shelf's search; empty lists the category.
     @State private var query = ""
+    /// Continue watching: started movies, or shows in progress.
+    @State private var continueCards: [ContinueCard] = []
+    /// Shows on that row whose episodes this device hasn't cached.
+    @State private var seriesNeedingEpisodes: [CatalogSeries] = []
+    /// Shows whose episodes were asked for this session, so one the
+    /// provider sends none for isn't asked again on every change.
+    @State private var episodeFetchesTried: Set<ItemKey> = []
+    @FocusState private var tvFocus: LibraryTVFocus?
     private var metrics = PosterGridMetrics()
 
     /// Titles a search shows at most (the catalog ranks name prefixes first).
@@ -149,6 +158,17 @@ struct CatalogGridScreen: View {
                  categoryID: storedCategoryID, sort: sort, limit: paging.limit, query: trimmedQuery)
     }
 
+    /// What Continue watching depends on.
+    private struct ContinueKey: Hashable {
+        var catalogRevision: Int
+        var storeRevision: Int
+        var profileID: UUID?
+    }
+
+    private var continueKey: ContinueKey {
+        ContinueKey(catalogRevision: catalog.revision, storeRevision: store.revision, profileID: session.currentProfile?.id)
+    }
+
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isSearching: Bool { !trimmedQuery.isEmpty }
 
@@ -161,6 +181,8 @@ struct CatalogGridScreen: View {
             }
         }
         .onChange(of: queryKey, initial: true) { _, _ in reload() }
+        .onChange(of: continueKey, initial: true) { _, _ in reloadContinue() }
+        .task(id: seriesNeedingEpisodes.map(\.key)) { await fetchMissingEpisodes() }
         .task(id: trimmedQuery) {
             // A big portal's titles aren't all on the device: once the
             // typing settles, ask it; what it finds bumps the catalog's
@@ -191,6 +213,9 @@ struct CatalogGridScreen: View {
                 .autocorrectionDisabled()
                 .frame(maxWidth: layout == .sidebar ? 520 : .infinity, alignment: .leading)
                 .padding(.horizontal, gutter)
+                if !isSearching, !continueCards.isEmpty {
+                    LibraryContinueRow(cards: continueCards, gutter: gutter)
+                }
                 Section {
                     if isSearching {
                         searchContent(gutter: gutter)
@@ -215,12 +240,17 @@ struct CatalogGridScreen: View {
 
     // MARK: TV
 
-    /// The Apple TV's grid: the categories and the sort as a row of buttons,
-    /// then six posters across that lift with focus. The tab bar names the
-    /// screen, so there is no title.
+    /// The Apple TV's grid: Continue watching, the categories and the sort
+    /// as a row of buttons, then six posters across that lift with focus.
+    /// The tab bar names the screen, so there is no title. Down from the
+    /// tab bar lands on the first thing to watch, not on whichever chip
+    /// sits under the tab.
     private var tvBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 36) {
+                if !continueCards.isEmpty {
+                    TVLibraryContinueShelf(cards: continueCards, focus: $tvFocus)
+                }
                 ScrollView(.horizontal) {
                     HStack(spacing: 20) {
                         tvSortMenu
@@ -247,6 +277,7 @@ struct CatalogGridScreen: View {
         .scrollClipDisabled()
         .hearthScreenBackground()
         .toolbar(.hidden, for: .automatic)
+        .defaultFocus($tvFocus, continueCards.isEmpty ? .firstPoster : .firstContinue, priority: .userInitiated)
     }
 
     private var tvSortMenu: some View {
@@ -277,7 +308,14 @@ struct CatalogGridScreen: View {
                 spacing: 56
             ) {
                 ForEach(entries) { entry in
-                    TVLibraryPosterLink(entry: entry)
+                    Group {
+                        if entry.index == 0 {
+                            TVLibraryPosterLink(entry: entry)
+                                .focused($tvFocus, equals: .firstPoster)
+                        } else {
+                            TVLibraryPosterLink(entry: entry)
+                        }
+                    }
                         .onAppear {
                             if paging.shouldGrow(appearingIndex: entry.index, loaded: entries.count) {
                                 paging.grow()
@@ -582,6 +620,50 @@ struct CatalogGridScreen: View {
                 .map { GridEntry(series: $1, index: $0, latest: latest[$1.key.rawValue]) }
         }
         hasLoaded = true
+    }
+
+    /// Continue watching: the profile's started movies, or its shows at the
+    /// episode each one's page would play. Empty for a Guest, who keeps no
+    /// progress.
+    private func reloadContinue() {
+        guard let profile = session.currentProfile, !profile.isGuest else {
+            continueCards = []
+            seriesNeedingEpisodes = []
+            return
+        }
+        switch shelf {
+        case .movies:
+            continueCards = LibraryContinue.movies(store.continueWatching(profileID: profile.id, limit: 60)) { catalog.movie($0) }
+            seriesNeedingEpisodes = []
+        case .shows:
+            let result = LibraryContinue.shows(
+                store.seriesInProgress(profileID: profile.id, limit: 40),
+                series: { catalog.seriesItem($0) },
+                episodes: { catalog.cachedEpisodes(seriesKey: $0) },
+                progress: { seriesKey in
+                    Dictionary(store.seriesProgress(profileID: profile.id, seriesKey: seriesKey).map { ($0.itemKey, $0) }, uniquingKeysWith: { first, _ in first })
+                }
+            )
+            continueCards = result.cards
+            seriesNeedingEpisodes = result.needingEpisodes
+        }
+    }
+
+    /// Episodes for shows on the row this device never cached (progress
+    /// synced from another device), one show at a time; each landing re-reads
+    /// the row, which then plays the episode straight away.
+    private func fetchMissingEpisodes() async {
+        for series in seriesNeedingEpisodes where !episodeFetchesTried.contains(series.key) {
+            do {
+                _ = try await catalog.episodes(for: series)
+            } catch is CancellationError {
+                return
+            } catch {
+                // Offline or a provider hiccup: the card opens the show.
+            }
+            if Task.isCancelled { return }
+            episodeFetchesTried.insert(series.key)
+        }
     }
 
     /// The profile's latest episode row of every show it has touched, in one

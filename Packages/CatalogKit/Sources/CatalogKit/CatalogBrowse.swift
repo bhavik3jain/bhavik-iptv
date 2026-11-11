@@ -54,8 +54,10 @@ extension CatalogService {
         defer { if added > 0 { catalogDidChange() } }
         do {
             let client = try await readyClient(for: configuration)
+            var askedAgain = false
             repeat {
                 let pageHasMore: Bool
+                let listed: Int
                 switch kind {
                 case .vod:
                     let page = try await client.movies(categoryID: remoteID, page: cursor.nextPage)
@@ -64,6 +66,7 @@ extension CatalogService {
                         movie.categoryID = movie.categoryID ?? remoteID
                         return movie
                     }
+                    listed = movies.count
                     added += try await CatalogWriter.appendMovies(movies, sourceID: sourceID, generation: generation, store: store)
                     pageHasMore = page.hasMore && !page.items.isEmpty
                 case .series:
@@ -73,10 +76,18 @@ extension CatalogService {
                         series.categoryID = series.categoryID ?? remoteID
                         return series
                     }
+                    listed = shows.count
                     added += try await CatalogWriter.appendSeries(shows, sourceID: sourceID, generation: generation, store: store)
                     pageHasMore = page.hasMore && !page.items.isEmpty
                 case .live:
                     return false
+                }
+                // An empty page where the provider said more would follow is
+                // asked once more before the category is taken to end here:
+                // that was for good, until the next day's refresh.
+                if listed == 0, cursor.hasMore, !askedAgain {
+                    askedAgain = true
+                    continue
                 }
                 cursor.nextPage += 1
                 cursor.hasMore = pageHasMore
@@ -155,13 +166,12 @@ extension CatalogService {
             var more = false
             for configuration in browsed {
                 guard let client = try? await readyClient(for: configuration), client.capabilities.searchesCatalog else { continue }
-                let pages = await withTaskGroup(of: RemoteSearchPage?.self) { group in
-                    for page in batch {
-                        group.addTask { try? await client.search(trimmed, page: page) }
-                    }
-                    var pages: [RemoteSearchPage] = []
-                    for await page in group { if let page { pages.append(page) } }
-                    return pages.sorted { $0.page < $1.page }
+                var pages = await Self.searchPages(trimmed, batch, client: client)
+                // Nothing at all is asked once more before it's remembered as
+                // asked: remembered, it kept a held title "Unavailable" in My
+                // List until the next day's refresh.
+                if !pages.isEmpty, pages.allSatisfy({ $0.movies.isEmpty && $0.series.isEmpty }) {
+                    pages = await Self.searchPages(trimmed, batch, client: client)
                 }
                 if !pages.isEmpty { answered = true }
                 if pages.last?.hasMore == true { more = true }
@@ -188,6 +198,19 @@ extension CatalogService {
         }
         if added > 0 { catalogDidChange() }
         return added
+    }
+
+    /// One batch of a provider's search pages, asked together, in page
+    /// order; a page that failed is left out.
+    nonisolated static func searchPages(_ query: String, _ batch: Range<Int>, client: any SourceClient) async -> [RemoteSearchPage] {
+        await withTaskGroup(of: RemoteSearchPage?.self) { group in
+            for page in batch {
+                group.addTask { try? await client.search(query, page: page) }
+            }
+            var pages: [RemoteSearchPage] = []
+            for await page in group { if let page { pages.append(page) } }
+            return pages.sorted { $0.page < $1.page }
+        }
     }
 
     func browseCursor(_ categoryID: String) -> BrowseCursor? {

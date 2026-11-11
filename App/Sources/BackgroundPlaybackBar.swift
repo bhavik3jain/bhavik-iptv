@@ -20,7 +20,7 @@ struct BackgroundPlaybackBar: View {
     }
 
     private var tvBar: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             Button(action: onReturn) {
                 Label {
                     Text(item.title).lineLimit(1)
@@ -28,8 +28,9 @@ struct BackgroundPlaybackBar: View {
                     Image(systemName: item.systemImage)
                 }
             }
-            // Beside the tab bar, whose seven tabs leave about this much.
-            .frame(maxWidth: 260)
+            // Beside the tab bar, whose eight tabs (Profiles since
+            // 2026-11-10) leave about this much on a 1920-point screen.
+            .frame(maxWidth: 200)
             .accessibilityLabel(Text(item.returnLabel))
             Button(action: onStop) {
                 Image(systemName: "xmark")

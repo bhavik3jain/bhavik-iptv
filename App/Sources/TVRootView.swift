@@ -6,7 +6,7 @@ import SwiftUI
 
 /// The Apple TV root. "Who's watching?" until a profile is chosen (PRF-2);
 /// then tvOS's own top tab bar — Search, Home, Live TV, Movies, Shows, My
-/// List and Settings, opening on Home — each tab with its own navigation
+/// List, Settings and Profiles, opening on Home — each tab with its own navigation
 /// stack, so Menu on the remote walks back through it and, at a tab's root,
 /// back to the bar.
 ///
@@ -60,7 +60,8 @@ struct TVRootView: View {
         @Bindable var navigation = navigation
         return TabView(selection: $navigation.selection) {
             // Words, not icons, as tvOS's own apps label their tabs (seven
-            // with icons overflow the bar); Search is the magnifier alone.
+            // with icons overflow the bar); Search is the magnifier alone at
+            // one end and Profiles a person alone at the other.
             ForEach(availableTabs, id: \.self) { tab in
                 Tab(value: tab) {
                     TVTabStack(tab: tab, navigation: navigation)
@@ -68,6 +69,9 @@ struct TVRootView: View {
                     if tab == .search {
                         Image(systemName: tab.systemImage)
                             .accessibilityLabel(Text(tab.title))
+                    } else if tab == .profiles {
+                        Image(systemName: tab.systemImage)
+                            .accessibilityLabel(Text(session.currentProfile.map { String(localized: "Profiles: \($0.name)") } ?? tab.title))
                     } else {
                         Text(tab.title)
                     }

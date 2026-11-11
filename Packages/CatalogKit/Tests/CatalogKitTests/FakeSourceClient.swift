@@ -29,6 +29,12 @@ final class FakeSourceClient: SourceClient {
         /// Stalker portal sends on a session that another sign-in from the
         /// same MAC ended (an envelope with an empty `js`).
         var emptyLists: Set<ContentKind> = []
+        /// The next this many list, search and show calls answer with
+        /// nothing, as the owner's portal has while the household's devices
+        /// used it (2026-11-08).
+        var emptyAnswers = 0
+        /// This movie category's first page answers with nothing, once.
+        var emptyOnceForMovieCategory: String?
         /// Movie pages past the first wait while this is set, so a test can
         /// have a browsed page answer after a refresh has swapped.
         var holdsLaterMoviePages = false
@@ -75,6 +81,15 @@ final class FakeSourceClient: SourceClient {
     var streamRequests: [StreamRequest] { requests.withLock { $0 } }
 
     private var fixture: Fixture { state.withLock { $0 } }
+
+    /// Takes one of `emptyAnswers`, if any are left.
+    private func answersWithNothing() -> Bool {
+        state.withLock { fixture in
+            guard fixture.emptyAnswers > 0 else { return false }
+            fixture.emptyAnswers -= 1
+            return true
+        }
+    }
     private func record(_ call: String) { log.withLock { $0.append(call) } }
 
     // MARK: SourceClient
@@ -108,23 +123,34 @@ final class FakeSourceClient: SourceClient {
         while page > 0, state.withLock({ $0.holdsLaterMoviePages }) {
             try await Task.sleep(for: .milliseconds(5))
         }
+        var empty = answersWithNothing()
+        if page == 0, let categoryID {
+            state.withLock {
+                if $0.emptyOnceForMovieCategory == categoryID {
+                    empty = true
+                    $0.emptyOnceForMovieCategory = nil
+                }
+            }
+        }
         let fixture = self.fixture
         if let pageDelay = fixture.pageDelay { try await Task.sleep(for: pageDelay) }
         if case .moviesPage(let failingPage, let error) = fixture.failure, failingPage == page { throw error }
-        if fixture.emptyLists.contains(.vod) { return Page(items: [], page: page, totalItems: nil, hasMore: false) }
+        if fixture.emptyLists.contains(.vod) || empty { return Page(items: [], page: page, totalItems: nil, hasMore: false) }
         return try paged(fixture.movies, kind: .vod, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
     }
 
     func series(categoryID: String?, page: Int) async throws -> Page<RemoteSeries> {
         record("series(\(categoryID ?? "all"),\(page))")
+        let empty = answersWithNothing()
         let fixture = self.fixture
         if let seriesPageDelay = fixture.seriesPageDelay { try await Task.sleep(for: seriesPageDelay) }
-        if fixture.emptyLists.contains(.series) { return Page(items: [], page: page, totalItems: nil, hasMore: false) }
+        if fixture.emptyLists.contains(.series) || empty { return Page(items: [], page: page, totalItems: nil, hasMore: false) }
         return try paged(fixture.series, kind: .series, categoryID: categoryID, page: page, fixture: fixture, category: \.categoryID)
     }
 
     func seriesDetail(_ series: RemoteSeries) async throws -> SeriesDetail {
         record("seriesDetail(\(series.id))")
+        if answersWithNothing() { return SeriesDetail(series: series, seasons: [], episodes: []) }
         guard let detail = fixture.details[series.id] else { throw SourceError(.badResponse, detail: "no detail") }
         return detail
     }
@@ -133,10 +159,11 @@ final class FakeSourceClient: SourceClient {
     /// say the provider searches.
     func search(_ query: String, page: Int) async throws -> RemoteSearchPage {
         record("search(\(query),\(page))")
+        let empty = answersWithNothing()
         let fixture = self.fixture
         if let searchDelay = fixture.searchDelay { try await Task.sleep(for: searchDelay) }
         if case .search(let error) = fixture.failure { throw error }
-        guard capabilities.searchesCatalog, !fixture.unmatchedQueries.contains(query) else { return RemoteSearchPage(page: page, hasMore: false) }
+        guard capabilities.searchesCatalog, !fixture.unmatchedQueries.contains(query), !empty else { return RemoteSearchPage(page: page, hasMore: false) }
         let movies = try paged(fixture.movies.filter { $0.name.localizedCaseInsensitiveContains(query) }, kind: .vod, categoryID: nil, page: page, fixture: fixture, category: \.categoryID)
         let series = try paged(fixture.series.filter { $0.name.localizedCaseInsensitiveContains(query) }, kind: .series, categoryID: nil, page: page, fixture: fixture, category: \.categoryID)
         return RemoteSearchPage(movies: movies.items, series: series.items, page: page, hasMore: movies.hasMore || series.hasMore)

@@ -141,12 +141,19 @@ extension CatalogService {
 /// ("Greys Anatomy - ENGLISH | TV SERIES", "EN | Lupin (2021)") that its
 /// search doesn't match: on the owner's portal the whole name found nothing
 /// and "Greys Anatomy" found the show first, among ten (2026-11-07). So the
-/// name's longest plain part goes first, and the whole name follows for a
-/// portal that only matches that. Last comes the plain part's most
-/// distinctive word: a name remembered only in its folded form ("greys
-/// anatomy english tv series", `heldTitle(for:)`) has no separators left and
-/// matches nothing whole, and one word matches the portal's spelling however
-/// its punctuation goes.
+/// name's title part goes first, and the whole name follows for a portal
+/// that only matches that. Last comes the title part's most distinctive
+/// word: a name remembered only in its folded form ("greys anatomy english
+/// tv series", `heldTitle(for:)`) has no separators left and matches nothing
+/// whole, and one word matches the portal's spelling however its punctuation
+/// goes.
+///
+/// The title part is the first part that isn't a tag (`isTag`), not the
+/// longest: "Iron Man - DISNEY+ | ENGLISH MOVIES" was searched as "ENGLISH
+/// MOVIES", which the portal answers with nothing, so the Mac's My List read
+/// "Unavailable" for every title whose name is shorter than its tags (Iron
+/// Man, Inception, Oppenheimer, Suits, The Pitt; 2026-11-11). Searched by
+/// their own names, each was on the portal's first or second page.
 enum HeldTitleSearch {
     static let separators = [" - ", " – ", " — ", " | ", "|", " (", " [", ")", "]"]
 
@@ -158,6 +165,9 @@ enum HeldTitleSearch {
         "polish", "korean", "japanese", "chinese", "persian", "multi", "multisub", "dubbed", "dual", "audio",
         "subbed", "subs", "subtitles", "vostfr", "series", "season", "episode", "episodes", "movie", "movies",
         "film", "films", "quality", "excellent", "cinema", "version", "extended", "uncut",
+        "tv", "kids", "latest", "new", "old", "collection", "classic", "classics", "eng", "subtitle",
+        "hd", "fhd", "uhd", "sd", "4k", "hdr", "netflix", "disney", "prime", "video", "amazon", "paramount",
+        "hbo", "max", "hulu", "apple", "peacock", "starz", "showtime", "zee5", "hotstar", "jiocinema",
     ]
 
     static func queries(for title: String) -> [String] {
@@ -167,15 +177,36 @@ enum HeldTitleSearch {
         for separator in separators {
             parts = parts.flatMap { $0.components(separatedBy: separator) }
         }
-        let core = parts
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)) }
-            .max { SearchKey.normalize($0).count < SearchKey.normalize($1).count } ?? ""
+        let core = titlePart(parts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)) }) ?? ""
         let plain = SearchKey.normalize(core).count >= 2 ? core : full
         var queries = plain == full ? [full] : [core, full]
         if let word = distinctiveWord(in: plain), !queries.contains(where: { SearchKey.normalize($0) == SearchKey.normalize(word) }) {
             queries.append(word)
         }
         return queries
+    }
+
+    /// The part that names the title, in the name's own order: the first
+    /// that isn't a tag and isn't all capitals (a prefix like "CRUNCHYROLL |"
+    /// is shouted, a title rarely), else the first that isn't a tag, else the
+    /// first part at all ("UP - DISNEY+ | ENGLISH MOVIES" is the film "UP").
+    static func titlePart(_ parts: [String]) -> String? {
+        let named = parts.filter { SearchKey.normalize($0).count >= 2 }
+        let titles = named.filter { !isTag($0) }
+        return titles.first { $0 != $0.uppercased() } ?? titles.first ?? named.first
+    }
+
+    /// A part made only of a provider's labels ("ENGLISH MOVIES", "DISNEY+",
+    /// "TV SERIES", "Eng Subtitle"), a year or a number, or a code of up to
+    /// three capitals ("EN", "UK", "HBO").
+    static func isTag(_ part: String) -> Bool {
+        let words = part.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        guard !words.isEmpty else { return true }
+        if words.count == 1, let word = words.first, word.count <= 3, word == word.uppercased(), word.contains(where: \.isLetter) { return true }
+        return words.allSatisfy { word in
+            let folded = SearchKey.normalize(word)
+            return labels.contains(folded) || folded.allSatisfy(\.isNumber)
+        }
     }
 
     /// The longest word of at least four letters that isn't a label or a

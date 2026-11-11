@@ -11,6 +11,15 @@ import SwiftUI
 /// better typed on an iPhone, iPad or Mac in the same household, and the TV
 /// says so. Choosing a profile asks for its PIN on the TV's own keypad.
 struct WhoIsWatchingTVScreen: View {
+    /// The gate, before any profile is in use, or the Profiles tab.
+    enum Mode {
+        case gate
+        /// From the tab bar: no logo (the bar is above), the profile in use
+        /// in focus, and Menu goes back to the bar as on any tab.
+        case switching(onChosen: () -> Void)
+    }
+
+    var mode: Mode = .gate
     let onManageHousehold: () -> Void
 
     @Environment(HouseholdStore.self) private var store
@@ -21,10 +30,12 @@ struct WhoIsWatchingTVScreen: View {
     var body: some View {
         let _ = store.revision
         VStack(spacing: 0) {
-            HStack {
-                HearthLogo()
-                    .scaleEffect(1.5, anchor: .leading)
-                Spacer()
+            if isGate {
+                HStack {
+                    HearthLogo()
+                        .scaleEffect(1.5, anchor: .leading)
+                    Spacer()
+                }
             }
             Spacer(minLength: 40)
             VStack(spacing: 14) {
@@ -59,10 +70,16 @@ struct WhoIsWatchingTVScreen: View {
         .pinFlow($pinRequest) { pin, ids in
             ids.contains { store.verifyPIN(pin, for: $0) }
         }
-        .defaultFocus($focusedProfile, initialProfileID)
+        .defaultFocus($focusedProfile, initialProfileID, priority: isGate ? .automatic : .userInitiated)
         // After Switch Profile, Menu goes back to the profile just left
-        // rather than out of the app; at launch it leaves as usual.
-        .hearthOnExitCommand(previousProfile.map { profile in { choose(profile) } })
+        // rather than out of the app; at launch it leaves as usual. On the
+        // Profiles tab it goes back to the tab bar.
+        .hearthOnExitCommand(isGate ? previousProfile.map { profile in { choose(profile) } } : nil)
+    }
+
+    private var isGate: Bool {
+        if case .gate = mode { return true }
+        return false
     }
 
     private var previousProfile: ProfileRecord? {
@@ -94,8 +111,10 @@ struct WhoIsWatchingTVScreen: View {
         .hearthFocusSection()
     }
 
-    /// The profile used last on this TV, else the first.
+    /// The profile in use (on the Profiles tab), else the one used last on
+    /// this TV, else the first.
     private var initialProfileID: UUID? {
+        if !isGate, let current = session.currentProfile?.id, store.profiles.contains(where: { $0.id == current }) { return current }
         if let last = session.lastUsedProfileID, store.profiles.contains(where: { $0.id == last }) { return last }
         return store.profiles.first?.id
     }
@@ -116,12 +135,17 @@ struct WhoIsWatchingTVScreen: View {
             for: profile,
             isWatchingNow: store.activePlaybacks.contains { $0.profileID == profile.id && !$0.isStale() },
             latestProgress: profile.kind == .standard ? store.continueWatching(profileID: profile.id, limit: 1).first : nil,
-            isLastUsedHere: session.lastUsedProfileID == profile.id
+            isLastUsedHere: session.lastUsedProfileID == profile.id,
+            isCurrent: !isGate && session.currentProfile?.id == profile.id
         )
     }
 
     /// Opens the profile, after its PIN (and an adult's when leaving Kids).
     private func choose(_ profile: ProfileRecord) {
+        if case .switching(let onChosen) = mode, profile.id == session.currentProfile?.id {
+            onChosen()
+            return
+        }
         let steps = PINSteps.forSwitch(from: session.currentProfile, to: profile, profiles: store.profiles)
         let select = { @MainActor in
             guard let fresh = store.profiles.first(where: { $0.id == profile.id }) else { return }

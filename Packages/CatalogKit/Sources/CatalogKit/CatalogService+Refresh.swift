@@ -368,7 +368,14 @@ extension CatalogService {
             ?? RemoteSeries(id: series.remoteID, name: series.name, posterURL: series.posterURL, plot: series.plot, year: series.year, rating: series.rating, addedAt: series.addedAt, genre: series.genre)
         do {
             let client = try await readyClient(for: configuration)
-            let detail = try await client.seriesDetail(remote)
+            var detail = try await client.seriesDetail(remote)
+            // An answer of nothing is asked once more before it's believed,
+            // and even then a show doesn't lose every episode overnight: what
+            // was cached stays, and as nothing is saved the next open asks
+            // again. Replacing the cache with nothing left the show with no
+            // episodes to show or play.
+            if detail.episodes.isEmpty { detail = try await client.seriesDetail(remote) }
+            if detail.episodes.isEmpty, !cached.isEmpty { return cached }
             try await CatalogWriter.saveEpisodes(detail, seriesID: series.remoteID, sourceID: series.sourceID, fetchedAt: .now, store: store)
             catalogDidChange()
             return queryCachedEpisodes(seriesKey: series.key)
